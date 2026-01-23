@@ -192,10 +192,11 @@ async function startMatchmaking(category: string) {
        }
     }
 
-  } catch (e) {
+  } catch (e: any) {
     console.error("Matchmaking failed", e);
-    matchStatus.value = 'CONNECTION ERROR';
-    setTimeout(() => step.value = 'MODESELECT', 2000);
+    matchStatus.value = `CONNECTION ERROR: ${e.message || 'Unknown Error'}`;
+    // Stay on screen longer to read error
+    setTimeout(() => step.value = 'MODESELECT', 4000);
     return;
   }
 

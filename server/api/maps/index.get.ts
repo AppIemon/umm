@@ -12,6 +12,14 @@ export default defineEventHandler(async (event) => {
     filter.creatorName = { $regex: new RegExp(`^${creator}$`, 'i') }
   }
 
-  const maps = await GameMap.find(filter).sort({ createdAt: -1 }).limit(50)
-  return maps
+  try {
+    const maps = await GameMap.find(filter).sort({ createdAt: -1 }).limit(50)
+    return maps
+  } catch (e: any) {
+    console.error("Map Fetch Error:", e);
+    throw createError({
+      statusCode: 500,
+      statusMessage: `DB Error: ${e.message}`
+    })
+  }
 })

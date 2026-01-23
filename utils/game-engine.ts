@@ -530,6 +530,14 @@ export class GameEngine {
     this.mapConfig = { ...this.mapConfig, ...config };
   }
 
+  loadMapData(mapData: any) {
+    // 객체 깊은 복사 또는 상태 초기화 (재시작 시 포탈 상태 리셋)
+    this.obstacles = mapData.engineObstacles.map((o: any) => ({ ...o }));
+    this.portals = mapData.enginePortals.map((p: any) => ({ ...p, activated: false }));
+    this.autoplayLog = [...mapData.autoplayLog];
+    this.totalLength = mapData.duration * this.baseSpeed + 500;
+  }
+
   // Autoplay data
   isAutoplay: boolean = false;
   autoplayLog: { x: number, y: number, holding: boolean }[] = [];
@@ -595,7 +603,7 @@ export class GameEngine {
 
     let currentTime = 0;
     let currentX = 200; // 시작 위치
-    let currentM = 1.0;  // 현재 속도 배율
+    let currentM = this.mapConfig.difficulty >= 24 ? 4.0 : 1.0;  // IMPOSSIBLE은 4배속 시작
     let currentMini = false;
     let currentInverted = false;
 
@@ -637,20 +645,35 @@ export class GameEngine {
 
         if (diff < 8) {
           // EASY (~7): 0.5x (Center), 1x
-          portalType = intensity < 0.7 ? 'speed_0.5' : 'speed_1';
+          // Highlight (High Intensity) -> 1x
+          portalType = intensity < 0.6 ? 'speed_0.5' : 'speed_1';
         } else if (diff < 16) {
           // NORMAL (8~15): 1x (Center), 2x
+          // Highlight -> 2x
           if (intensity < 0.6) portalType = 'speed_1';
           else portalType = 'speed_2';
         } else if (diff < 24) {
           // HARD (16~23): 0.5x (Narrow), 2x (Center), 3x
-          if (intensity < 0.15) portalType = 'speed_0.5';
-          else if (intensity < 0.75) portalType = 'speed_2';
-          else portalType = 'speed_3';
+          // Highlight -> 3x (or 2x)
+          if (intensity < 0.3) portalType = 'speed_0.5';
+          else if (intensity < 0.65) portalType = 'speed_2'; // Normal
+          else portalType = 'speed_3'; // Highlight
         } else {
-          // IMPOSSIBLE (24+): 4x (Center)
-          portalType = 'speed_4';
+          // IMPOSSIBLE (24+): Chaos + Speed
+          // Highlight -> 4x
+          const r = rng();
+          // If it's a highlight (intensity > 0.8), almost always 4x
+          if (intensity > 0.8) {
+            portalType = 'speed_4';
+          } else {
+            // Random mixed speeds for non-highlight
+            if (r < 0.15) portalType = 'speed_3';
+            else if (r < 0.2) portalType = 'speed_2';
+            else portalType = 'speed_4';
+          }
         }
+
+        // 강제 4배속 유지 (Impossible) -> Removed. 위 로직에서 처리.
 
         // 한 번에 생성할 포탈 목록 수집
         const portalTypes: PortalType[] = [];
@@ -663,7 +686,9 @@ export class GameEngine {
         }
 
         // 2. 변곡점 중력반전 포탈 (EASY 모드에서는 미등장)
-        if (rng() < 0.75 && diff >= 8) {
+        // Impossible 모드는 90% 확률로 중력 반전을 시도하여 혼란을 줌
+        const gravityChance = diff >= 24 ? 0.9 : 0.75;
+        if (rng() < gravityChance && diff >= 8) {
           const wantInverted = rng() > 0.5;
           if (wantInverted !== currentInverted) {
             portalTypes.push(wantInverted ? 'gravity_yellow' : 'gravity_blue');
@@ -672,9 +697,22 @@ export class GameEngine {
         }
 
         // 3. 미니 포탈 (난이도 3부터 등장)
-        if (this.mapConfig.difficulty >= 3 && (intensity > 0.8 || (intensity > 0.6 && rng() < 0.4))) {
-          portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
-          currentMini = !currentMini;
+        // Impossible 모드는 미니 모드를 매우 적극적으로 사용
+        const miniThreshold = diff >= 24 ? 0.3 : 0.8; // 30% 확률 이상이면 미니 적용 (Highly frequent in Impossible)
+        if (this.mapConfig.difficulty >= 3) {
+          if (diff >= 24) {
+            // Impossible: Random chaos
+            if (rng() > 0.4) { // 60% chance to toggle
+              portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
+              currentMini = !currentMini;
+            }
+          } else {
+            // Normal logic
+            if (intensity > miniThreshold || (intensity > 0.6 && rng() < 0.4)) {
+              portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
+              currentMini = !currentMini;
+            }
+          }
         }
 
         if (portalTypes.length > 0) {
@@ -688,32 +726,35 @@ export class GameEngine {
 
         const speedM = this.getSpeedMultiplierFromType(lastSpeedType);
 
-        // 속도와 미니 상태에 따른 동적 간격 스케일 + 재생성 시 증가하는 배율 적용
-        let gapScale = 1.0 * this.patternGapMultiplier;
+        // User request: gapScale = 5 / difficulty
+        // Also keep speed compensation to avoid impossible overlap at high speeds
+        const diff = Math.max(1, this.mapConfig.difficulty);
+        let gapScale = (5.0 / diff) * this.patternGapMultiplier;
 
-        if (this.mapConfig.difficulty >= 24) {
-          // IMPOSSIBLE
+        // Speed compensation (slightly reduced to keep density high)
+        gapScale *= Math.pow(speedM, 0.9);
+
+        // --- Difficulty Specific Adjustments ---
+
+        // Hard: 0.5x (매우 매우 좁은 간격)
+        if (diff >= 16 && diff < 24 && lastSpeedType === 'speed_0.5') {
+          gapScale *= 0.5;
+        }
+
+        // Impossible settings
+        if (diff >= 24) {
           if (currentMini) {
-            // 4x Mini: Sparse
-            gapScale *= 2.0;
+            // 4배속 미니웨이브 (장애물이 비교적 적음)
+            gapScale *= 1.8;
           } else {
-            // 4x Normal: Dense (Many obstacles)
-            gapScale *= 0.7;
+            // 4배속 (중심) (장애물이 매우 많음) - Gravity Inversion more difficult (denser)
+            gapScale *= 0.8;
+            if (currentInverted) {
+              gapScale *= 0.9;
+            }
           }
-          // High speed compensation reduced to keep density high
-          gapScale *= Math.pow(speedM, 0.9);
-        } else if (this.mapConfig.difficulty >= 16) {
-          // HARD
-          if (Math.abs(speedM - Math.sqrt(0.5)) < 0.01) {
-            // 0.5x: Very Narrow
-            gapScale *= 0.4;
-          } else {
-            gapScale *= Math.pow(speedM, 1.3);
-          }
-          if (currentMini) gapScale *= 1.25;
         } else {
-          // EASY / NORMAL
-          gapScale *= Math.pow(speedM, 1.3);
+          // Normal mini scaling
           if (currentMini) gapScale *= 1.25;
         }
 
@@ -1043,12 +1084,36 @@ export class GameEngine {
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
       const prevH = curr.h;
-      const lookaheadFrames = 40;
+      // Reduced lookahead to 20 frames (~0.33s) to avoid false fears.
+      const lookaheadFrames = 20;
 
-      // CPS Limiting Logic: Target Max 4 CPS (~0.125s interval)
-      const MIN_SWITCH_INTERVAL = 0.125;
+      // CPS Limiting Logic:
+      // Scale interval: 0.125 / (speedMultiplier^0.7)
+      const MIN_SWITCH_INTERVAL = 0.125 / Math.pow(curr.sm, 0.7);
+
       const timeSinceLastSwitch = curr.time - curr.lastSwitchTime;
-      const isSwitchRestricted = timeSinceLastSwitch < MIN_SWITCH_INTERVAL;
+      let isSwitchRestricted = timeSinceLastSwitch < MIN_SWITCH_INTERVAL;
+
+      // Exception: If we are deviating from center (> 25px) and moving AWAY,
+      // allow rapid switching to correct course.
+      if (isSwitchRestricted) {
+        const currentY = curr.y;
+        const distFromCenter = Math.abs(currentY - 360);
+        if (distFromCenter > 25) {
+          const isGravityInv = curr.g;
+          const isHolding = prevH;
+          // Vy direction: 
+          // Normal(g=F): Hold -> Up(-), Release -> Down(+)
+          // Inverted(g=T): Hold -> Down(+), Release -> Up(-)
+
+          const vy = isGravityInv ? (isHolding ? 1 : -1) : (isHolding ? -1 : 1);
+          const movingAway = (currentY > 360 && vy > 0) || (currentY < 360 && vy < 0);
+
+          if (movingAway) {
+            isSwitchRestricted = false;
+          }
+        }
+      }
 
       let preferHold = false;
       // Pass lastSwitchTime to validation state for lookahead? (Simplification: just check immediate safety)
@@ -1056,10 +1121,29 @@ export class GameEngine {
       const isReleaseSafe = !dR && checkSurvival({ ...curr, x: nX, y: nYR, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, h: false, lastSwitchTime: !prevH ? curr.lastSwitchTime : nT, prev: null }, false, lookaheadFrames);
 
       // Default preference based on safety
+      // Default preference based on safety
       if (prevH) {
-        preferHold = isHoldSafe;
+        if (isHoldSafe) preferHold = true;
+        else preferHold = false;
       } else {
-        preferHold = !isReleaseSafe;
+        if (isReleaseSafe) preferHold = false;
+        else preferHold = true;
+      }
+
+      // If both options are safe, Bias towards Center (Y=360)
+      if (isHoldSafe && isReleaseSafe) {
+        const targetY = 360;
+        const distH = Math.abs(nYH - targetY);
+        const distR = Math.abs(nYR - targetY);
+
+        // Priority 1: Center
+        if (Math.abs(distH - distR) > 5) {
+          preferHold = distH < distR;
+        } else {
+          // Priority 2: Bottom (if tie, prefer larger Y)
+          // Y increases downwards. So Bottom > Top.
+          preferHold = nYH > nYR;
+        }
       }
 
       // 1. If currently violating CPS limit, FORCE keeping same state if safe.
@@ -1500,19 +1584,23 @@ export class GameEngine {
       const isBottomSpike = obsY > 300;
       const centerX = obs.x + obs.width / 2;
 
+      // Hitbox forgiveness: Shrink the triangle slightly (3px)
+      // This prevents "clipping" deaths where the player visually barely touches the edge
+      const padding = 3;
+
       if (isBottomSpike) {
         for (const p of points) {
           if (this.isPointInTriangle(p.x, p.y,
-            obs.x, obsY + obs.height,
-            centerX, obsY,
-            obs.x + obs.width, obsY + obs.height)) return true;
+            obs.x + padding, obsY + obs.height - padding,
+            centerX, obsY + padding,
+            obs.x + obs.width - padding, obsY + obs.height - padding)) return true;
         }
       } else {
         for (const p of points) {
           if (this.isPointInTriangle(p.x, p.y,
-            obs.x, obsY,
-            centerX, obsY + obs.height,
-            obs.x + obs.width, obsY)) return true;
+            obs.x + padding, obsY + padding,
+            centerX, obsY + obs.height - padding,
+            obs.x + obs.width - padding, obsY + padding)) return true;
         }
       }
       return false;

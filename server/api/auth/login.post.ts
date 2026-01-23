@@ -36,9 +36,10 @@ export default defineEventHandler(async (event) => {
 
     return userData
   } catch (error: any) {
+    console.error("Login API Error:", error);
     throw createError({
       statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || 'Internal Server Error'
+      statusMessage: error.message || 'Internal Server Error'
     })
   }
 })

@@ -3,6 +3,10 @@ import mongoose from 'mongoose'
 export default defineNitroPlugin(async (nitroApp) => {
   const config = useRuntimeConfig()
 
+  if (mongoose.connection.readyState === 1) {
+    return
+  }
+
   try {
     if (!config.mongodbUri) {
       throw new Error('MONGODB_URI is not defined in runtime config')

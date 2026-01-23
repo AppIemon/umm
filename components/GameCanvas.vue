@@ -180,11 +180,7 @@ const startGame = () => {
   isAutoplayUI.value = wasAutoplay;
   if (props.loadMap) {
     // 저장된 맵 데이터 로드
-    engine.value.obstacles = [...props.loadMap.engineObstacles];
-    engine.value.portals = [...props.loadMap.enginePortals];
-    engine.value.autoplayLog = [...props.loadMap.autoplayLog];
-    engine.value.totalLength = props.loadMap.duration * engine.value.baseSpeed + 500;
-    engine.value.totalLength = props.loadMap.duration * engine.value.baseSpeed + 500;
+    engine.value.loadMapData(props.loadMap);
     difficulty.value = props.loadMap.difficulty;
     isMapValidated.value = true; // 이미 로그가 있으면 검증된 것으로 간주
   } else {

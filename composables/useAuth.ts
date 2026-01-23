@@ -42,7 +42,7 @@ export const useAuth = () => {
       user.value = userData;
       router.push('/');
     } catch (error: any) {
-      alert(error.statusMessage || 'Login failed');
+      alert(error.statusMessage || error.message || 'Login failed');
     }
   };
 
