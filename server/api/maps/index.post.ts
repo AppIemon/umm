@@ -3,12 +3,11 @@ import { User } from '~/server/models/User'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { title, difficulty, seed, beatTimes, sections, engineObstacles, enginePortals, autoplayLog, duration, creatorName } = body
+  const { title, difficulty, seed, beatTimes, sections, engineObstacles, enginePortals, autoplayLog, duration, creatorName, audioUrl, audioData, isShared } = body
 
-  // Note: REAL auth should be implemented here. For now, we use creatorName or a mock user.
+  // Attempt to find user
   let user = await User.findOne({ username: creatorName.toLowerCase() })
   if (!user) {
-    // Falls back to a default user or creates a mock one if needed
     user = await User.create({
       username: creatorName.toLowerCase(),
       password: 'mock_password',
@@ -20,6 +19,8 @@ export default defineEventHandler(async (event) => {
     title,
     creator: user._id,
     creatorName: user.displayName,
+    audioUrl,
+    audioData,
     difficulty,
     seed,
     beatTimes,
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
     enginePortals,
     autoplayLog,
     duration,
-    isShared: false
+    isShared: isShared !== undefined ? isShared : false
   })
 
   return newMap

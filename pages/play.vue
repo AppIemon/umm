@@ -7,9 +7,21 @@
       <div v-if="isAnalyzing" class="processing-overlay">
          <div class="loader-content">
             <div class="wave-loader">◆</div>
-            <h2>맵 생성 중...</h2>
-            <div class="progress-bar"><div class="fill"></div></div>
-            <p>비트를 분석하고 장애물을 배치하고 있습니다</p>
+            <h2>{{ analysisProgress.step || '맵 생성 중...' }}</h2>
+            <div class="progress-bar">
+              <div class="fill" :style="{ width: analysisProgress.percent + '%', animation: 'none' }"></div>
+            </div>
+            <p v-if="timeLeft > 0" class="time-left">예상 남은 시간: 약 {{ Math.ceil(timeLeft) }}초</p>
+            <p v-else-if="analysisProgress.percent > 0">거의 다 되었습니다...</p>
+
+            <!-- 실패 분석 정보 표시 (시각화 추가) -->
+            <div v-if="validationFailure" class="failure-log">
+              <span class="fail-tag">CRITICAL BLOCKAGE AT {{ validationFailure.x }}</span>
+              <canvas ref="failCanvas" width="300" height="150" class="fail-preview"></canvas>
+              <div class="fail-details">
+                AI failed to find a path through this section.
+              </div>
+            </div>
          </div>
       </div>
       
@@ -67,6 +79,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useAudioAnalyzer, type SongSection } from '@/composables/useAudioAnalyzer';
 import { useAuth } from '@/composables/useAuth';
 import { useRoute } from 'vue-router';
+import { GameEngine } from '@/utils/game-engine';
 
 // 플레이 중에는 navbar 숨기기
 definePageMeta({
@@ -82,7 +95,12 @@ const audioBuffer = ref<AudioBuffer | null>(null);
 const obstacles = ref<number[]>([]);
 const sections = ref<SongSection[]>([]);
 const isAnalyzing = ref(false);
+const analysisProgress = ref({ step: '', percent: 0 });
+const startTime = ref(0);
+const timeLeft = ref(0);
 const loadedMapData = ref<any>(null);
+const validationFailure = ref<any>(null);
+const failCanvas = ref<HTMLCanvasElement | null>(null);
 const { user } = useAuth();
 const route = useRoute();
 
@@ -106,30 +124,88 @@ const getDifficultyColor = (d: number) => {
 const handleSongSelect = async (file: File) => {
   selectedSong.value = file;
   isAnalyzing.value = true;
-  
-  await new Promise(r => setTimeout(r, 100));
+  startTime.value = Date.now();
+  hasSavedCurrentMap.value = false;
 
   try {
-    if (loadedMapData.value) {
-      // 로드된 맵이 있으면 분석을 건너뛰고 오디오만 로드
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = await audioCtx.decodeAudioData(arrayBuffer);
-      audioBuffer.value = buffer;
-      // 맵 데이터는 이미 onMounted에서 세팅됨
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // 1. Audio Analysis
+    const result = await analyzeAudio(file, difficulty.value, (p) => {
+      analysisProgress.value = p;
+      if (p.percent > 5) {
+        const elapsed = (Date.now() - startTime.value) / 1000;
+        const totalEstimated = elapsed / (p.percent / 100);
+        timeLeft.value = Math.max(0, totalEstimated - elapsed);
+      }
+    });
+    
+    audioBuffer.value = result.buffer;
+    obstacles.value = result.obstacles;
+    sections.value = result.sections;
+
+    // 2. Map Generation & Validation
+    const tempEngine = new GameEngine({ difficulty: difficulty.value, density: 1.0, portalFrequency: 0.15 });
+    
+    // Seed를 고유하게 생성 (시간 + 랜덤)
+    const uniqueSeed = Date.now() + Math.floor(Math.random() * 1000000);
+    
+    let success = false;
+    for (let i = 0; ; i++) {
+      const stepMsg = i === 0 ? 'AI가 맵을 분석하고 있습니다...' : `맵 보정 중... (${i + 1}회차)`;
+      analysisProgress.value = { step: stepMsg, percent: 0 };
+      
+      // 맵 생성 (매 시도시마다 간격이 조금씩 넓어짐)
+      tempEngine.generateMap(result.obstacles, result.sections, result.duration, uniqueSeed + i, false, i);
+      
+      // 비동기 검증 (프로그레스 바 업데이트)
+      success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
+        analysisProgress.value.percent = Math.floor(p * 100);
+      });
+      if (success) {
+        validationFailure.value = null; // 성공 시 리셋
+        break; 
+      }
+      
+      // 실패 시 정보 저장 및 시각화
+      if (tempEngine.validationFailureInfo) {
+        validationFailure.value = {
+          x: Math.floor(tempEngine.validationFailureInfo.x),
+          y: Math.floor(tempEngine.validationFailureInfo.y),
+          rawObstacles: tempEngine.validationFailureInfo.nearObstacles
+        };
+        // 캔버스 업데이트를 위해 다음 틱에 실행
+        nextTick(() => drawFailurePreview());
+      }
+
+      if (i > 100) break; // 극단적인 안전장치는 유지 (100번)
+    }
+
+    if (success) {
+      loadedMapData.value = {
+        title: file.name.substring(0, 100),
+        difficulty: difficulty.value,
+        seed: uniqueSeed,
+        engineObstacles: tempEngine.obstacles,
+        enginePortals: tempEngine.portals,
+        autoplayLog: tempEngine.autoplayLog,
+        duration: result.duration,
+        beatTimes: result.obstacles,
+        sections: result.sections
+      };
+      // 더 이상 자동으로 저장하지 않음 (사용자의 명시적 요청시에만 저장)
     } else {
-      const result = await analyzeAudio(file, difficulty.value);
-      audioBuffer.value = result.buffer;
-      obstacles.value = result.obstacles;
-      sections.value = result.sections;
+      throw new Error("지나갈 수 있는 맵을 생성하지 못했습니다. 다시 시도해 주세요.");
     }
     
-    isAnalyzing.value = false;
-    step.value = 'play';
-  } catch (e) {
+    setTimeout(() => {
+      isAnalyzing.value = false;
+      step.value = 'play';
+    }, 500); 
+  } catch (e: any) {
     console.error(e);
     isAnalyzing.value = false;
-    alert("오디오 분석 또는 로드에 실패했습니다");
+    alert(e.message || "오디오 분석 또는 로드에 실패했습니다");
   }
 };
 
@@ -137,29 +213,111 @@ const startGame = () => {
   step.value = 'play';
 };
 
+const hasSavedCurrentMap = ref(false);
+
+const drawFailurePreview = () => {
+  if (!failCanvas.value || !validationFailure.value) return;
+  const ctx = failCanvas.value.getContext('2d');
+  if (!ctx) return;
+
+  const { x, y, rawObstacles } = validationFailure.value;
+  const w = failCanvas.value.width;
+  const h = failCanvas.value.height;
+  
+  // Clear & Setup
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, w, h);
+  
+  const zoom = 0.5; // 보기 편하게 줌 조절
+  const offsetX = x - (w / 2) / zoom;
+  const offsetY = 360 - (h / 2) / zoom; // 게임 중앙 Y 기준 오프셋
+
+  // 배경 격자
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  for(let i=0; i<w; i+=20) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke();
+  }
+
+  // 장애물 그리기
+  rawObstacles.forEach((obs: any) => {
+    ctx.save();
+    ctx.translate((obs.x - offsetX) * zoom, (obs.y - offsetY) * zoom);
+    if(obs.angle) ctx.rotate(obs.angle * Math.PI / 180);
+    
+    ctx.fillStyle = obs.type === 'spike' ? '#ff4444' : '#555';
+    ctx.strokeStyle = '#ff00ff';
+    ctx.lineWidth = 1;
+    
+    const ow = obs.width * zoom;
+    const oh = obs.height * zoom;
+    
+    if (obs.type === 'spike') {
+       ctx.beginPath();
+       const isBottom = obs.y > 300;
+       if(isBottom) {
+         ctx.moveTo(0, oh); ctx.lineTo(ow/2, 0); ctx.lineTo(ow, oh);
+       } else {
+         ctx.moveTo(0, 0); ctx.lineTo(ow/2, oh); ctx.lineTo(ow, 0);
+       }
+       ctx.fill(); ctx.stroke();
+    } else {
+       ctx.fillRect(0, 0, ow, oh);
+       ctx.strokeRect(0, 0, ow, oh);
+    }
+    ctx.restore();
+  });
+
+  // 실패 지점 표시 (기체 위치)
+  ctx.fillStyle = '#fff';
+  ctx.shadowBlur = 10; ctx.shadowColor = '#00ffff';
+  ctx.beginPath();
+  ctx.arc((x - offsetX) * zoom, (y - offsetY) * zoom, 5, 0, Math.PI * 2);
+  ctx.fill();
+};
+
 const handleMapReady = async (mapData: any) => {
-  // 생성된 맵을 서버에 저장
-  if (!selectedSong.value) return;
+  if (hasSavedCurrentMap.value) return;
+  if (!selectedSong.value && !loadedMapData.value?.audioUrl) return;
   
   try {
-    await $fetch('/api/maps', {
+    const body: any = {
+      title: (selectedSong.value?.name || loadedMapData.value?.title || 'Unknown Map').substring(0, 100),
+      difficulty: mapData.difficulty,
+      seed: obstacles.value.length * 777 + Math.floor(mapData.duration * 100),
+      beatTimes: obstacles.value,
+      sections: sections.value,
+      engineObstacles: mapData.engineObstacles,
+      enginePortals: mapData.enginePortals,
+      autoplayLog: mapData.autoplayLog,
+      duration: mapData.duration,
+      creatorName: user.value?.username || 'Guest',
+      isShared: false // Default to false so it's "My Map", can be shared later
+    };
+
+    if (selectedSong.value) {
+      body.audioUrl = `/audio/${selectedSong.value.name}`;
+      
+      // Convert file to Base64 and store in DB
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(selectedSong.value!);
+      });
+      body.audioData = await base64Promise;
+    } else if (loadedMapData.value?.audioUrl) {
+      body.audioUrl = loadedMapData.value.audioUrl;
+      body.audioData = loadedMapData.value.audioData;
+    }
+
+    const saved = await $fetch('/api/maps', {
       method: 'POST',
-      body: {
-        title: selectedSong.value.name.substring(0, 100),
-        difficulty: mapData.difficulty,
-        seed: obstacles.value.length * 777 + Math.floor(mapData.duration * 100),
-        beatTimes: obstacles.value,
-        sections: sections.value,
-        engineObstacles: mapData.engineObstacles,
-        enginePortals: mapData.enginePortals,
-        autoplayLog: mapData.autoplayLog,
-        duration: mapData.duration,
-        creatorName: user.value?.username || 'Guest'
-      }
+      body
     });
-    console.log("Map saved successfully");
+    
+    hasSavedCurrentMap.value = true;
+    console.log(`[Database] Map successfully saved to internal database. ID: ${saved._id}`);
   } catch (e) {
-    console.error("Failed to save map:", e);
+    console.error("Failed to save map auto-registration:", e);
   }
 };
 
@@ -182,21 +340,41 @@ const initFromQuery = async () => {
   if (!mapId) return;
 
   try {
+    isAnalyzing.value = true;
     const targetMap: any = await $fetch(`/api/maps/${mapId}`);
     if (targetMap) {
-      if (route.query.map) {
-        // ?map=id 인 경우 바로 시작 (무음)
-        await handleMapOnlyStart(targetMap);
-      } else {
-        // ?mapId=id 인 경우 노래 선택 대기
-        loadedMapData.value = targetMap;
-        obstacles.value = targetMap.beatTimes;
-        sections.value = targetMap.sections;
-        difficulty.value = targetMap.difficulty;
+      loadedMapData.value = targetMap;
+      obstacles.value = targetMap.beatTimes;
+      sections.value = targetMap.sections;
+      difficulty.value = targetMap.difficulty;
+
+      if (targetMap.audioData || targetMap.audioUrl) {
+         try {
+           let arrayBuffer: ArrayBuffer;
+           if (targetMap.audioData) {
+             // Load from DB (Base64 Data URL) - fetch can handle data URLs!
+             const res = await fetch(targetMap.audioData);
+             arrayBuffer = await res.arrayBuffer();
+           } else {
+             // Fallback to static URL
+             const res = await fetch(targetMap.audioUrl);
+             arrayBuffer = await res.arrayBuffer();
+           }
+           
+           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+           audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+           step.value = 'play';
+         } catch (e) {
+           console.warn("Auto-load failed, waiting for user file", e);
+         }
+      } else if (route.query.map) {
+         await handleMapOnlyStart(targetMap);
       }
     }
   } catch (e) {
     console.error("Failed to load map:", e);
+  } finally {
+    isAnalyzing.value = false;
   }
 };
 
@@ -397,8 +575,21 @@ watch(() => route.query.mapId, (newMapId) => {
 }
 
 .loader-content p {
-  color: #666;
+  color: #888;
   font-size: 0.9rem;
+  margin-top: 1rem;
+}
+
+.time-left {
+  color: #00ffff !important;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
 }
 
 .progress-bar {
@@ -416,19 +607,53 @@ watch(() => route.query.mapId, (newMapId) => {
   top: 0; 
   left: 0; 
   height: 100%; 
-  width: 50%;
+  width: 0%;
   background: linear-gradient(90deg, #00ffff, #ff00ff);
-  animation: load 1s infinite linear;
   border-radius: 2px;
-}
-
-@keyframes load {
-  0% { left: -50%; }
-  100% { left: 100%; }
+  transition: width 0.3s ease-out;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.failure-log {
+  margin-top: 1.5rem;
+  padding: 0.8rem;
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  border-radius: 8px;
+  font-family: monospace;
+  animation: shake 0.5s ease-in-out;
+}
+
+.fail-tag {
+  color: #ff4444;
+  font-weight: 900;
+  font-size: 0.8rem;
+  display: block;
+  margin-bottom: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.fail-preview {
+  width: 100%;
+  height: 120px;
+  background: #000;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  border: 1px solid #333;
+}
+
+.fail-details {
+  color: #666;
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
 }
 </style>

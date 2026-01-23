@@ -3,8 +3,15 @@
  * 패턴 기반 맵 생성 시스템
  */
 
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike';
+export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser';
 export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green';
+
+export interface ObstacleMovement {
+  type: 'updown';
+  range: number;
+  speed: number;
+  phase: number;
+}
 
 export interface Obstacle {
   x: number;
@@ -13,6 +20,8 @@ export interface Obstacle {
   height: number;
   type: ObstacleType;
   angle?: number; // 기울기 각도 (도)
+  movement?: ObstacleMovement;
+  initialY?: number; // 움직임의 기준점
 }
 
 export interface Portal {
@@ -56,7 +65,7 @@ export class GameEngine {
   playerY: number = 360;
   playerSize: number = 12;
   basePlayerSize: number = 12;
-  miniPlayerSize: number = 6;  // 미니 모드 히트박스
+  miniPlayerSize: number = 12;  // 미니 모드 히트박스 (일반과 동일)
 
   // Wave movement
   baseSpeed: number = 350;
@@ -107,6 +116,9 @@ export class GameEngine {
   totalLength: number = 0;
 
   // Track data
+  // Validation feedback
+  validationFailureInfo: { x: number, y: number, nearObstacles: Obstacle[] } | null = null;
+
   trackDuration: number = 0;
 
   // Visual effects
@@ -129,10 +141,36 @@ export class GameEngine {
     const playH = this.maxY - this.minY;
     const diff = this.mapConfig.difficulty;
 
-    // 난이도별 격차 극대화: 30은 물리적 한계치 (0.02)
-    const gapMultiplier = Math.max(0.02, Math.pow(0.80, diff - 5) * (diff < 5 ? 1 + (5 - diff) * 0.4 : 1));
-    // 난이도에 따른 블록 간격 배수 (더 극단적)
-    const blockGapFactor = 2.5 * Math.max(0.15, 1.0 + (5 - diff) * 0.1);
+    // 물리적 한계치 설정 (플레이어 크기의 최소 3.5배는 되어야 통과 가능)
+    const MIN_GAP = this.basePlayerSize * 3.5;
+
+    // 난이도별 격차 극대화: Difficulties are 1~30
+    // Easy (1~7): 널널함 (1.5 ~ 1.0)
+    // Normal (8~15): 적당함 (1.0 ~ 0.6)
+    // Hard (16~23): 빡빡함 (0.6 ~ 0.3)
+    // Impossible (24~30): 극한 (0.3 ~ 0.05) - 물리적 한계치 근접
+
+    let gapMultiplier = 1.0;
+    if (diff < 8) {
+      // Easy: 1.5 -> 1.0
+      gapMultiplier = 1.5 - ((diff - 1) / 7) * 0.5;
+    } else if (diff < 16) {
+      // Normal: 1.0 -> 0.6
+      gapMultiplier = 1.0 - ((diff - 8) / 8) * 0.4;
+    } else if (diff < 24) {
+      // Hard: 0.6 -> 0.3
+      gapMultiplier = 0.6 - ((diff - 16) / 8) * 0.3;
+    } else {
+      // Impossible: 0.3 -> 0.05
+      gapMultiplier = 0.3 - ((diff - 24) / 7) * 0.25;
+    }
+
+    // 블록 간격 배수 (Easy는 넓게, Impossible은 좁게)
+    let blockGapFactor = 1.0;
+    if (diff < 8) blockGapFactor = 2.0; // Easy
+    else if (diff < 16) blockGapFactor = 1.2; // Normal
+    else if (diff < 24) blockGapFactor = 1.0; // Hard
+    else blockGapFactor = 0.8; // Impossible
     const SPIKE_H = 40;
 
     // 패턴 1-10: 바닥 가시 (위로 피하기)
@@ -182,7 +220,7 @@ export class GameEngine {
     // 패턴 31-40: 더블 가시 (중간 통로) - 난이도 반영
     for (let i = 0; i < 10; i++) {
       const baseGap = (160 - i * 8) * blockGapFactor;
-      const gapSize = baseGap * gapMultiplier;
+      const gapSize = Math.max(MIN_GAP, baseGap * gapMultiplier);
       const topH = (playH - gapSize) / 2;
       const bottomY = topH + gapSize;
       const bottomH = playH - bottomY;
@@ -294,7 +332,7 @@ export class GameEngine {
     for (let i = 0; i < 10; i++) {
       const gapY = 40 + i * 35;
       const baseGapH = (100 - i * 4) * blockGapFactor;
-      const gapH = baseGapH * gapMultiplier;
+      const gapH = Math.max(MIN_GAP, baseGapH * gapMultiplier);
       this.patterns.push({
         obstacles: [
           { dx: 0, dy: 0, w: 40, h: gapY, type: 'block' },
@@ -331,6 +369,83 @@ export class GameEngine {
         obstacles: obs,
         requiredY: i % 2 === 0 ? 'top' : 'bottom',
         width: 80
+      });
+    }
+
+    // 패턴 101-110: 레이저 (중앙 또는 위아래)
+    for (let i = 0; i < 10; i++) {
+      const h = 15;
+      const w = 200;
+      const positions = ['top', 'middle', 'bottom'] as const;
+      const pos = positions[i % 3]!;
+      let dy = playH / 2 - h / 2;
+      if (pos === 'top') dy = 60;
+      if (pos === 'bottom') dy = playH - 60 - h;
+
+      this.patterns.push({
+        obstacles: [{ dx: 0, dy: dy, w: w, h: h, type: 'laser' }],
+        requiredY: pos === 'top' ? 'bottom' : pos === 'bottom' ? 'top' : (i % 2 === 0 ? 'top' : 'bottom'),
+        width: w + 50,
+        type: 'laser_pattern'
+      });
+    }
+
+    // 패턴 111-120: 움직이는 톱니/스파이크볼
+    for (let i = 0; i < 10; i++) {
+      const size = 60;
+      const type = i % 2 === 0 ? 'saw' : 'spike_ball';
+      const dy = playH / 2 - size / 2;
+
+      this.patterns.push({
+        obstacles: [{
+          dx: 0, dy: dy, w: size, h: size, type: type as ObstacleType,
+          movement: {
+            type: 'updown',
+            range: 100 + i * 10,
+            speed: 1 + i * 0.25,
+            phase: i * Math.PI / 4
+          }
+        }],
+        requiredY: 'middle',
+        width: 100,
+        type: 'moving_hazard'
+      });
+    }
+
+    // 패턴 121-130: 스파이크 볼 밭
+    for (let i = 0; i < 10; i++) {
+      const count = 3 + Math.floor(i / 3);
+      const obs: Pattern['obstacles'] = [];
+      for (let j = 0; j < count; j++) {
+        const dy = 50 + (j * 120) % (playH - 100);
+        obs.push({ dx: j * 80, dy: dy, w: 40, h: 40, type: 'spike_ball' });
+      }
+      this.patterns.push({
+        obstacles: obs,
+        requiredY: 'middle',
+        width: count * 80,
+        type: 'spike_ball_field'
+      });
+    }
+
+    // 패턴 131-140: 세로 레이저 (Vertical Lasers)
+    for (let i = 0; i < 10; i++) {
+      const h = playH;
+      const w = 15;
+      const xOffset = 0;
+
+      // 상단/하단 중 하나를 비우거나 중앙을 통과하게 함
+      const gapY = 100 + (i * 100) % (playH - 200);
+      const gapH = 150;
+
+      this.patterns.push({
+        obstacles: [
+          { dx: xOffset, dy: 0, w: w, h: gapY, type: 'v_laser' },
+          { dx: xOffset, dy: gapY + gapH, w: w, h: playH - (gapY + gapH), type: 'v_laser' }
+        ],
+        requiredY: gapY < playH / 3 ? 'top' : gapY > playH * 2 / 3 - gapH ? 'bottom' : 'middle',
+        width: 100,
+        type: 'vertical_laser_pattern'
       });
     }
 
@@ -424,15 +539,17 @@ export class GameEngine {
   private patternGapMultiplier: number = 1.0;
 
   /**
-   * 패턴 기반 맵 생성 (AI 경로 계산 실패 시 자동 재생성)
+   * patterns.
+   * @param offsetAttempt 외부에서 재시도를 관리할 때 사용하는 시도 횟수 오프셋
    */
-  generateMap(beatTimes: number[], sections: any[], duration: number, fixedSeed?: number) {
+  generateMap(beatTimes: number[], sections: any[], duration: number, fixedSeed?: number, verify: boolean = true, offsetAttempt: number = 0) {
     const seed = fixedSeed || (beatTimes.length * 777 + Math.floor(duration * 100));
-    const maxRetries = 10;
+    const maxRetries = verify ? 10 : 1;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const currentAttempt = attempt + offsetAttempt;
       // 시도할 때마다 간격 배율 증가 (1.0, 1.2, 1.44, 1.73, ...)
-      this.patternGapMultiplier = Math.pow(1.2, attempt);
+      this.patternGapMultiplier = Math.pow(1.2, currentAttempt);
 
       this.initPatterns();
       this.obstacles = [];
@@ -441,13 +558,22 @@ export class GameEngine {
       this.totalLength = duration * this.baseSpeed + 500;
       this.autoplayLog = [];
 
-      let rng = this.seededRandom(seed + attempt); // 시드도 살짝 변경
+      let rng = this.seededRandom(seed + currentAttempt); // 시드도 살짝 변경
 
       this.generatePatternBasedMap(beatTimes, sections, rng);
 
       // 정렬 (AI 경로 계산 전에 필요)
       this.obstacles.sort((a, b) => a.x - b.x);
       this.portals.sort((a, b) => a.x - b.x);
+
+      // 중복 및 포함된 장애물 제거
+      this.removeRedundantObstacles();
+
+      // 검증을 건너뛰는 경우 첫 생성 결과로 종료
+      if (!verify) {
+        console.log(`[MapGen] Map generated quickly with seed: ${seed}`);
+        return;
+      }
 
       // AI 경로 계산 시도
       const pathSuccess = this.computeAutoplayLog(200, 360);
@@ -510,18 +636,20 @@ export class GameEngine {
         let portalType: PortalType;
 
         if (diff < 8) {
-          // EASY (~7): 0.5x, 1x 위주
-          portalType = intensity < 0.75 ? 'speed_0.5' : 'speed_1';
-        } else if (diff < 18) {
-          // NORMAL (8~17): 1x, 2x 중심. 가끔 3x.
-          if (intensity < 0.4) portalType = 'speed_1';
-          else if (intensity < 0.85) portalType = 'speed_2';
+          // EASY (~7): 0.5x (Center), 1x
+          portalType = intensity < 0.7 ? 'speed_0.5' : 'speed_1';
+        } else if (diff < 16) {
+          // NORMAL (8~15): 1x (Center), 2x
+          if (intensity < 0.6) portalType = 'speed_1';
+          else portalType = 'speed_2';
+        } else if (diff < 24) {
+          // HARD (16~23): 0.5x (Narrow), 2x (Center), 3x
+          if (intensity < 0.15) portalType = 'speed_0.5';
+          else if (intensity < 0.75) portalType = 'speed_2';
           else portalType = 'speed_3';
         } else {
-          // HARD+ (18~30): 2x, 3x, 4x 배정
-          if (intensity < 0.3) portalType = 'speed_2';
-          else if (intensity < 0.7) portalType = 'speed_3';
-          else portalType = 'speed_4';
+          // IMPOSSIBLE (24+): 4x (Center)
+          portalType = 'speed_4';
         }
 
         // 한 번에 생성할 포탈 목록 수집
@@ -534,8 +662,8 @@ export class GameEngine {
           lastSpeedType = portalType;
         }
 
-        // 2. 변곡점 중력반전 포탈
-        if (rng() < 0.75) {
+        // 2. 변곡점 중력반전 포탈 (EASY 모드에서는 미등장)
+        if (rng() < 0.75 && diff >= 8) {
           const wantInverted = rng() > 0.5;
           if (wantInverted !== currentInverted) {
             portalTypes.push(wantInverted ? 'gravity_yellow' : 'gravity_blue');
@@ -543,8 +671,8 @@ export class GameEngine {
           }
         }
 
-        // 3. 미니 포탈
-        if (intensity > 0.8 || (intensity > 0.6 && rng() < 0.4)) {
+        // 3. 미니 포탈 (난이도 3부터 등장)
+        if (this.mapConfig.difficulty >= 3 && (intensity > 0.8 || (intensity > 0.6 && rng() < 0.4))) {
           portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
           currentMini = !currentMini;
         }
@@ -562,12 +690,36 @@ export class GameEngine {
 
         // 속도와 미니 상태에 따른 동적 간격 스케일 + 재생성 시 증가하는 배율 적용
         let gapScale = 1.0 * this.patternGapMultiplier;
-        if (currentMini) gapScale *= 1.25;
-        gapScale *= Math.pow(speedM, 1.3);
+
+        if (this.mapConfig.difficulty >= 24) {
+          // IMPOSSIBLE
+          if (currentMini) {
+            // 4x Mini: Sparse
+            gapScale *= 2.0;
+          } else {
+            // 4x Normal: Dense (Many obstacles)
+            gapScale *= 0.7;
+          }
+          // High speed compensation reduced to keep density high
+          gapScale *= Math.pow(speedM, 0.9);
+        } else if (this.mapConfig.difficulty >= 16) {
+          // HARD
+          if (Math.abs(speedM - Math.sqrt(0.5)) < 0.01) {
+            // 0.5x: Very Narrow
+            gapScale *= 0.4;
+          } else {
+            gapScale *= Math.pow(speedM, 1.3);
+          }
+          if (currentMini) gapScale *= 1.25;
+        } else {
+          // EASY / NORMAL
+          gapScale *= Math.pow(speedM, 1.3);
+          if (currentMini) gapScale *= 1.25;
+        }
 
         const xPos = currentX;
-        // 패턴 간 최소 간격 (재생성 시 자동 확대됨)
-        const minGapSeconds = (220 * gapScale) / (this.baseSpeed * speedM);
+        // 패턴 간 최소 간격 (기본 220 -> 330으로 1.5배 증가)
+        const minGapSeconds = (330 * gapScale) / (this.baseSpeed * speedM);
 
         if (beatTime < lastPatternEndTime + minGapSeconds) continue;
 
@@ -643,7 +795,8 @@ export class GameEngine {
         y: baseY + obs.dy,
         width: obs.w,
         height: obs.h,
-        type: obs.type
+        type: obs.type,
+        initialY: baseY + obs.dy
       });
     }
   }
@@ -684,7 +837,9 @@ export class GameEngine {
         width: w,
         height: h,
         type: obs.type,
-        angle: obs.angle
+        angle: obs.angle,
+        movement: obs.movement ? { ...obs.movement } : undefined,
+        initialY: baseY + dy
       });
     }
   }
@@ -715,22 +870,26 @@ export class GameEngine {
     });
 
     // 강제 진입 블록 (전체 포탈 그룹을 감쌈)
+    // 플레이어 크기보다 틈새가 넉넉해야 함
+    const entryMargin = this.basePlayerSize * 2.2;
     const portalTop = centerY - portalHeight / 2;
     const portalBottom = centerY + portalHeight / 2;
 
-    if (portalTop > this.minY + 15) {
+    if (portalTop > this.minY + entryMargin) {
       this.obstacles.push({
         x: xPos - 10, y: this.minY,
-        width: totalWidth + 20, height: portalTop - this.minY - 10,
-        type: 'block'
+        width: totalWidth + 20, height: portalTop - this.minY - entryMargin,
+        type: 'block',
+        initialY: this.minY
       });
     }
 
-    if (portalBottom < this.maxY - 15) {
+    if (portalBottom < this.maxY - entryMargin) {
       this.obstacles.push({
-        x: xPos - 10, y: portalBottom + 10,
-        width: totalWidth + 20, height: this.maxY - portalBottom - 10,
-        type: 'block'
+        x: xPos - 10, y: portalBottom + entryMargin,
+        width: totalWidth + 20, height: this.maxY - (portalBottom + entryMargin),
+        type: 'block',
+        initialY: portalBottom + entryMargin
       });
     }
   }
@@ -764,180 +923,191 @@ export class GameEngine {
    */
   public *computeAutoplayLogGen(startX: number, startY: number): Generator<number, boolean, unknown> {
     this.autoplayLog = [];
-    const dt = 1 / 60; // 60fps 시뮬레이션
-
-    let x = startX;
-    let y = startY;
-    let h = false; // 현재 입력 상태 (홀딩 여부)
-    let g = this.isGravityInverted;
-    let sm = this.speedMultiplier;
-    let m = this.isMini;
-    let wa = this.waveAngle;
-
+    this.validationFailureInfo = null;
+    const dt = 1 / 60;
     const sortedObs = [...this.obstacles].sort((a, b) => a.x - b.x);
     const sortedPortals = [...this.portals].sort((a, b) => a.x - b.x);
-    let pIdx = 0;
 
-    // 내부 도우미: 충돌 체크
-    const checkCollision = (testX: number, testY: number, size: number): boolean => {
-      if (testY < this.minY + size || testY > this.maxY - size) return true;
+    interface SearchState {
+      x: number; y: number; time: number; g: boolean; sm: number; m: boolean; wa: number;
+      h: boolean; pIdx: number; lastSwitchTime: number; prev: SearchState | null;
+    }
+
+    const initialState: SearchState = {
+      x: startX, y: startY, time: 0, g: this.isGravityInverted, sm: this.speedMultiplier,
+      m: this.isMini, wa: this.waveAngle, h: false, pIdx: 0, lastSwitchTime: -1.0, prev: null
+    };
+
+    const visited = new Set<string>();
+    const getVisitedKey = (s: SearchState) => {
+      const xi = Math.floor(s.x / (this.baseSpeed * 0.016));
+      const yi = Math.floor(s.y / 8);
+      return `${xi}_${yi}_${s.g ? 1 : 0}_${s.sm}_${s.m ? 1 : 0}`;
+    };
+
+    const checkColl = (tx: number, ty: number, sz: number, tm: number): boolean => {
+      if (ty < this.minY + sz || ty > this.maxY - sz) return true;
       for (let i = 0; i < sortedObs.length; i++) {
-        const obs = sortedObs[i]!;
-        if (obs.x + obs.width < testX - 50) continue;
-        if (obs.x > testX + size + 100) break;
-        if (this.checkObstacleCollision(obs, testX, testY, size)) return true;
+        const o = sortedObs[i]!;
+        if (o.x + o.width < tx - 50) continue;
+        if (o.x > tx + 100) break;
+        if (this.checkObstacleCollision(o, tx, ty, sz, tm)) return true;
       }
       return false;
     };
 
-    // 내부 도우미: 미래 N프레임 시뮬레이션 (점수 반환)
-    const simulateFuture = (startX: number, startY: number, startG: boolean, startSM: number, startM: boolean, startWA: number, initialHold: boolean, frames: number): number => {
-      let sx = startX, sy = startY, sg = startG, ssm = startSM, swa = startWA, smini = startM;
-      let sh = initialHold;
-      let survived = 0;
-      let totalCenterScore = 0;
-      let spIdx = 0;
-
-      // 현재 포탈 시점부터 시작
-      while (spIdx < sortedPortals.length && sortedPortals[spIdx]!.x + sortedPortals[spIdx]!.width < sx) spIdx++;
+    // Lookahead helper
+    const checkSurvival = (baseState: SearchState, testH: boolean, frames: number): boolean => {
+      let sx = baseState.x;
+      let sy = baseState.y;
+      let sg = baseState.g;
+      let ssm = baseState.sm;
+      let swa = baseState.wa;
+      let sm = baseState.m;
+      let spIdx = baseState.pIdx;
+      let sTime = baseState.time;
 
       for (let i = 0; i < frames; i++) {
-        // 포탈 체크
-        for (let j = spIdx; j < sortedPortals.length; j++) {
-          const p = sortedPortals[j]!;
-          if (p.x > sx + 20) break;
-          if (sx >= p.x && sx <= p.x + p.width && sy >= p.y && sy <= p.y + p.height) {
+        while (spIdx < sortedPortals.length && sx >= sortedPortals[spIdx]!.x) {
+          const p = sortedPortals[spIdx]!;
+          if (sy >= p.y && sy <= p.y + p.height) {
             if (p.type === 'gravity_yellow') sg = true;
             if (p.type === 'gravity_blue') sg = false;
             if (p.type.startsWith('speed_')) ssm = this.getSpeedMultiplierFromType(p.type as PortalType);
-            if (p.type === 'mini_pink') { smini = true; swa = this.miniWaveAngle; }
-            if (p.type === 'mini_green') { smini = false; swa = 45; }
+            if (p.type === 'mini_pink') { sm = true; swa = this.miniWaveAngle; }
+            if (p.type === 'mini_green') { sm = false; swa = 45; }
           }
+          spIdx++;
         }
 
+        const spd = this.baseSpeed * ssm;
+        const amp = spd * Math.tan(swa * Math.PI / 180);
+        const sz = sm ? this.miniPlayerSize : this.basePlayerSize;
 
-        const speed = this.baseSpeed * ssm;
-        const amp = speed * Math.tan(swa * Math.PI / 180);
-        // 시뮬레이션 시에는 5% 정도 더 큰 히트박스로 보수적으로 계산
-        const size = (smini ? this.miniPlayerSize : this.basePlayerSize) * 1.05;
+        sx += spd * dt;
+        sTime += dt;
+        const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
+        sy += amp * vy * dt;
 
-        sx += speed * dt;
-        const holdDir = sg ? 1 : -1;
-        const releaseDir = sg ? -1 : 1;
-        const dir = sh ? holdDir : releaseDir;
-        sy += amp * dir * dt;
-
-
-        // 충돌 시 시뮬레이션 종료
-        if (checkCollision(sx, sy, size)) break;
-        survived++;
-
-        // 득점 요소: 타겟(포탈 또는 중앙) 유지 가중치
-        let targetY = 360;
-        let portalBonus = 0;
-        for (let k = spIdx; k < sortedPortals.length; k++) {
-          const p = sortedPortals[k]!;
-          if (p.x > sx + 150) break;
-          if (p.x > sx) {
-            targetY = p.y + p.height / 2;
-            portalBonus = 2000; // 포탈 정렬 가중치 부여
-            break;
-          }
-        }
-
-        totalCenterScore += (100 - Math.abs(sy - targetY)) + portalBonus;
-
-        // 시뮬레이션 내에서의 간단한 정책: 다음 프레임에 죽지 않는 쪽 선택
-        const nextYHold = sy + amp * holdDir * dt;
-        const nextYRelease = sy + amp * releaseDir * dt;
-        const nextX = sx + speed * dt;
-        const holdDead = checkCollision(nextX, nextYHold, size);
-        const releaseDead = checkCollision(nextX, nextYRelease, size);
-
-        if (holdDead && !releaseDead) sh = false;
-        else if (!holdDead && releaseDead) sh = true;
-        else {
-          // 둘 다 살면 타겟 Y 유지 시도
-          sh = Math.abs(nextYHold - targetY) < Math.abs(nextYRelease - targetY);
-        }
+        if (checkColl(sx, sy, sz, sTime)) return false;
       }
-      return survived * 10000 + totalCenterScore;
+      return true;
     };
 
+    const stack: SearchState[] = [initialState];
+    let maxX = startX;
     let loops = 0;
-    while (x < this.totalLength) {
+    const maxLoops = 250000;
+    let bestState: SearchState | null = null;
+    let furthestFailX = startX;
+    let failY = startY;
+
+    while (stack.length > 0) {
       loops++;
-      if (loops % 30 === 0) {
-        yield x / this.totalLength;
+      const curr = stack.pop()!;
+      if (curr.x > maxX) {
+        maxX = curr.x;
+        if (loops % 500 === 0) yield maxX / this.totalLength;
       }
+      if (curr.x >= this.totalLength) { bestState = curr; break; }
 
-      // 포탈 상태 업데이트
-      while (pIdx < sortedPortals.length && x >= sortedPortals[pIdx]!.x) {
-        const p = sortedPortals[pIdx]!;
-        if (y >= p.y && y <= p.y + p.height) {
-          if (p.type === 'gravity_yellow') g = true;
-          if (p.type === 'gravity_blue') g = false;
-          if (p.type.startsWith('speed_')) sm = this.getSpeedMultiplierFromType(p.type as PortalType);
-          if (p.type === 'mini_pink') { m = true; wa = this.miniWaveAngle; }
-          if (p.type === 'mini_green') { m = false; wa = 45; }
+      const vkey = getVisitedKey(curr);
+      if (visited.has(vkey)) continue;
+      visited.add(vkey);
+
+      let nG = curr.g; let nSM = curr.sm; let nM = curr.m; let nWA = curr.wa;
+      let npIdx = curr.pIdx;
+      while (npIdx < sortedPortals.length && curr.x >= sortedPortals[npIdx]!.x) {
+        const p = sortedPortals[npIdx]!;
+        if (curr.y >= p.y && curr.y <= p.y + p.height) {
+          if (p.type === 'gravity_yellow') nG = true;
+          if (p.type === 'gravity_blue') nG = false;
+          if (p.type.startsWith('speed_')) nSM = this.getSpeedMultiplierFromType(p.type as PortalType);
+          if (p.type === 'mini_pink') { nM = true; nWA = this.miniWaveAngle; }
+          if (p.type === 'mini_green') { nM = false; nWA = 45; }
         }
-        pIdx++;
+        npIdx++;
       }
 
-      const speed = this.baseSpeed * sm;
-      const amp = speed * Math.tan(wa * Math.PI / 180);
-      const size = m ? this.miniPlayerSize : this.basePlayerSize;
+      const spd = this.baseSpeed * nSM;
+      const amp = spd * Math.tan(nWA * Math.PI / 180);
+      const sz = nM ? this.miniPlayerSize : this.basePlayerSize;
+      const nT = curr.time + dt;
+      const nX = curr.x + spd * dt;
+      const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
+      const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
+      const dH = checkColl(nX, nYH, sz, nT);
+      const dR = checkColl(nX, nYR, sz, nT);
 
-      // 현재 시점에서 두 가지 선택지에 대해 미래 시뮬레이션 수행
-      // 300프레임(약 5초) 앞을 내다봄
-      const scoreHold = simulateFuture(x, y, g, sm, m, wa, true, 300);
-      const scoreRelease = simulateFuture(x, y, g, sm, m, wa, false, 300);
+      if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
-      // 결정
-      if (scoreHold > scoreRelease) {
-        h = true;
-      } else if (scoreRelease > scoreHold) {
-        h = false;
+      const prevH = curr.h;
+      const lookaheadFrames = 40;
+
+      // CPS Limiting Logic: Target Max 4 CPS (~0.125s interval)
+      const MIN_SWITCH_INTERVAL = 0.125;
+      const timeSinceLastSwitch = curr.time - curr.lastSwitchTime;
+      const isSwitchRestricted = timeSinceLastSwitch < MIN_SWITCH_INTERVAL;
+
+      let preferHold = false;
+      // Pass lastSwitchTime to validation state for lookahead? (Simplification: just check immediate safety)
+      const isHoldSafe = !dH && checkSurvival({ ...curr, x: nX, y: nYH, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, h: true, lastSwitchTime: prevH ? curr.lastSwitchTime : nT, prev: null }, true, lookaheadFrames);
+      const isReleaseSafe = !dR && checkSurvival({ ...curr, x: nX, y: nYR, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, h: false, lastSwitchTime: !prevH ? curr.lastSwitchTime : nT, prev: null }, false, lookaheadFrames);
+
+      // Default preference based on safety
+      if (prevH) {
+        preferHold = isHoldSafe;
       } else {
-        // 동점이면 타겟 유지
-        const pholdDir = g ? 1 : -1;
-        const preleaseDir = g ? -1 : 1;
-        const nextYHold = y + amp * pholdDir * dt;
-        const nextYRelease = y + amp * preleaseDir * dt;
-
-        // 타겟 Y (중앙 또는 포탈)
-        let tY = 360;
-        for (let k = pIdx; k < sortedPortals.length; k++) {
-          const p = sortedPortals[k]!
-          if (p.x > x + 150) break;
-          if (p.x > x) { tY = p.y + p.height / 2; break; }
-        }
-        h = Math.abs(nextYHold - tY) < Math.abs(nextYRelease - tY);
+        preferHold = !isReleaseSafe;
       }
 
-      // 실제 이동
-      const currentDir = h ? (g ? 1 : -1) : (g ? -1 : 1);
-      const nextX = x + speed * dt;
-      const nextY = y + amp * currentDir * dt;
+      // 1. If currently violating CPS limit, FORCE keeping same state if safe.
+      // 2. Unless keeping same state is DEATH (isHoldSafe=false for prevH=true) -> then we MUST switch (exception applied)
+      if (isSwitchRestricted) {
+        if (prevH && isHoldSafe) preferHold = true; // Must hold
+        if (!prevH && isReleaseSafe) preferHold = false; // Must release
+      }
 
-      // 현재 프레임 로그 저장
-      this.autoplayLog.push({ x: nextX, y: nextY, holding: h });
+      const nextActions = preferHold ? [true, false] : [false, true];
+      // Note: `preferHold ? [true, false]` means if preferHold is true, we test Hold first.
 
-      // 상태 업데이트
-      x = nextX;
-      y = nextY;
+      for (const h of nextActions) {
+        if (h ? !dH : !dR) {
+          // If this action is a switch:
+          if (h !== prevH) {
+            // Check restriction
+            if (isSwitchRestricted) {
+              // Only allow switch if the alternative (maintaining state) leads to death
+              // We already established preference above, but let's be explicit
+              const maintenanceSafe = prevH ? isHoldSafe : isReleaseSafe;
+              if (maintenanceSafe) continue; // Skip this switch, it violates CPS and isn't necessary for survival
+            }
+          }
 
-      // 만약 정답을 찾지 못하고 죽었다면 여기서 중단 (로그가 잘린 채로 게임 오버 처리됨)
-      if (checkCollision(x, y, size)) break;
+          // Push new state
+          const newLastSwitchTime = (h !== prevH) ? nT : curr.lastSwitchTime;
+          stack.push({ x: nX, y: h ? nYH : nYR, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, h, pIdx: npIdx, lastSwitchTime: newLastSwitchTime, prev: curr });
+        }
+      }
+      if (loops > maxLoops) break;
     }
 
-    return x >= this.totalLength;
+    if (bestState) {
+      const path: { x: number, y: number, holding: boolean }[] = [];
+      let t: SearchState | null = bestState;
+      while (t) { path.push({ x: t.x, y: t.y, holding: t.h }); t = t.prev; }
+      this.autoplayLog = path.reverse();
+      return true;
+    } else {
+      this.validationFailureInfo = {
+        x: furthestFailX, y: failY,
+        nearObstacles: sortedObs.filter(o => o.x > furthestFailX - 400 && o.x < furthestFailX + 600)
+      };
+      return false;
+    }
   }
 
-  /**
-   * 동기 Wrapper (기존 호환성용 - 맵 생성 시 검증 등)
-   */
   public computeAutoplayLog(startX: number = 200, startY: number = 360): boolean {
     const gen = this.computeAutoplayLogGen(startX, startY);
     let res = gen.next();
@@ -945,9 +1115,6 @@ export class GameEngine {
     return res.value as boolean;
   }
 
-  /**
-   * 비동기 Wrapper (UI 프로그레스 바 업데이트용)
-   */
   public async computeAutoplayLogAsync(startX: number, startY: number, onProgress: (p: number) => void): Promise<boolean> {
     const gen = this.computeAutoplayLogGen(startX, startY);
     let res = gen.next();
@@ -956,7 +1123,6 @@ export class GameEngine {
     while (!res.done) {
       if (typeof res.value === 'number') {
         const now = performance.now();
-        // 16ms(60fps) 마다 UI 제어권 반환 및 프로그레스 업데이트
         if (now - lastTime > 16) {
           onProgress(res.value);
           await new Promise(resolve => setTimeout(resolve, 0));
@@ -1048,11 +1214,13 @@ export class GameEngine {
     if (this.playerY < this.minY + this.playerSize) {
       this.playerY = this.minY + this.playerSize;
       this.die('천장에 충돌!');
+      this.spawnDeathParticles();
       return;
     }
     if (this.playerY > this.maxY - this.playerSize) {
       this.playerY = this.maxY - this.playerSize;
       this.die('바닥에 충돌!');
+      this.spawnDeathParticles();
       return;
     }
 
@@ -1064,8 +1232,9 @@ export class GameEngine {
     if (this.trail.length > 80) this.trail.shift();  // 더 긴 트레일
 
     this.updateParticles(dt);
+    this.updateMovingObstacles(currentTime);
     this.checkPortalCollisions();
-    this.checkCollisions();
+    this.checkCollisions(currentTime);
 
     if (this.playerX >= this.totalLength) {
       this.isPlaying = false;
@@ -1245,12 +1414,12 @@ export class GameEngine {
     return { top: obs.y, bottom: obs.y + obs.height };
   }
 
-  private checkCollisions() {
+  private checkCollisions(time: number) {
     for (const obs of this.obstacles) {
       if (obs.x + obs.width < this.playerX - 80) continue;
       if (obs.x > this.playerX + 100) break;
 
-      if (this.checkObstacleCollision(obs, this.playerX, this.playerY, this.playerSize)) {
+      if (this.checkObstacleCollision(obs, this.playerX, this.playerY, this.playerSize, time)) {
         this.die('장애물과 충돌!');
         this.spawnDeathParticles();
         return;
@@ -1261,13 +1430,21 @@ export class GameEngine {
   /**
    * 세밀한 충돌 체크 (가시는 세모, 기울어진 블록은 OBB 적용)
    */
-  private checkObstacleCollision(obs: Obstacle, px: number, py: number, pSize: number): boolean {
+  private checkObstacleCollision(obs: Obstacle, px: number, py: number, pSize: number, simTime?: number): boolean {
+    let obsY = obs.y;
+
+    // 시뮬레이션 중이거나 움직임이 있는 경우 현재 시간 기준으로 위치 계산
+    if (simTime !== undefined && obs.movement && obs.movement.type === 'updown' && obs.initialY !== undefined) {
+      const { range, speed, phase } = obs.movement;
+      obsY = obs.initialY + Math.sin(simTime * speed + phase) * range;
+    }
+
     const isRotated = obs.angle !== undefined && obs.angle !== 0;
 
     // 1단계: 기본 AABB 체크 (기울어진 경우 여유를 둠)
     const margin = isRotated ? Math.max(obs.width, obs.height) : 0;
     if (px + pSize <= obs.x - margin || px - pSize >= obs.x + obs.width + margin ||
-      py + pSize <= obs.y - margin || py - pSize >= obs.y + obs.height + margin) {
+      py + pSize <= obsY - margin || py - pSize >= obsY + obs.height + margin) {
       return false;
     }
 
@@ -1282,17 +1459,18 @@ export class GameEngine {
 
     // 2단계: 기울어진 블록 (Point-in-Rotated-Rect)
     if (isRotated && obs.type === 'block') {
+      const tempObs = { ...obs, y: obsY };
       for (const p of points) {
-        if (this.isPointInRotatedRect(p.x, p.y, obs)) return true;
+        if (this.isPointInRotatedRect(p.x, p.y, tempObs)) return true;
       }
       return false;
     }
 
-    // 4단계: 톱니(Saw) 원형 히트박스 체크 (더 정교하게)
-    if (obs.type === 'saw') {
+    // 4단계: 톱니(Saw) & 스파이크볼(Spike Ball) 원형 히트박스 체크 (더 정교하게)
+    if (obs.type === 'saw' || obs.type === 'spike_ball') {
       const centerX = obs.x + obs.width / 2;
-      const centerY = obs.y + obs.height / 2;
-      const radius = (obs.width / 2) * 0.9; // 시각적 원에 더 근접하도록 90% 크기 사용
+      const centerY = obsY + obs.height / 2;
+      const radius = (obs.width / 2) * (obs.type === 'saw' ? 0.9 : 0.85); // 스파이크볼은 약간 더 정밀하게
 
       // 원과 사각형(플레이어) 충돌: 플레이어의 5개 점 체크
       for (const p of points) {
@@ -1303,24 +1481,38 @@ export class GameEngine {
       return false;
     }
 
+    // 5단계: 레이저 (Laser) - 얇은 가로선 / v_laser - 얇은 세로선
+    if (obs.type === 'laser') {
+      const laserH = obs.height * 0.4;
+      const centerY = obsY + obs.height / 2;
+      return px + pSize > obs.x && px - pSize < obs.x + obs.width &&
+        py + pSize > centerY - laserH && py - pSize < centerY + laserH;
+    }
+    if (obs.type === 'v_laser') {
+      const laserW = obs.width * 0.4;
+      const centerX = obs.x + obs.width / 2;
+      return py + pSize > obsY && py - pSize < obsY + obs.height &&
+        px + pSize > centerX - laserW && px - pSize < centerX + laserW;
+    }
+
     // 3단계: 가시(Spike) 세모 체크
     if (obs.type === 'spike' || obs.type === 'mini_spike') {
-      const isBottomSpike = obs.y > 300;
+      const isBottomSpike = obsY > 300;
       const centerX = obs.x + obs.width / 2;
 
       if (isBottomSpike) {
         for (const p of points) {
           if (this.isPointInTriangle(p.x, p.y,
-            obs.x, obs.y + obs.height,
-            centerX, obs.y,
-            obs.x + obs.width, obs.y + obs.height)) return true;
+            obs.x, obsY + obs.height,
+            centerX, obsY,
+            obs.x + obs.width, obsY + obs.height)) return true;
         }
       } else {
         for (const p of points) {
           if (this.isPointInTriangle(p.x, p.y,
-            obs.x, obs.y,
-            centerX, obs.y + obs.height,
-            obs.x + obs.width, obs.y)) return true;
+            obs.x, obsY,
+            centerX, obsY + obs.height,
+            obs.x + obs.width, obsY)) return true;
         }
       }
       return false;
@@ -1328,7 +1520,7 @@ export class GameEngine {
 
     // 일반 블록은 AABB만으로 체크 (isRotated가 false인 경우)
     return px + pSize > obs.x && px - pSize < obs.x + obs.width &&
-      py + pSize > obs.y && py - pSize < obs.y + obs.height;
+      py + pSize > obsY && py - pSize < obsY + obs.height;
   }
 
   private isPointInRotatedRect(px: number, py: number, obs: Obstacle): boolean {
@@ -1345,6 +1537,117 @@ export class GameEngine {
     const ry = tx * sin + ty * cos;
 
     return Math.abs(rx) <= obs.width / 2 && Math.abs(ry) <= obs.height / 2;
+  }
+
+  /**
+   * 장애물 중복 제거: 다른 장애물에 완전히 포함된 장애물을 삭제합니다.
+   */
+  private removeRedundantObstacles() {
+    const toRemove = new Set<number>();
+    const n = this.obstacles.length;
+
+    for (let i = 0; i < n; i++) {
+      const a = this.obstacles[i]!;
+      if (a.movement) continue; // 움직이는 장애물은 일단 제외
+
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const b = this.obstacles[j]!;
+        if (b.movement) continue;
+
+        // 최적화: X축 범위가 겹치지 않으면 패스
+        // (단, b가 회전된 경우는 span이 달라질 수 있으므로 여유를 둠)
+        const margin = b.angle ? Math.max(b.width, b.height) : 0;
+        if (b.x - margin > a.x || b.x + b.width + margin < a.x + a.width) continue;
+
+        if (this.isObstacleContained(a, b)) {
+          toRemove.add(i);
+          break;
+        }
+      }
+    }
+
+    if (toRemove.size > 0) {
+      console.log(`[MapGen] Removing ${toRemove.size} redundant obstacles.`);
+      this.obstacles = this.obstacles.filter((_, idx) => !toRemove.has(idx));
+    }
+  }
+
+  private isObstacleContained(a: Obstacle, b: Obstacle): boolean {
+    // b가 블록이나 가시일 때만 포함 가능하다고 가정 (레이저 등은 너무 얇음)
+    if (b.type !== 'block' && b.type !== 'spike' && b.type !== 'mini_spike') return false;
+
+    const corners = this.getObstacleCorners(a);
+    for (const p of corners) {
+      if (!this.isPointInStaticObstacle(p.x, p.y, b)) return false;
+    }
+    return true;
+  }
+
+  private isPointInStaticObstacle(px: number, py: number, obs: Obstacle): boolean {
+    if (obs.type === 'block') {
+      return this.isPointInRotatedRect(px, py, obs);
+    }
+    if (obs.type === 'spike' || obs.type === 'mini_spike') {
+      const isBottomSpike = obs.y > 300;
+      const centerX = obs.x + obs.width / 2;
+      if (isBottomSpike) {
+        return this.isPointInTriangle(px, py,
+          obs.x, obs.y + obs.height,
+          centerX, obs.y,
+          obs.x + obs.width, obs.y + obs.height);
+      } else {
+        return this.isPointInTriangle(px, py,
+          obs.x, obs.y,
+          centerX, obs.y + obs.height,
+          obs.x + obs.width, obs.y);
+      }
+    }
+    return false;
+  }
+
+  private getObstacleCorners(obs: Obstacle): { x: number, y: number }[] {
+    if (obs.type === 'spike' || obs.type === 'mini_spike') {
+      const isBottomSpike = obs.y > 300;
+      const centerX = obs.x + obs.width / 2;
+      if (isBottomSpike) {
+        return [
+          { x: obs.x, y: obs.y + obs.height },
+          { x: centerX, y: obs.y },
+          { x: obs.x + obs.width, y: obs.y + obs.height }
+        ];
+      } else {
+        return [
+          { x: obs.x, y: obs.y },
+          { x: centerX, y: obs.y + obs.height },
+          { x: obs.x + obs.width, y: obs.y }
+        ];
+      }
+    }
+
+    if (obs.angle) {
+      const angleRad = (obs.angle * Math.PI) / 180;
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + obs.height / 2;
+      const cos = Math.cos(angleRad);
+      const sin = Math.sin(angleRad);
+      const hw = obs.width / 2;
+      const hh = obs.height / 2;
+      return [
+        { dx: -hw, dy: -hh }, { dx: hw, dy: -hh },
+        { dx: hw, dy: hh }, { dx: -hw, dy: hh }
+      ].map(p => ({
+        x: cx + p.dx * cos - p.dy * sin,
+        y: cy + p.dx * sin + p.dy * cos
+      }));
+    }
+
+    return [
+      { x: obs.x, y: obs.y },
+      { x: obs.x + obs.width, y: obs.y },
+      { x: obs.x, y: obs.y + obs.height },
+      { x: obs.x + obs.width, y: obs.y + obs.height }
+    ];
   }
 
   private isPointInTriangle(px: number, py: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) {
@@ -1368,6 +1671,15 @@ export class GameEngine {
         life: 0.8 + Math.random() * 0.4,
         color: colors[Math.floor(Math.random() * colors.length)] || '#ffffff'
       });
+    }
+  }
+
+  private updateMovingObstacles(time: number) {
+    for (const obs of this.obstacles) {
+      if (obs.movement && obs.movement.type === 'updown' && obs.initialY !== undefined) {
+        const { range, speed, phase } = obs.movement;
+        obs.y = obs.initialY + Math.sin(time * speed + phase) * range;
+      }
     }
   }
 

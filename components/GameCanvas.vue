@@ -7,7 +7,22 @@
       <div class="hud">
         <div class="hud-top-left">
           <div class="game-actions">
-            <button v-if="!multiplayerMode" @click="startAutoplay" class="hud-action-btn tutorial">TUTORIAL</button>
+            <button 
+              v-if="!multiplayerMode" 
+              @click="startAutoplay" 
+              class="hud-action-btn tutorial"
+              :disabled="!isMapValidated"
+              :class="{ disabled: !isMapValidated }"
+            >
+              {{ isMapValidated ? 'TUTORIAL' : 'VALIDATING...' }}
+            </button>
+            <button 
+              v-if="!multiplayerMode && !loadMap && isMapValidated && !hasSaved" 
+              @click="manualSave" 
+              class="hud-action-btn save"
+            >
+              SAVE MAP
+            </button>
             <button @click="emit('exit', { progress: progressPct, score: score, outcome: gameOver ? 'fail' : 'win' })" class="hud-action-btn exit">나가기</button>
           </div>
           <div class="title-container">
@@ -58,13 +73,11 @@
           <div class="countdown-text">{{ countdown }}</div>
         </div>
 
-        <div v-if="isComputingPath" class="overlay computing-overlay">
-          <div class="computing-box">
-            <div class="computing-text">COMPUTING OPTIMAL PATH...</div>
-            <div class="computing-progress-track">
-              <div class="computing-progress-fill" :style="{ width: computingProgress + '%' }"></div>
-            </div>
-          </div>
+        <div v-if="isComputingPath && !gameOver && !victory" class="validation-status">
+           <div class="status-msg">OPTIMIZING MAP...</div>
+           <div class="mini-progress">
+             <div class="fill" :style="{ width: computingProgress + '%' }"></div>
+           </div>
         </div>
         
         <div class="controls-hint" v-if="!countdown && !gameOver && !victory && !isComputingPath">
@@ -106,10 +119,12 @@ const isGravityInverted = ref(false);
 const isMini = ref(false);
 const difficulty = ref(props.difficulty || 10);
 const isAutoplayUI = ref(false);
-const isGhostVisible = ref(false);
+const hasSaved = ref(false);
 
+const currentTrackTime = ref(0);
 const isComputingPath = ref(false);
 const computingProgress = ref(0);
+const isMapValidated = ref(false);
 let autoRetryTimer: any = null;
 
 // Audio
@@ -169,24 +184,20 @@ const startGame = () => {
     engine.value.portals = [...props.loadMap.enginePortals];
     engine.value.autoplayLog = [...props.loadMap.autoplayLog];
     engine.value.totalLength = props.loadMap.duration * engine.value.baseSpeed + 500;
+    engine.value.totalLength = props.loadMap.duration * engine.value.baseSpeed + 500;
     difficulty.value = props.loadMap.difficulty;
-    isGhostVisible.value = true;
+    isMapValidated.value = true; // 이미 로그가 있으면 검증된 것으로 간주
   } else {
     engine.value.setMapConfig({
       density: 1.0,
       portalFrequency: 0.15,
       difficulty: difficulty.value
     });
-    engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration);
+    engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false);
     
-    // 생성된 맵 데이터 전달
-    emit('map-ready', {
-      difficulty: difficulty.value,
-      engineObstacles: engine.value.obstacles,
-      enginePortals: engine.value.portals,
-      autoplayLog: engine.value.autoplayLog,
-      duration: props.audioBuffer.duration
-    });
+    // 비동기 검증 시작 (플레이 중에 진행)
+    // 검증이 성공해야만 서버에 저장(share) 가능한 상태가 됨
+    validateMapInBackground();
   }
   
   gameOver.value = false;
@@ -202,39 +213,83 @@ const startGame = () => {
   attempts.value++;
 };
 
-const startAutoplay = async () => {
-  if (props.multiplayerMode) return;
-  isAutoplayUI.value = true;
-  engine.value.isAutoplay = true;
+const emitMapData = () => {
+  if (hasSaved.value) return;
+  emit('map-ready', {
+    difficulty: difficulty.value,
+    engineObstacles: engine.value.obstacles,
+    enginePortals: engine.value.portals,
+    autoplayLog: engine.value.autoplayLog,
+    duration: props.audioBuffer.duration
+  });
+  hasSaved.value = true;
+};
 
-  // 맵 생성 시 이미 경로가 계산됨 - 경로가 있으면 바로 시작
+const manualSave = () => {
+  emitMapData();
+};
+
+const validateMapInBackground = async () => {
+  if (props.multiplayerMode) return;
+  
+  // 이미 검증된 경로가 있으면 건너뜜
   if (engine.value.autoplayLog.length > 0) {
-    console.log(`[Autoplay] Using pre-computed path (${engine.value.autoplayLog.length} frames)`);
-    startGame();
+    isMapValidated.value = true;
     return;
   }
 
-  // 경로가 없는 경우에만 계산 (저장된 맵 로드 시 등)
+  isMapValidated.value = false;
+  // 불필요한 UI 노출 방지: 이미 로그가 있으면 리턴(상단에서 체크됨), 없으면 연산 시작
   isComputingPath.value = true;
   computingProgress.value = 0;
 
-  await new Promise(resolve => setTimeout(resolve, 50));
+  for (let retry = 0; ; retry++) {
+    try {
+      if (retry > 0) {
+        console.log(`[Validation] Retry ${retry + 1}: Regenerating map with updated offsets...`);
+        // 더 넓은 간격으로 맵 다시 생성
+        engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false, retry);
+      }
 
-  try {
-    const startTime = performance.now();
-    await engine.value.computeAutoplayLogAsync(engine.value.playerX, engine.value.playerY, (p) => {
-      computingProgress.value = p * 100;
-    });
-    const endTime = performance.now();
-    console.log(`Path computation took ${endTime - startTime}ms`);
-  } catch (e) {
-    console.error("Autoplay computation failed", e);
+      const success = await engine.value.computeAutoplayLogAsync(engine.value.playerX, engine.value.playerY, (p) => {
+        computingProgress.value = p * 100;
+      });
+      
+      if (success) {
+        console.log(`[Validation] Path found on Attempt ${retry + 1}!`);
+        isMapValidated.value = true;
+        // emitMapData(); // 이제 자동으로 저장하지 않음
+        break;
+      } else if (retry > 100) {
+        console.error("[Validation] Safeguard triggered: Stopped after 100 failed retries.");
+        break;
+      }
+    } catch (e) {
+      console.error("Background validation error:", e);
+      break;
+    }
   }
+  isComputingPath.value = false;
+};
 
-  setTimeout(() => {
-    isComputingPath.value = false;
+const startAutoplay = async () => {
+  if (props.multiplayerMode) return;
+  if (!isMapValidated.value) return; // 검증 완료 전에는 시작 불가
+
+  isAutoplayUI.value = true;
+  engine.value.isAutoplay = true;
+
+  // 이미 경로가 있으면 바로 시작
+  if (engine.value.autoplayLog.length > 0) {
     startGame();
-  }, 300);
+    return;
+  }
+  
+  // 혹시라도 경로가 없으면 한 번 더 시도 (안전장치)
+  await validateMapInBackground();
+  if (isMapValidated.value) {
+    startGame();
+  }
 };
 
 
@@ -362,6 +417,7 @@ const update = () => {
   if (dt < 0) dt = 0;
 
   engine.value.update(dt, trackTime);
+  currentTrackTime.value = trackTime;
   
   score.value = engine.value.score;
   progress.value = engine.value.progress;
@@ -379,7 +435,7 @@ const update = () => {
     
     // Ghost (Opponent) progress simulation
     // The ghost follows the track time perfectly (60fps simulation)
-    const ghostIndex = Math.floor((engine.value.trackTime || 0) * 60);
+    const ghostIndex = Math.floor((currentTrackTime.value || 0) * 60);
     const ghostLogEntry = engine.value.autoplayLog[ghostIndex] || 
                           engine.value.autoplayLog[engine.value.autoplayLog.length - 1];
     
@@ -601,7 +657,7 @@ const draw = () => {
       // Teeth
       ctx.fillStyle = '#ff6600';
       const teeth = 10;
-      const time = Date.now() / 120;
+      const time = currentTrackTime.value * 8;
       for (let i = 0; i < teeth; i++) {
         const angle = (Math.PI * 2 * i / teeth) + time;
         const tx = cx + Math.cos(angle) * radius * 0.75;
@@ -615,6 +671,93 @@ const draw = () => {
       ctx.beginPath();
       ctx.arc(cx, cy, radius * 0.25, 0, Math.PI * 2);
       ctx.fill();
+    } else if (obs.type === 'spike_ball') {
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + obs.height / 2;
+      const radius = obs.width / 2;
+      
+      ctx.fillStyle = '#666';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#444';
+      
+      // Spikes
+      const spikes = 8;
+      const rotation = currentTrackTime.value * 3;
+      ctx.fillStyle = '#444';
+      for (let i = 0; i < spikes; i++) {
+        const angle = (Math.PI * 2 * i / spikes) + rotation;
+        ctx.beginPath();
+        const tx = cx + Math.cos(angle) * radius * 1.2;
+        const ty = cy + Math.sin(angle) * radius * 1.2;
+        ctx.moveTo(cx + Math.cos(angle - 0.2) * radius * 0.8, cy + Math.sin(angle - 0.2) * radius * 0.8);
+        ctx.lineTo(tx, ty);
+        ctx.lineTo(cx + Math.cos(angle + 0.2) * radius * 0.8, cy + Math.sin(angle + 0.2) * radius * 0.8);
+        ctx.fill();
+      }
+      
+      // Main ball
+      const grad = ctx.createRadialGradient(cx - radius * 0.3, cy - radius * 0.3, radius * 0.1, cx, cy, radius);
+      grad.addColorStop(0, '#888');
+      grad.addColorStop(1, '#222');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      
+    } else if (obs.type === 'laser') {
+      const centerY = obs.y + obs.height / 2;
+      const glow = Math.sin(currentTrackTime.value * 15) * 5 + 10;
+      
+      ctx.strokeStyle = '#ff3333';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = Math.max(0, glow);
+      ctx.shadowColor = '#ff0000';
+      
+      ctx.beginPath();
+      ctx.moveTo(obs.x, centerY);
+      ctx.lineTo(obs.x + obs.width, centerY);
+      ctx.stroke();
+      
+      // Laser core
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(obs.x, centerY);
+      ctx.lineTo(obs.x + obs.width, centerY);
+      ctx.stroke();
+
+      // Side brackets
+      ctx.fillStyle = '#777';
+      ctx.fillRect(obs.x, obs.y, 8, obs.height);
+      ctx.fillRect(obs.x + obs.width - 8, obs.y, 8, obs.height);
+    } else if (obs.type === 'v_laser') {
+      const centerX = obs.x + obs.width / 2;
+      const glow = Math.sin(currentTrackTime.value * 15) * 5 + 10;
+      
+      ctx.strokeStyle = '#ff3333';
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = Math.max(0, glow);
+      ctx.shadowColor = '#ff0000';
+      
+      ctx.beginPath();
+      ctx.moveTo(centerX, obs.y);
+      ctx.lineTo(centerX, obs.y + obs.height);
+      ctx.stroke();
+      
+      // Laser core
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(centerX, obs.y);
+      ctx.lineTo(centerX, obs.y + obs.height);
+      ctx.stroke();
+
+      // Top/Bottom brackets
+      ctx.fillStyle = '#777';
+      ctx.fillRect(obs.x, obs.y, obs.width, 8);
+      ctx.fillRect(obs.x, obs.y + obs.height - 8, obs.width, 8);
     }
     
     ctx.restore();
@@ -669,9 +812,9 @@ const draw = () => {
   }
   
   // Draw Ghost (Validated route)
-  if ((isGhostVisible.value || props.multiplayerMode) && engine.value.autoplayLog.length > 0) {
+  if (props.multiplayerMode && engine.value.autoplayLog.length > 0) {
     // 고스트 실시간 위치 추적 (시간 기준)
-    const ghostIndex = Math.floor((engine.value.trackTime || 0) * 60);
+    const ghostIndex = Math.floor((currentTrackTime.value || 0) * 60);
     const ghostLog = engine.value.autoplayLog[ghostIndex] || 
                      engine.value.autoplayLog[engine.value.autoplayLog.length - 1];
     if (ghostLog) {
@@ -1166,6 +1309,17 @@ button.secondary:hover {
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
+.hud-action-btn.save {
+  background: #00ffaa;
+  color: #000;
+  box-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+}
+
+.hud-action-btn.save:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(0, 255, 170, 0.5);
+}
+
 .hud-action-btn.exit {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.6);
@@ -1176,6 +1330,27 @@ button.secondary:hover {
   background: rgba(255, 0, 0, 0.2);
   color: #ff4444;
   border-color: #ff4444;
+}
+
+.hud-action-btn.ghost-toggle {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hud-action-btn.ghost-toggle.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+.hud-action-btn.ghost-toggle:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
 
 /* Simplified Status Overlays */
@@ -1347,5 +1522,52 @@ button.secondary:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.validation-status {
+  position: absolute;
+  top: 100px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 10px 15px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 100;
+  animation: slideIn 0.3s ease-out;
+}
+
+.status-msg {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #00ffff;
+  letter-spacing: 1px;
+}
+
+.mini-progress {
+  width: 120px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mini-progress .fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00ffff, #ff00ff);
+  transition: width 0.3s ease-out;
+}
+
+.hud-action-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
 </style>

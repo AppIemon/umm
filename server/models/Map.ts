@@ -21,6 +21,8 @@ export interface IMap extends Document {
   likes: number
   bestScore: number
   bestPlayer: string | null
+  audioUrl: string | null // 노래 파일 URL
+  audioData: string | null // 노래 파일 데이터 (Base64)
 }
 
 const mapSchema = new mongoose.Schema<IMap>({
@@ -38,6 +40,14 @@ const mapSchema = new mongoose.Schema<IMap>({
   creatorName: {
     type: String,
     required: true
+  },
+  audioUrl: {
+    type: String,
+    default: null
+  },
+  audioData: {
+    type: String,
+    default: null
   },
   difficulty: {
     type: Number,

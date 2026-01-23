@@ -177,9 +177,20 @@ async function startMatchmaking(category: string) {
     }
 
     selectedMap.value = maps[Math.floor(Math.random() * maps.length)];
-    
-    // Simulate finding a REAL opponent name from maps if possible or use rankings
-    opponentName.value = selectedMap.value.bestPlayer || ['WAVE_MASTER', 'ORBIT_CRUSHER', 'VOID_RACER', 'NEO_PILOT'][Math.floor(Math.random()*4)];
+    opponentName.value = selectedMap.value.bestPlayer || 'ELITE_GHOST';
+
+    // Auto-load audio if available
+    if (selectedMap.value.audioUrl) {
+       try {
+         matchStatus.value = 'DOWNLOADING BATTLE TRACK...';
+         const res = await fetch(selectedMap.value.audioUrl);
+         const arrayBuffer = await res.arrayBuffer();
+         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+         audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+       } catch (e) {
+         console.warn("Could not auto-load audio, using silent buffer", e);
+       }
+    }
 
   } catch (e) {
     console.error("Matchmaking failed", e);
@@ -188,7 +199,6 @@ async function startMatchmaking(category: string) {
     return;
   }
 
-  await new Promise(r => setTimeout(r, 1500));
   matchStatus.value = 'OPPONENT FOUND: SYNCHRONIZING...';
   await new Promise(r => setTimeout(r, 1000));
   
