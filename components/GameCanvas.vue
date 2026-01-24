@@ -212,13 +212,7 @@ const difficultyName = computed(() => {
   return 'IMPOSSIBLE';
 });
 
-const bestProgress = computed(() => {
-  if (props.loadMap?.bestScore) {
-    // Score is progress * 10, so progress = score / 10
-    return Math.min(100, props.loadMap.bestScore / 10);
-  }
-  return 0;
-});
+
 
 const startGame = () => {
   if (!props.audioBuffer || !canvas.value) return;
@@ -246,7 +240,14 @@ const startGame = () => {
     // 저장된 맵 데이터 로드
     engine.value.loadMapData(props.loadMap);
     difficulty.value = props.loadMap.difficulty;
-    isMapValidated.value = true; 
+    isMapValidated.value = true;
+    
+    // 최고 기록 초기화 (점수 / 10 = 퍼센트)
+    if (props.loadMap.bestScore) {
+      bestProgress.value = Math.min(100, props.loadMap.bestScore / 10);
+    } else {
+      bestProgress.value = 0;
+    }
   } else {
     engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false);
     validateMapInBackground();

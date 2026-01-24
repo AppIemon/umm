@@ -9,18 +9,18 @@ export default defineEventHandler(async (event) => {
   // Pixabay Music 또는 다른 안정적인 소스 사용
   const sampleSources: Record<string, { url: string; name: string }> = {
     '1': {
-      // Pixabay - Electronic (Free for commercial use)
-      url: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3',
+      // SoundHelix - Song 1 (Reliable test audio)
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
       name: 'Electronic Future Beats'
     },
     '2': {
-      // Pixabay - Synthwave (Free for commercial use)
-      url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0c6ff1bab.mp3',
+      // SoundHelix - Song 8
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',
       name: 'Synthwave Retro'
     },
     '3': {
-      // Pixabay - Epic Electronic (Free for commercial use)
-      url: 'https://cdn.pixabay.com/download/audio/2021/11/25/audio_91b32e02f9.mp3',
+      // SoundHelix - Song 10
+      url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3',
       name: 'Epic Cinematic'
     }
   };

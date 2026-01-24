@@ -23,6 +23,9 @@ declare module "nitropack/types" {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id].get').default>>>>
       'patch': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id].patch').default>>>>
     }
+    '/api/maps/:id/audio-chunk': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id]/audio-chunk.post').default>>>>
+    }
     '/api/maps/:id/rate': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id]/rate.post').default>>>>
     }
@@ -38,6 +41,9 @@ declare module "nitropack/types" {
     }
     '/api/matchmaking/status': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/status.post').default>>>>
+    }
+    '/api/samples': {
+      'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/samples.get').default>>>>
     }
     '/api/youtube': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/youtube.post').default>>>>

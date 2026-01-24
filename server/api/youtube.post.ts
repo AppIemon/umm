@@ -127,7 +127,17 @@ export default defineEventHandler(async (event) => {
     setResponseHeader(event, 'Content-Disposition', `attachment; filename*=UTF-8''${encodedTitle}`);
 
     // Stream directly using the already fetched info
-    return sendStream(event, ytdl.downloadFromInfo(info, { format, agent, requestOptions }));
+    // 403 Forbidden 해결 시도: dlChunkSize 설정 및 highWaterMark 증가
+    const stream = ytdl.downloadFromInfo(info, {
+      format,
+      agent,
+      requestOptions, // 헤더 전달
+      highWaterMark: 1 << 25, // 32MB
+      dlChunkSize: 0, // 0으로 설정하여 전체 파일을 한 번에 요청 시도 (또는 매우 큰 값) -> youtube throttling 우회 시도
+      ipv6Block: false
+    });
+
+    return sendStream(event, stream);
 
   } catch (error: any) {
     console.error("YouTube Download Error Info:", {

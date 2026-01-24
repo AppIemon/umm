@@ -1301,8 +1301,18 @@ export class GameEngine {
       const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
-      const dH = checkColl(nX, nYH, sz, nT, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
-      const dR = checkColl(nX, nYR, sz, nT, 3);
+      let dH = checkColl(nX, nYH, sz, nT, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
+      let dR = checkColl(nX, nYR, sz, nT, 3);
+
+      // Tunneling prevention: Check midpoint if moving fast vertically
+      // dt=1/30 (approx 11px X movement), but Y movement can be large (50px+)
+      const vDist = sz * 0.8;
+      if (!dH && Math.abs(nYH - curr.y) > vDist) {
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, 3)) dH = true;
+      }
+      if (!dR && Math.abs(nYR - curr.y) > vDist) {
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, 3)) dR = true;
+      }
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 

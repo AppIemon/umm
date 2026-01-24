@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1c6e4-r4U5Tmmc0zdN3cA4P1Ll3nHuUfM\"",
-    "mtime": "2026-01-24T08:11:42.670Z",
-    "size": 116452,
+    "etag": "\"1d908-ancOths7GL6nYnMhDmWFnv/+IsA\"",
+    "mtime": "2026-01-24T10:54:50.068Z",
+    "size": 121096,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"69117-YYULVMapj2TA9ydVrrlGrEILyQE\"",
-    "mtime": "2026-01-24T08:11:42.676Z",
-    "size": 430359,
+    "etag": "\"6cf13-y/+SXf4sUzQshD13cUhHmWyq9qM\"",
+    "mtime": "2026-01-24T10:54:50.068Z",
+    "size": 446227,
     "path": "index.mjs.map"
   }
 };
@@ -1943,12 +1943,14 @@ const _lazy_su95aX = () => Promise.resolve().then(function () { return updateSta
 const _lazy_ItOqgi = () => Promise.resolve().then(function () { return _id__delete$1; });
 const _lazy_dtHPno = () => Promise.resolve().then(function () { return _id__get$1; });
 const _lazy_wh0PQr = () => Promise.resolve().then(function () { return _id__patch$1; });
+const _lazy_GIoMLU = () => Promise.resolve().then(function () { return audioChunk_post$1; });
 const _lazy_gy6T5E = () => Promise.resolve().then(function () { return rate_post$1; });
 const _lazy_vSvfPH = () => Promise.resolve().then(function () { return record_post$1; });
 const _lazy_tYJqVb = () => Promise.resolve().then(function () { return index_get$1; });
 const _lazy_DwrcjF = () => Promise.resolve().then(function () { return index_post$1; });
 const _lazy_bVOdlf = () => Promise.resolve().then(function () { return find_post$1; });
 const _lazy_IjqA3x = () => Promise.resolve().then(function () { return status_post$1; });
+const _lazy_WxDeHw = () => Promise.resolve().then(function () { return samples_get$1; });
 const _lazy_42HsTT = () => Promise.resolve().then(function () { return youtube_post$1; });
 const _lazy_Lesw2n = () => Promise.resolve().then(function () { return renderer$1; });
 
@@ -1963,12 +1965,14 @@ const handlers = [
   { route: '/api/maps/:id', handler: _lazy_ItOqgi, lazy: true, middleware: false, method: "delete" },
   { route: '/api/maps/:id', handler: _lazy_dtHPno, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps/:id', handler: _lazy_wh0PQr, lazy: true, middleware: false, method: "patch" },
+  { route: '/api/maps/:id/audio-chunk', handler: _lazy_GIoMLU, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps/:id/rate', handler: _lazy_gy6T5E, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps/:id/record', handler: _lazy_vSvfPH, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps', handler: _lazy_tYJqVb, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps', handler: _lazy_DwrcjF, lazy: true, middleware: false, method: "post" },
   { route: '/api/matchmaking/find', handler: _lazy_bVOdlf, lazy: true, middleware: false, method: "post" },
   { route: '/api/matchmaking/status', handler: _lazy_IjqA3x, lazy: true, middleware: false, method: "post" },
+  { route: '/api/samples', handler: _lazy_WxDeHw, lazy: true, middleware: false, method: "get" },
   { route: '/api/youtube', handler: _lazy_42HsTT, lazy: true, middleware: false, method: "post" },
   { route: '/__nuxt_error', handler: _lazy_Lesw2n, lazy: true, middleware: false, method: undefined },
   { route: '/__nuxt_island/**', handler: _SxA8c9, lazy: false, middleware: false, method: undefined },
@@ -2573,6 +2577,10 @@ const mapSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  audioChunks: {
+    type: [String],
+    default: []
+  },
   difficulty: {
     type: Number,
     required: true,
@@ -2654,6 +2662,10 @@ const mapSchema = new mongoose.Schema({
   rating: {
     type: Number,
     default: 0
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
   }
 });
 mapSchema.index({ creator: 1 });
@@ -2691,7 +2703,12 @@ const _id__get = defineEventHandler(async (event) => {
       statusMessage: "Map not found"
     });
   }
-  return map;
+  const mapObj = map.toObject();
+  if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
+    mapObj.audioData = mapObj.audioChunks.join("");
+  }
+  delete mapObj.audioChunks;
+  return mapObj;
 });
 
 const _id__get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
@@ -2714,6 +2731,7 @@ const _id__patch = defineEventHandler(async (event) => {
     duration,
     audioUrl,
     audioData,
+    audioChunks,
     isShared,
     bpm,
     measureLength
@@ -2730,6 +2748,7 @@ const _id__patch = defineEventHandler(async (event) => {
   if (duration !== void 0) updateData.duration = duration;
   if (audioUrl !== void 0) updateData.audioUrl = audioUrl;
   if (audioData !== void 0) updateData.audioData = audioData;
+  if (audioChunks !== void 0) updateData.audioChunks = audioChunks;
   if (isShared !== void 0) updateData.isShared = isShared;
   if (bpm !== void 0) updateData.bpm = bpm;
   if (measureLength !== void 0) updateData.measureLength = measureLength;
@@ -2746,6 +2765,32 @@ const _id__patch = defineEventHandler(async (event) => {
 const _id__patch$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: _id__patch
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const audioChunk_post = defineEventHandler(async (event) => {
+  const id = getRouterParam(event, "id");
+  const body = await readBody(event);
+  const { chunkIndex, chunkData, totalChunks } = body;
+  if (!id) {
+    throw createError({ statusCode: 400, statusMessage: "Missing ID" });
+  }
+  if (chunkIndex === void 0 || !chunkData || !totalChunks) {
+    throw createError({ statusCode: 400, statusMessage: "Missing chunk data" });
+  }
+  const map = await GameMap.findById(id);
+  if (!map) {
+    throw createError({ statusCode: 404, statusMessage: "Map not found" });
+  }
+  await GameMap.updateOne(
+    { _id: id },
+    { $set: { [`audioChunks.${chunkIndex}`]: chunkData } }
+  );
+  return { success: true, index: chunkIndex };
+});
+
+const audioChunk_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: audioChunk_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const rate_post = defineEventHandler(async (event) => {
@@ -2830,7 +2875,7 @@ const index_get = defineEventHandler(async (event) => {
     filter.creatorName = { $regex: new RegExp(`^${creator}$`, "i") };
   }
   try {
-    const maps = await GameMap.find(filter).select("-audioData -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50);
+    const maps = await GameMap.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50);
     return maps;
   } catch (e) {
     console.error("Map Fetch Error:", e);
@@ -2862,6 +2907,7 @@ const index_post = defineEventHandler(async (event) => {
     creatorName,
     audioUrl,
     audioData,
+    audioChunks,
     isShared,
     bpm,
     measureLength
@@ -2888,6 +2934,7 @@ const index_post = defineEventHandler(async (event) => {
     enginePortals: enginePortals || [],
     autoplayLog: autoplayLog || [],
     duration: duration || 60,
+    audioChunks: audioChunks || [],
     isShared: isShared !== void 0 ? isShared : false,
     bpm: bpm || 120,
     measureLength: measureLength || 2
@@ -3116,6 +3163,66 @@ const status_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePrope
   default: status_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
+const samples_get = defineEventHandler(async (event) => {
+  const { id } = getQuery$1(event);
+  const sampleSources = {
+    "1": {
+      // SoundHelix - Song 1 (Reliable test audio)
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      name: "Electronic Future Beats"
+    },
+    "2": {
+      // SoundHelix - Song 8
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+      name: "Synthwave Retro"
+    },
+    "3": {
+      // SoundHelix - Song 10
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
+      name: "Epic Cinematic"
+    }
+  };
+  const sample = sampleSources[id];
+  if (!sample) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Sample not found"
+    });
+  }
+  try {
+    console.log(`[Samples] Fetching: ${sample.name} from ${sample.url}`);
+    const response = await fetch(sample.url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://pixabay.com/"
+      }
+    });
+    if (!response.ok) {
+      console.error(`[Samples] Failed to fetch: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch sample: ${response.status}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    console.log(`[Samples] Successfully fetched ${sample.name}, size: ${arrayBuffer.byteLength} bytes`);
+    setResponseHeader(event, "Content-Type", "audio/mpeg");
+    setResponseHeader(event, "Content-Disposition", `attachment; filename="${encodeURIComponent(sample.name)}.mp3"`);
+    setResponseHeader(event, "Cache-Control", "public, max-age=604800");
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error("[Samples] Error:", error.message);
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Failed to load sample music: ${error.message}`
+    });
+  }
+});
+
+const samples_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: samples_get
+}, Symbol.toStringTag, { value: 'Module' }));
+
 const youtube_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { url } = body;
@@ -3207,12 +3314,33 @@ const youtube_post = defineEventHandler(async (event) => {
     console.log(`[YouTube] Fetching info for: ${url}`);
     const info = await ytdl.getInfo(url, { agent, requestOptions });
     const title = info.videoDetails.title.replace(/[\/\\:*?"<>|]/g, "_");
-    const format = ytdl.chooseFormat(info.formats, { quality: "highestaudio", filter: "audioonly" });
+    let format;
+    try {
+      format = ytdl.chooseFormat(info.formats, { quality: "highestaudio", filter: "audioonly" });
+    } catch (e) {
+      const audioFormats = ytdl.filterFormats(info.formats, "audioandvideo");
+      if (audioFormats.length > 0) {
+        format = audioFormats[0];
+      } else {
+        throw new Error("No playable formats found (audioonly or audioandvideo)");
+      }
+    }
     console.log(`[YouTube] Successfully fetched info for: ${title}`);
     setResponseHeader(event, "Content-Type", "audio/mpeg");
     const encodedTitle = encodeURIComponent(title + ".mp3");
     setResponseHeader(event, "Content-Disposition", `attachment; filename*=UTF-8''${encodedTitle}`);
-    return sendStream(event, ytdl.downloadFromInfo(info, { format, agent, requestOptions }));
+    const stream = ytdl.downloadFromInfo(info, {
+      format,
+      agent,
+      requestOptions,
+      // 헤더 전달
+      highWaterMark: 1 << 25,
+      // 32MB
+      dlChunkSize: 0,
+      // 0으로 설정하여 전체 파일을 한 번에 요청 시도 (또는 매우 큰 값) -> youtube throttling 우회 시도
+      ipv6Block: false
+    });
+    return sendStream(event, stream);
   } catch (error) {
     console.error("YouTube Download Error Info:", {
       message: error.message,
