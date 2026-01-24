@@ -769,16 +769,16 @@ export class GameEngine {
           else if (intensity < 0.65) portalType = 'speed_2'; // Normal
           else portalType = 'speed_3'; // Highlight
         } else {
-          // IMPOSSIBLE (24+): Chaos + Speed
-          // Highlight -> 4x
+          // IMPOSSIBLE (24+): Chaos + Slow/Fast Swings
+          // User Request: "0.25배속, 0.5배속 구간이 존재: 매우 엄격한 동선과 길도 찾기 힘들 정도로 매우 매우 많은 장애물들."
           const r = rng();
-          // If it's a highlight (intensity > 0.8), almost always 4x
-          if (intensity > 0.8) {
+          if (intensity > 0.85) {
             portalType = 'speed_4';
           } else {
-            // Random mixed speeds for non-highlight
-            if (r < 0.15) portalType = 'speed_3';
-            else if (r < 0.2) portalType = 'speed_2';
+            // 35% Chance for SLOW torturous sections
+            if (r < 0.20) portalType = 'speed_0.5';
+            else if (r < 0.35) portalType = 'speed_0.25';
+            else if (r < 0.6) portalType = 'speed_3';
             else portalType = 'speed_4';
           }
         }
@@ -861,28 +861,35 @@ export class GameEngine {
         // Speed compensation (고속에서는 간격 살짝 넓힘)
         gapScale *= Math.pow(speedM, 0.6);
 
-        // GLOBAL DENSITY ADJUSTMENT (Reduced from previous 0.33)
+        // GLOBAL DENSITY ADJUSTMENT
         gapScale *= 0.8;
 
         // --- Difficulty Specific Adjustments ---
 
         // Hard/Impossible: 0.5x 배속에서 장애물 밀도 완화
-        if (diff >= 16 && lastSpeedType === 'speed_0.5') {
+        if (diff >= 16 && diff < 24 && lastSpeedType === 'speed_0.5') {
           gapScale *= 0.4; // 이전 0.16에서 0.4로 대폭 완화
         }
 
         // Impossible settings
         if (diff >= 24) {
-          if (currentMini) {
-            gapScale *= 1.4;
+          if (lastSpeedType === 'speed_0.25' || lastSpeedType === 'speed_0.5') {
+            // IMPOSSIBLE SLOW SECTIONS: OVERWHELMING DENSITY
+            // reduce gap to 15% (overlap likely, creating walls)
+            gapScale *= 0.15;
           } else {
-            gapScale *= 0.85; // 이전 0.7에서 상향
-            if (currentInverted) {
-              gapScale *= 0.95;
+            // Normal fast impossible
+            if (currentMini) {
+              gapScale *= 1.4;
+            } else {
+              gapScale *= 0.85;
+              if (currentInverted) {
+                gapScale *= 0.95;
+              }
             }
           }
         } else if (diff >= 16) {
-          gapScale *= 0.95; // 이전 0.85에서 상향
+          gapScale *= 0.95;
           if (currentMini) gapScale *= 1.1;
         } else {
           // Normal/Easy mini scaling

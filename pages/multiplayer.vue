@@ -6,20 +6,20 @@
     <div v-if="step === 'MODESELECT'" class="setup-screen glass-panel">
       <h1 class="glow-text">BATTLE CATEGORY</h1>
       <div class="mode-grid">
-        <div class="mode-card" @click="startMatchmaking('3m')">
+        <div class="mode-card" @click="startMatchmaking('1m')">
           <div class="mode-icon">⚡</div>
           <h3>SPRINT</h3>
+          <p>1 MINUTE MATCH</p>
+        </div>
+        <div class="mode-card" @click="startMatchmaking('3m')">
+          <div class="mode-icon">⚔️</div>
+          <h3>STANDARD</h3>
           <p>3 MINUTE MATCH</p>
         </div>
         <div class="mode-card" @click="startMatchmaking('10m')">
-          <div class="mode-icon">⚔️</div>
-          <h3>STANDARD</h3>
-          <p>10 MINUTE MATCH</p>
-        </div>
-        <div class="mode-card" @click="startMatchmaking('1h')">
           <div class="mode-icon">🌌</div>
           <h3>ENDURANCE</h3>
-          <p>1 HOUR MATCH</p>
+          <p>10 MINUTE MATCH</p>
         </div>
       </div>
       <button @click="exitGame" class="back-btn-simple">BACK TO MENU</button>
@@ -265,9 +265,9 @@ async function startGame() {
   if (!selectedMap.value) return;
   
   // Set Timer based on category
-  if (selectedCategory.value === '3m') timeRemaining.value = 180;
+  if (selectedCategory.value === '1m') timeRemaining.value = 60;
+  else if (selectedCategory.value === '3m') timeRemaining.value = 180;
   else if (selectedCategory.value === '10m') timeRemaining.value = 600;
-  else if (selectedCategory.value === '1h') timeRemaining.value = 3600;
 
   obstacles.value = selectedMap.value.beatTimes || [];
   sections.value = selectedMap.value.sections || [];
@@ -336,12 +336,12 @@ function updateProgress(data: { progress: number, ghostProgress: number, y: numb
 
 function handleRoundFinish(data: any) {
   // If player crashed
+  // If player crashed (or disconnected/gave up)
   if (data?.outcome === 'fail') {
-    // If player crashed, we don't end the match immediately anymore,
-    // just wait for the timeout or a 100% finish.
-    // However,GD-style MP often shows the result immediately if both are dead.
-    // Let's stick to the user's "best record" request - crashing doesn't lose the match,
-    // it just stops that attempt.
+    // User Request: "온라인 플레이 도중 연결이 끊기면 그 즉시 패배."
+    // Treat 'fail' (death) as instant defeat.
+    finalizeMatch('opponent');
+  } else if (bestPlayerProgress.value >= 100) {
   } else if (bestPlayerProgress.value >= 100) {
     finalizeMatch('player');
   }

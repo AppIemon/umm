@@ -27,9 +27,9 @@
         <span class="icon">⚔️</span>
         <span class="label">MULTI</span>
       </NuxtLink>
-      <NuxtLink to="/rankings" class="nav-item">
-        <span class="icon">🏆</span>
-        <span class="label">RANK</span>
+      <NuxtLink to="/guide" class="nav-item">
+        <span class="icon">📖</span>
+        <span class="label">GUIDE</span>
       </NuxtLink>
     </div>
 
