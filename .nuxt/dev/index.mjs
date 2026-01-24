@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1ae5a-BdQow+C12ttNIfiJc9H3q+KmqiQ\"",
-    "mtime": "2026-01-24T06:34:32.936Z",
-    "size": 110170,
+    "etag": "\"1b1de-VVACEv1Chbr/JEYcVHIwcCQQwW4\"",
+    "mtime": "2026-01-24T06:41:57.910Z",
+    "size": 111070,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"637d3-7785SS5qkdxF8Mm9wF7ndkFYeOI\"",
-    "mtime": "2026-01-24T06:34:32.936Z",
-    "size": 407507,
+    "etag": "\"64747-ZlXZU6vn8z/ipviXnmuFdnm8uBw\"",
+    "mtime": "2026-01-24T06:41:57.910Z",
+    "size": 411463,
     "path": "index.mjs.map"
   }
 };
@@ -2989,22 +2989,27 @@ const youtube_post = defineEventHandler(async (event) => {
       try {
         const content = fs.readFileSync(cookiesTxtPath, "utf8");
         const cookies = [];
-        content.split("\n").forEach((line) => {
+        content.split(/\r?\n/).forEach((line) => {
+          line = line.trim();
           if (!line || line.startsWith("#")) return;
-          const parts = line.split("	");
+          const parts = line.split(/\t/);
           if (parts.length >= 7) {
             cookies.push({
               domain: parts[0],
               path: parts[2],
               secure: parts[3] === "TRUE",
-              expirationDate: parseInt(parts[4]),
+              expires: parseInt(parts[4]),
               name: parts[5],
-              value: parts[6].trim()
+              value: parts[6]
             });
           }
         });
-        agent = ytdl.createAgent(cookies);
-        console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+        if (cookies.length > 0) {
+          agent = ytdl.createAgent(cookies);
+          console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+        } else {
+          console.warn("[YouTube] Found cookies.txt but no valid cookies were parsed.");
+        }
       } catch (e) {
         console.error("[YouTube] Failed to parse cookies txt:", e);
       }

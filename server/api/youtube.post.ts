@@ -31,22 +31,27 @@ export default defineEventHandler(async (event) => {
       try {
         const content = fs.readFileSync(cookiesTxtPath, 'utf8');
         const cookies: any[] = [];
-        content.split('\n').forEach(line => {
+        content.split(/\r?\n/).forEach(line => {
+          line = line.trim();
           if (!line || line.startsWith('#')) return;
-          const parts = line.split('\t');
+          const parts = line.split(/\t/);
           if (parts.length >= 7) {
             cookies.push({
               domain: parts[0],
               path: parts[2],
               secure: parts[3] === 'TRUE',
-              expirationDate: parseInt(parts[4]),
+              expires: parseInt(parts[4]),
               name: parts[5],
-              value: parts[6].trim()
+              value: parts[6]
             });
           }
         });
-        agent = ytdl.createAgent(cookies);
-        console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+        if (cookies.length > 0) {
+          agent = ytdl.createAgent(cookies);
+          console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+        } else {
+          console.warn('[YouTube] Found cookies.txt but no valid cookies were parsed.');
+        }
       } catch (e) {
         console.error('[YouTube] Failed to parse cookies txt:', e);
       }
