@@ -152,9 +152,24 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         const res = await fetch(item.mapData.audioData);
         const arrayBuffer = await res.arrayBuffer();
         audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+        step.value = 'play';
+     } else if (item.mapData._id) {
+        // Try loading from IndexedDB using server ID
+        console.log("Loading recent map audio from IndexedDB...", item.mapData._id);
+        try {
+          const localFile = await getAudioFromDB(item.mapData._id);
+          if (localFile) {
+             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+             const ab = await localFile.arrayBuffer();
+             audioBuffer.value = await audioCtx.decodeAudioData(ab);
+             step.value = 'play';
+          } else {
+             alert("오디오 파일을 찾을 수 없습니다. (IDB Miss)");
+          }
+        } catch(e) { console.error(e); }
+     } else {
+        alert("오디오 데이터가 만료되었습니다.");
      }
-     
-     step.value = 'play';
      return;
   }
 
@@ -243,11 +258,12 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         audioData: null // We'll fill this if we save to storage
       };
 
-      // Save to local recent storage
-      saveToRecentStorage(loadedMapData.value);
-
       // --- AUTO-SAVE TO SERVER "MY MAPS" ---
       await handleMapReady(loadedMapData.value);
+      
+      // Save to local recent storage (AFTER getting ID)
+      saveToRecentStorage(loadedMapData.value);
+
       analysisProgress.value.step = '준비 완료!';
       
     } else {
@@ -390,7 +406,7 @@ const handleMapReady = async (mapData: any) => {
         });
         body.audioData = await base64Promise;
       } else {
-        console.warn("Audio file too large for server storage (>100MB). Skipping audio persistence.");
+        console.log("Audio file too large for server (>4.5MB). Will attempt local IndexedDB backup.");
         // We do NOT send audioData. The user will have to upload it locally to play.
       }
     } else if (loadedMapData.value?.audioUrl) {
@@ -409,11 +425,22 @@ const handleMapReady = async (mapData: any) => {
     hasSavedCurrentMap.value = true;
     console.log(`[Database] Map successfully saved. ID: ${saved._id}`);
     
-    // If audio was not saved, notify user (optional, or just logic handles it)
-    if (!body.audioData) {
-       console.log("Audio data was not saved (File too large).");
+    // Assign ID to current loaded map so we can reference it
+    if (loadedMapData.value) {
+      loadedMapData.value._id = saved._id;
     }
-
+    
+    // If audio was not saved (File too large), save to Local IndexedDB
+    if (!body.audioData && selectedSong.value) {
+       console.log("Large file detected. Saving audio to local IndexedDB for auto-load...");
+       try {
+         await saveAudioToDB(saved._id, selectedSong.value);
+         console.log("Audio successfully saved to local IndexedDB!");
+       } catch (dbErr) {
+         console.error("Failed to save to IndexedDB", dbErr);
+         alert("오디오 파일이 너무 커서 서버 및 로컬 백업에 실패했습니다.");
+       }
+    }
   } catch (e: any) {
     console.error("Failed to save map auto-registration:", e);
   }
@@ -511,25 +538,61 @@ const initFromQuery = async () => {
       difficulty.value = targetMap.difficulty;
 
       if (targetMap.audioData || targetMap.audioUrl) {
-         try {
-           let arrayBuffer: ArrayBuffer;
-            
-           if (targetMap.audioData) {
-             const res = await fetch(targetMap.audioData);
-             arrayBuffer = await res.arrayBuffer();
-             
-             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-             audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-             step.value = 'play';
-           } else {
-             console.log("Map loaded without audio. Waiting for user file.");
-           }
-         } catch (e) {
-           console.warn("Auto-load failed, waiting for user file", e);
+       try {
+         let loadedAudio: ArrayBuffer | null = null;
+
+         // 1. Try Base64 Data (Small files)
+         if (targetMap.audioData) {
+            console.log("Loading audio from Base64 Data...");
+            const res = await fetch(targetMap.audioData);
+            loadedAudio = await res.arrayBuffer();
          }
-      } else {
-         await handleMapOnlyStart(targetMap);
-      }
+
+         // 2. Try IndexedDB (Large files local cache)
+         if (!loadedAudio) {
+            console.log("Checking local IndexedDB for audio...");
+            try {
+              const localFile = await getAudioFromDB(targetMap._id);
+              if (localFile) {
+                 console.log("Found audio in local DB!");
+                 loadedAudio = await localFile.arrayBuffer();
+              }
+            } catch (e) {
+              console.warn("IndexedDB check failed", e);
+            }
+         }
+
+         // 3. Try URL (Samples or Hosted)
+         if (!loadedAudio && targetMap.audioUrl) {
+            console.log("Loading audio from URL:", targetMap.audioUrl);
+            try {
+               const res = await fetch(targetMap.audioUrl);
+               if (res.ok) {
+                 loadedAudio = await res.arrayBuffer();
+               } else {
+                 console.warn("Audio URL fetch failed:", res.status);
+               }
+            } catch (e) {
+               console.warn("Audio URL fetch error", e);
+            }
+         }
+
+         if (loadedAudio) {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioBuffer.value = await audioCtx.decodeAudioData(loadedAudio);
+            step.value = 'play';
+         } else {
+            console.log("Could not find audio source. Prompting user.");
+            alert("오디오 파일을 자동으로 불러오지 못했습니다. (서버/로컬 저장소 없음)\n원본 음악 파일을 다시 선택해주세요.");
+         }
+
+       } catch (e) {
+         console.warn("Auto-load failed, waiting for user file", e);
+         alert("오디오 로딩 실패. 파일을 수동으로 선택해주세요.");
+       }
+    } else {
+       // View-only mode for maps with no audio config
+       await handleMapOnlyStart(targetMap);
     }
   } catch (e) {
     console.error("Failed to load map:", e);
@@ -547,6 +610,46 @@ watch(() => route.query.map, (newMap) => {
 watch(() => route.query.mapId, (newMapId) => {
   if (newMapId) initFromQuery();
 });
+
+// --- IndexedDB Helper ---
+const DB_NAME = 'umm_audio_db';
+const STORE_NAME = 'audio_files';
+
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e: any) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = (e: any) => resolve(e.target.result);
+    request.onerror = (e) => reject(e);
+  });
+};
+
+const saveAudioToDB = async (mapId: string, file: File) => {
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.put(file, mapId);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+};
+
+const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get(mapId);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+};
 </script>
 
 <style scoped>

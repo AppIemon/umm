@@ -846,14 +846,14 @@ export class GameEngine {
           // EASY: 튜토리얼 수준의 매우 넓은 간격 (1.5 ~ 1.0)
           gapScale = 1.5 - ((diff - 1) / 7) * 0.5;
         } else if (diff < 16) {
-          // NORMAL: 적당한 간격 (0.65 ~ 0.45)
-          gapScale = 0.65 - ((diff - 8) / 8) * 0.2;
+          // NORMAL: 적당한 간격 (0.65 ~ 0.45) -> 조금 더 좁힘 (0.6 -> 0.4)
+          gapScale = 0.60 - ((diff - 8) / 8) * 0.2;
         } else if (diff < 24) {
-          // HARD: 빡빡한 간격 (0.45 ~ 0.25)
-          gapScale = 0.45 - ((diff - 16) / 8) * 0.2;
+          // HARD: 매우 빡빡한 간격 (0.35 ~ 0.18) - User Request: "매우 매우 높여라"
+          gapScale = 0.35 - ((diff - 16) / 8) * 0.17;
         } else {
-          // IMPOSSIBLE: 극한이나 이전보다 완화 (0.25 ~ 0.12)
-          gapScale = 0.25 - ((diff - 24) / 6) * 0.13;
+          // IMPOSSIBLE: Semi-Impossible (0.12 ~ 0.05) - 물리적 한계점 테스트
+          gapScale = 0.12 - ((diff - 24) / 6) * 0.07;
         }
 
         gapScale *= this.patternGapMultiplier;
