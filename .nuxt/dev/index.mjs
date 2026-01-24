@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1b1de-VVACEv1Chbr/JEYcVHIwcCQQwW4\"",
-    "mtime": "2026-01-24T06:41:57.910Z",
-    "size": 111070,
+    "etag": "\"1b28c-dM1vZZ1L4dD2TUiVgSc3+r7jBVc\"",
+    "mtime": "2026-01-24T06:44:57.268Z",
+    "size": 111244,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"64747-ZlXZU6vn8z/ipviXnmuFdnm8uBw\"",
-    "mtime": "2026-01-24T06:41:57.910Z",
-    "size": 411463,
+    "etag": "\"64932-O1DdKSifgJAXnNjuz0Ji9JAk3DY\"",
+    "mtime": "2026-01-24T06:44:57.270Z",
+    "size": 411954,
     "path": "index.mjs.map"
   }
 };
@@ -2975,13 +2975,15 @@ const youtube_post = defineEventHandler(async (event) => {
   }
   try {
     let agent;
-    const cookiesJsonPath = path.resolve(process.cwd(), "youtube-cookies.json");
-    const cookiesTxtPath = path.resolve(process.cwd(), "youtube-cookies.txt");
+    const projectRoot = process.cwd();
+    const cookiesJsonPath = path.resolve(projectRoot, "youtube-cookies.json");
+    const cookiesTxtPath = path.resolve(projectRoot, "youtube-cookies.txt");
+    console.log(`[YouTube] Searching for cookies in: ${projectRoot}`);
     if (fs.existsSync(cookiesJsonPath)) {
       try {
         const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, "utf8"));
         agent = ytdl.createAgent(cookies);
-        console.log("[YouTube] Using cookies from JSON");
+        console.log("[YouTube] Successfully loaded cookies from JSON");
       } catch (e) {
         console.error("[YouTube] Failed to parse cookies JSON:", e);
       }
@@ -3006,13 +3008,15 @@ const youtube_post = defineEventHandler(async (event) => {
         });
         if (cookies.length > 0) {
           agent = ytdl.createAgent(cookies);
-          console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+          console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from txt`);
         } else {
-          console.warn("[YouTube] Found cookies.txt but no valid cookies were parsed.");
+          console.warn("[YouTube] Found cookies.txt but it appears to be empty or malformed");
         }
       } catch (e) {
         console.error("[YouTube] Failed to parse cookies txt:", e);
       }
+    } else {
+      console.log("[YouTube] No cookie files (json/txt) found in project root. Proceeding without auth.");
     }
     if (!agent) {
       agent = ytdl.createAgent();
