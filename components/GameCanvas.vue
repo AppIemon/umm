@@ -447,7 +447,7 @@ const handleGameOver = () => {
       startGame();
     }
   }, 3000);
-  }, 3000);
+
 };
 
 const handleVictory = () => {
