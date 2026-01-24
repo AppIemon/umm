@@ -145,6 +145,36 @@ export const useAudioAnalyzer = () => {
       interpolatedObstacles.sort((a, b) => a - b);
     }
 
+    if (onProgress) onProgress({ step: 'BPM을 분석하는 중...', percent: 80 });
+
+    // BPM Detection using beat intervals
+    let bpm = 120; // Default fallback
+    if (obstacles.length >= 4) {
+      const intervals: number[] = [];
+      for (let i = 1; i < Math.min(obstacles.length, 50); i++) {
+        const interval = obstacles[i]! - obstacles[i - 1]!;
+        if (interval > 0.2 && interval < 2.0) {
+          intervals.push(interval);
+        }
+      }
+      if (intervals.length > 0) {
+        // Sort and take median to avoid outliers
+        intervals.sort((a, b) => a - b);
+        const medianInterval = intervals[Math.floor(intervals.length / 2)]!;
+        const rawBpm = 60 / medianInterval;
+
+        // Quantize to common BPM values (round to nearest 5)
+        bpm = Math.round(rawBpm / 5) * 5;
+        bpm = Math.max(60, Math.min(200, bpm)); // Clamp to reasonable range
+      }
+    }
+
+    // 한 마디(4박자) 길이 (초)
+    const beatLength = 60 / bpm;
+    const measureLength = beatLength * 4;
+
+    console.log(`[AudioAnalyzer] Detected BPM: ${bpm}, Measure Length: ${measureLength.toFixed(3)}s`);
+
     if (onProgress) onProgress({ step: '곡의 분위기 변화를 감지하는 중...', percent: 85 });
 
     // Section detection
@@ -197,7 +227,9 @@ export const useAudioAnalyzer = () => {
       buffer: audioBuffer,
       obstacles: interpolatedObstacles,
       sections: sections,
-      duration: audioBuffer.duration
+      duration: audioBuffer.duration,
+      bpm: bpm,
+      measureLength: measureLength
     };
   };
 

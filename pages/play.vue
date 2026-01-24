@@ -156,7 +156,7 @@ const handleSongSelect = async (file: File) => {
       analysisProgress.value = { step: stepMsg, percent: 0 };
       
       // 맵 생성 (매 시도시마다 간격이 조금씩 넓어짐)
-      tempEngine.generateMap(result.obstacles, result.sections, result.duration, uniqueSeed + i, false, i);
+      tempEngine.generateMap(result.obstacles, result.sections, result.duration, uniqueSeed + i, false, i, result.bpm, result.measureLength);
       
       // 비동기 검증 (프로그레스 바 업데이트)
       success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
@@ -191,7 +191,9 @@ const handleSongSelect = async (file: File) => {
         autoplayLog: tempEngine.autoplayLog,
         duration: result.duration,
         beatTimes: result.obstacles,
-        sections: result.sections
+        sections: result.sections,
+        bpm: result.bpm,
+        measureLength: result.measureLength
       };
       // 더 이상 자동으로 저장하지 않음 (사용자의 명시적 요청시에만 저장)
     } else {
@@ -297,16 +299,24 @@ const handleMapReady = async (mapData: any) => {
     if (selectedSong.value) {
       body.audioUrl = `/audio/${selectedSong.value.name}`;
       
-      // Convert file to Base64 and store in DB
-      const reader = new FileReader();
-      const base64Promise = new Promise<string>((resolve) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(selectedSong.value!);
-      });
-      body.audioData = await base64Promise;
+      // Convert file to Base64 (size limit: 100MB)
+      if (selectedSong.value.size < 100 * 1024 * 1024) {
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(selectedSong.value!);
+        });
+        body.audioData = await base64Promise;
+      } else {
+        console.warn("Audio file too large for server storage (>100MB). Skipping audio persistence.");
+        // We do NOT send audioData. The user will have to upload it locally to play.
+      }
     } else if (loadedMapData.value?.audioUrl) {
       body.audioUrl = loadedMapData.value.audioUrl;
-      body.audioData = loadedMapData.value.audioData;
+      // If we loaded it from DB, we can try to save it back, check length first (100MB limit)
+      if (loadedMapData.value.audioData && loadedMapData.value.audioData.length < 100 * 1024 * 1024) {
+         body.audioData = loadedMapData.value.audioData;
+      }
     }
 
     const saved = await $fetch('/api/maps', {
@@ -315,9 +325,16 @@ const handleMapReady = async (mapData: any) => {
     });
     
     hasSavedCurrentMap.value = true;
-    console.log(`[Database] Map successfully saved to internal database. ID: ${saved._id}`);
-  } catch (e) {
+    console.log(`[Database] Map successfully saved. ID: ${saved._id}`);
+    
+    // If audio was not saved, notify user (optional, or just logic handles it)
+    if (!body.audioData) {
+       console.log("Audio data was not saved (File too large).");
+    }
+
+  } catch (e: any) {
     console.error("Failed to save map auto-registration:", e);
+    // Don't alert here to avoid annoying the user if it's just a background save
   }
 };
 
@@ -351,23 +368,25 @@ const initFromQuery = async () => {
       if (targetMap.audioData || targetMap.audioUrl) {
          try {
            let arrayBuffer: ArrayBuffer;
+            
            if (targetMap.audioData) {
-             // Load from DB (Base64 Data URL) - fetch can handle data URLs!
+             // Load from DB (Base64 Data URL)
              const res = await fetch(targetMap.audioData);
              arrayBuffer = await res.arrayBuffer();
+             
+             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+             audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+             step.value = 'play';
            } else {
-             // Fallback to static URL
-             const res = await fetch(targetMap.audioUrl);
-             arrayBuffer = await res.arrayBuffer();
+             // If no audioData in DB, we do NOT auto-load.
+             // The UI will show "Map Loaded: [Title]" and ask user to upload the song.
+             console.log("Map loaded without audio. Waiting for user file.");
            }
-           
-           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-           audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-           step.value = 'play';
          } catch (e) {
            console.warn("Auto-load failed, waiting for user file", e);
          }
-      } else if (route.query.map) {
+      } else if (route.query.map || route.query.mapId) {
+         // No audio in DB - start game with silent buffer (view-only mode)
          await handleMapOnlyStart(targetMap);
       }
     }

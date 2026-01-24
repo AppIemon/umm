@@ -175,24 +175,22 @@ const startGame = () => {
     audioCtx.resume();
   }
   const wasAutoplay = props.multiplayerMode ? false : engine.value.isAutoplay;
+  engine.value.setMapConfig({
+    density: 1.0,
+    portalFrequency: 0.15,
+    difficulty: difficulty.value
+  });
   engine.value.reset();
   engine.value.isAutoplay = wasAutoplay;
   isAutoplayUI.value = wasAutoplay;
+
   if (props.loadMap) {
     // 저장된 맵 데이터 로드
     engine.value.loadMapData(props.loadMap);
     difficulty.value = props.loadMap.difficulty;
-    isMapValidated.value = true; // 이미 로그가 있으면 검증된 것으로 간주
+    isMapValidated.value = true; 
   } else {
-    engine.value.setMapConfig({
-      density: 1.0,
-      portalFrequency: 0.15,
-      difficulty: difficulty.value
-    });
     engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false);
-    
-    // 비동기 검증 시작 (플레이 중에 진행)
-    // 검증이 성공해야만 서버에 저장(share) 가능한 상태가 됨
     validateMapInBackground();
   }
   
@@ -754,7 +752,57 @@ const draw = () => {
       ctx.fillStyle = '#777';
       ctx.fillRect(obs.x, obs.y, obs.width, 8);
       ctx.fillRect(obs.x, obs.y + obs.height - 8, obs.width, 8);
+
+    } else if (obs.type === 'mine') {
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + obs.height / 2;
+      const radius = obs.width / 2;
+      
+      const pulse = Math.sin(currentTrackTime.value * 10) * 0.1 + 0.9;
+      
+      ctx.fillStyle = '#ff3333';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ff0000';
+      
+      ctx.beginPath();
+      // Hexagon shape for mine
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i + currentTrackTime.value * 2;
+        const x = cx + Math.cos(angle) * radius * pulse;
+        const y = cy + Math.sin(angle) * radius * pulse;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      // Inner detail
+      ctx.fillStyle = '#550000';
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (obs.type === 'orb') {
+      const cx = obs.x + obs.width / 2;
+      const cy = obs.y + obs.height / 2;
+      const radius = obs.width / 2;
+      
+      const pulse = Math.sin(currentTrackTime.value * 5) * 0.1 + 1.0;
+
+      const grad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * pulse);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.4, '#aa44ff'); // Purple
+      grad.addColorStop(0.8, '#4400cc');
+      grad.addColorStop(1, 'rgba(68, 0, 204, 0)');
+      
+      ctx.fillStyle = grad;
+      ctx.globalCompositeOperation = 'lighter'; // Additive blending for glow
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over'; // Reset
     }
+
     
     ctx.restore();
   });
