@@ -12,7 +12,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const user = await User.findOne({ username, password })
+    const lowercaseUsername = username.toLowerCase().trim()
+    const user = await User.findOne({ username: lowercaseUsername, password })
+
     if (!user) {
       throw createError({
         statusCode: 401,
@@ -21,18 +23,21 @@ export default defineEventHandler(async (event) => {
     }
 
     const userData = {
-      _id: user._id,
+      _id: user._id.toString(),
       username: user.username,
       displayName: user.displayName,
       rating: user.rating,
-      matchHistory: user.matchHistory,
       isGuest: false
     }
 
     // Set cookie for "session"
+    // Limited data in cookie to avoid header size issues
     setCookie(event, 'auth_user', JSON.stringify(userData), {
       httpOnly: false,
-      maxAge: 60 * 60 * 24 * 7 // 1 week
+      maxAge: 60 * 60 * 24 * 7, // 1 week
+      path: '/',
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
     })
 
     return userData
@@ -40,7 +45,7 @@ export default defineEventHandler(async (event) => {
     console.error("Login API Error:", error);
     throw createError({
       statusCode: error.statusCode || 500,
-      statusMessage: error.message || 'Internal Server Error'
+      statusMessage: error.message || 'Authentication error'
     })
   }
 })

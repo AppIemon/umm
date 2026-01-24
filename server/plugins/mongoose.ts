@@ -1,5 +1,10 @@
 import mongoose from 'mongoose'
 
+/**
+ * Caching connection for serverless longevity
+ */
+let cachedPromise: Promise<typeof mongoose> | null = null
+
 export default defineNitroPlugin(async (nitroApp) => {
   const config = useRuntimeConfig()
 
@@ -7,13 +12,32 @@ export default defineNitroPlugin(async (nitroApp) => {
     return
   }
 
-  try {
-    if (!config.mongodbUri) {
-      throw new Error('MONGODB_URI is not defined in runtime config')
+  if (!cachedPromise) {
+    const uri = config.mongodbUri as string
+    if (!uri) {
+      console.error('[Nitro] DB ERROR: MONGODB_URI is empty')
+      return
     }
-    await mongoose.connect(config.mongodbUri as string)
-    console.log('Connected to MongoDB')
+
+    const opts = {
+      bufferCommands: false, // Disable buffering to catch connection issues early
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+    }
+
+    cachedPromise = mongoose.connect(uri, opts as any).then((m) => {
+      console.log('[Nitro] Successfully connected to MongoDB Atlas')
+      return m
+    }).catch(err => {
+      cachedPromise = null // Reset on error
+      console.error('[Nitro] DB Connection Error:', err.message)
+      throw err
+    })
+  }
+
+  try {
+    await cachedPromise
   } catch (e) {
-    console.error('Error connecting to MongoDB: ', e)
+    // Already logged above
   }
 })

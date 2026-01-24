@@ -12,7 +12,9 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const existingUser = await User.findOne({ username })
+    const lowercaseUsername = username.toLowerCase().trim()
+    const existingUser = await User.findOne({ username: lowercaseUsername })
+
     if (existingUser) {
       throw createError({
         statusCode: 409,
@@ -21,31 +23,34 @@ export default defineEventHandler(async (event) => {
     }
 
     const user = await User.create({
-      username,
-      password, // In a real app, hash this!
-      displayName
+      username: lowercaseUsername,
+      password,
+      displayName: displayName.trim()
     })
 
     const userData = {
-      _id: user._id,
+      _id: user._id.toString(),
       username: user.username,
       displayName: user.displayName,
       rating: user.rating,
-      matchHistory: user.matchHistory,
       isGuest: false
     }
 
     // Set cookie for "session"
     setCookie(event, 'auth_user', JSON.stringify(userData), {
-      httpOnly: false, // Accessible by frontend for simple demo
-      maxAge: 60 * 60 * 24 * 7 // 1 week
+      httpOnly: false,
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
     })
 
     return userData
   } catch (error: any) {
+    console.error("Registration Error:", error);
     throw createError({
       statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || 'Internal Server Error'
+      statusMessage: error.statusMessage || 'Failed to create entity'
     })
   }
 })
