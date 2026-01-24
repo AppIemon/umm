@@ -614,7 +614,7 @@ export class GameEngine {
 
   // Autoplay data
   isAutoplay: boolean = false;
-  autoplayLog: { x: number, y: number, holding: boolean }[] = [];
+  autoplayLog: { x: number, y: number, holding: boolean, time: number }[] = [];
   private lastAutoplayIndex: number = 0;
 
   // 패턴 간격 배율 (재생성 시 증가)
@@ -792,42 +792,35 @@ export class GameEngine {
         // 1. 배속 포탈
         // 첫 포탈이거나 속도가 변할 때 포탈 생성
         if (portalType !== lastSpeedType || lastPortalX === 0) {
-          // 같은 포탈 2개 놓기
-          portalTypes.push(portalType);
           portalTypes.push(portalType);
           lastSpeedType = portalType;
         }
 
         // 2. 변곡점 중력반전 포탈 (EASY 모드: diff 3 이상부터 등장, 낮은 확률)
+        // Impossible 모드는 90% 확률로 중력 반전을 시도하여 혼란을 줌
         const gravityChance = diff >= 24 ? 0.9 : (diff < 8 ? 0.35 : 0.75);
-        if (rng() < gravityChance && diff >= 3) {
+        if (rng() < gravityChance && diff >= 3) { // diff >= 3 부터 중력 반전 허용
           const wantInverted = rng() > 0.5;
           if (wantInverted !== currentInverted) {
-            const gType: PortalType = wantInverted ? 'gravity_yellow' : 'gravity_blue';
-            // 같은 포탈 2개 놓기
-            portalTypes.push(gType);
-            portalTypes.push(gType);
+            portalTypes.push(wantInverted ? 'gravity_yellow' : 'gravity_blue');
             currentInverted = wantInverted;
           }
         }
 
         // 3. 미니 포탈 (난이도 2부터 등장)
-        const miniThreshold = diff >= 24 ? 0.3 : 0.8;
+        // Impossible 모드는 미니 모드를 매우 적극적으로 사용
+        const miniThreshold = diff >= 24 ? 0.3 : 0.8; // 30% 확률 이상이면 미니 적용 (Highly frequent in Impossible)
         if (this.mapConfig.difficulty >= 2) {
           if (diff >= 24) {
-            if (rng() > 0.4) {
-              const mType: PortalType = !currentMini ? 'mini_pink' : 'mini_green';
-              // 같은 포탈 2개 놓기
-              portalTypes.push(mType);
-              portalTypes.push(mType);
+            // Impossible: Random chaos
+            if (rng() > 0.4) { // 60% chance to toggle
+              portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
               currentMini = !currentMini;
             }
           } else {
+            // Normal logic
             if (intensity > miniThreshold || (intensity > 0.6 && rng() < 0.4)) {
-              const mType: PortalType = !currentMini ? 'mini_pink' : 'mini_green';
-              // 같은 포탈 2개 놓기
-              portalTypes.push(mType);
-              portalTypes.push(mType);
+              portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
               currentMini = !currentMini;
             }
           }
@@ -835,16 +828,7 @@ export class GameEngine {
 
         if (portalTypes.length > 0) {
           this.generatePortalWithType(portalX, portalTypes[0]!, rng, portalTypes.slice(1));
-
-          // 포탈 그룹의 총 너비를 계산하여 lastPortalX를 그룹의 끝으로 설정
-          const portalWidth = 50;
-          const portalSpacing = 600; // 넓어진 간격 반영
-          const totalPortalWidth = portalTypes.length * portalWidth + (portalTypes.length - 1) * portalSpacing;
-          lastPortalX = portalX + totalPortalWidth;
-
-          // 포탈 영점 이후에 장애물이 바로 나오지 않도록 시간 지연 추가
-          const speedMultiplier = this.getSpeedMultiplierFromType(lastSpeedType);
-          lastPatternEndTime = event.time + totalPortalWidth / (this.baseSpeed * speedMultiplier) + 0.5;
+          lastPortalX = portalX;
         }
       } else {
         // 비트 이벤트: 장애물 배치
@@ -1102,7 +1086,7 @@ export class GameEngine {
   private generatePortalWithType(xPos: number, firstType: PortalType, rng: () => number, extraTypes: PortalType[] = []) {
     const portalHeight = 100;
     const portalWidth = 50;
-    const spacing = 600; // 매우 넓은 간격 (사용자 요청: 포탈 2개 간격 이상)
+    const spacing = 40; // 포탈 간 간격
     const playH = this.maxY - this.minY;
     const centerY = this.minY + 80 + rng() * (playH - 160);
 
@@ -1147,12 +1131,27 @@ export class GameEngine {
 
   /**
    * 랜덤 타입으로 포탈 생성 (기존 호환)
+   * 난이도에 따라 빠른 속도 포탈 제한
    */
   private generatePortal(xPos: number, rng: () => number) {
-    const portalTypes: PortalType[] = [
+    let portalTypes: PortalType[] = [
       'gravity_yellow', 'gravity_blue',
       'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4'
     ];
+
+    // 난이도별 속도 포탈 제한
+    const diff = this.mapConfig.difficulty;
+    if (diff < 8) {
+      // EASY: 2배속 이상 제외
+      portalTypes = portalTypes.filter(t => !['speed_2', 'speed_3', 'speed_4'].includes(t));
+    } else if (diff < 16) {
+      // NORMAL: 3배속 이상 제외
+      portalTypes = portalTypes.filter(t => !['speed_3', 'speed_4'].includes(t));
+    } else if (diff < 24) {
+      // HARD: 4배속 제외
+      portalTypes = portalTypes.filter(t => t !== 'speed_4');
+    }
+    // IMPOSSIBLE: 모든 포탈 허용
 
     const availableTypes = portalTypes.filter(t => {
       if (t === 'gravity_blue') return this.portals.some(p => p.type === 'gravity_yellow');
@@ -1175,7 +1174,8 @@ export class GameEngine {
   public *computeAutoplayLogGen(startX: number, startY: number): Generator<number, boolean, unknown> {
     this.autoplayLog = [];
     this.validationFailureInfo = null;
-    const dt = 1 / 60;
+    // 성능 최적화: dt를 1/30으로 설정하여 검증 속도 2배 향상
+    const dt = 1 / 30;
     const sortedObs = [...this.obstacles].sort((a, b) => a.x - b.x);
     const sortedPortals = [...this.portals].sort((a, b) => a.x - b.x);
 
@@ -1191,23 +1191,25 @@ export class GameEngine {
 
     const visited = new Set<string>();
     const getVisitedKey = (s: SearchState) => {
-      const xi = Math.floor(s.x / (this.baseSpeed * 0.016));
-      const yi = Math.floor(s.y / 8);
-      return `${xi}_${yi}_${s.g ? 1 : 0}_${s.sm}_${s.m ? 1 : 0}`;
+      // 성능 최적화: 더 큰 그리드 셀 사용
+      const xi = Math.floor(s.x / (this.baseSpeed * 0.033));
+      const yi = Math.floor(s.y / 12);
+      return `${xi}_${yi}_${s.g ? 1 : 0}_${Math.round(s.sm * 10)}_${s.m ? 1 : 0}`;
     };
 
-    const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 1.0): boolean => {
-      // 바닥/천장 충돌 체크에도 마진 적용
-      if (ty < this.minY + sz + margin || ty > this.maxY - sz - margin) return true;
+    const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 0): boolean => {
+      // 바닥/천장 충돌 체크 (실제 게임과 동일하게 마진 없음)
+      if (ty < this.minY + sz || ty > this.maxY - sz) return true;
       for (let i = 0; i < sortedObs.length; i++) {
         const o = sortedObs[i]!;
         if (o.x + o.width < tx - 50) continue;
         if (o.x > tx + 100) break;
 
-        // 움직이는 장애물에 대해서는 추가적인 안전 마진을 최소화 (타이밍 오차 보정용 1.2px)
-        const moveMargin = o.movement ? 1.2 : 0;
+        // 움직이는 장애물에 대해서만 타이밍 오차 보정용 마진 적용 (2px)
+        // 이동 오브젝트는 시뮬레이션 시간과 실제 게임 시간의 차이로 인해 위치가 달라질 수 있음
+        const moveMargin = o.movement ? 2.0 : 0;
 
-        // 장애물 충돌 체크에도 마진(sz + margin) 적용
+        // 실제 게임과 동일하게 sz 그대로 사용, 이동 오브젝트만 추가 마진
         if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm)) return true;
       }
       return false;
@@ -1248,8 +1250,8 @@ export class GameEngine {
         const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
         sy += amp * vy * dt;
 
-        // 생존 확인 시에는 매우 작은 마진(0.5px)만 둠
-        if (checkColl(sx, sy, sz, sTime, 0.5)) return false;
+        // 생존 확인: 실제 게임과 동일하게 마진 0 (이동 오브젝트만 내부에서 마진 적용)
+        if (checkColl(sx, sy, sz, sTime, 0)) return false;
       }
       return true;
     };
@@ -1299,8 +1301,8 @@ export class GameEngine {
       const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
-      const dH = checkColl(nX, nYH, sz, nT, 0.8); // 0.8px safety margin for immediate action
-      const dR = checkColl(nX, nYR, sz, nT, 0.8);
+      const dH = checkColl(nX, nYH, sz, nT, 0); // 실제 게임과 동일하게 마진 없음
+      const dR = checkColl(nX, nYR, sz, nT, 0);
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
@@ -1461,9 +1463,9 @@ export class GameEngine {
     }
 
     if (bestState) {
-      const path: { x: number, y: number, holding: boolean }[] = [];
+      const path: { x: number, y: number, holding: boolean, time: number }[] = [];
       let t: SearchState | null = bestState;
-      while (t) { path.push({ x: t.x, y: t.y, holding: t.h }); t = t.prev; }
+      while (t) { path.push({ x: t.x, y: t.y, holding: t.h, time: t.time }); t = t.prev; }
       this.autoplayLog = path.reverse();
       return true;
     } else {
@@ -1534,6 +1536,7 @@ export class GameEngine {
     this.playerX += this.waveSpeed * dt;
 
     // 오토플레이 로직: 사전 계산된 로그를 기반으로 입력 및 경로 시각화 (User request)
+    let simTime: number | null = null; // 오토플레이 시 AI 시뮬레이션 시간
     if (this.isAutoplay && this.autoplayLog.length > 0) {
       // 시간/프레임 대신 X 좌표 기반으로 가장 가까운 로그 찾기
       const targetX = this.playerX;
@@ -1557,8 +1560,11 @@ export class GameEngine {
         if (prevEntry) {
           const ratio = (targetX - prevEntry.x) / (foundEntry.x - prevEntry.x);
           this.playerY = prevEntry.y + (foundEntry.y - prevEntry.y) * Math.max(0, Math.min(1, ratio));
+          // 시간도 보간하여 이동 오브젝트 동기화
+          simTime = prevEntry.time + (foundEntry.time - prevEntry.time) * Math.max(0, Math.min(1, ratio));
         } else {
           this.playerY = foundEntry.y;
+          simTime = foundEntry.time;
         }
 
         // 지그재그 경로 시각화 업데이트
@@ -1594,9 +1600,12 @@ export class GameEngine {
     if (this.trail.length > 80) this.trail.shift();  // 더 긴 트레일
 
     this.updateParticles(dt);
-    this.updateMovingObstacles(currentTime);
+
+    // 오토플레이 모드에서는 AI 시뮬레이션 시간(simTime)을 사용하여 이동 오브젝트 동기화
+    const effectiveTime = simTime !== null ? simTime : currentTime;
+    this.updateMovingObstacles(effectiveTime);
     this.checkPortalCollisions();
-    this.checkCollisions(currentTime);
+    this.checkCollisions(effectiveTime);
 
     if (this.playerX >= this.totalLength) {
       this.isPlaying = false;

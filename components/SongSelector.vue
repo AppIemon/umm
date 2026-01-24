@@ -2,13 +2,34 @@
   <div class="song-selector">
     <!-- Tabs -->
     <div class="tabs">
+      <button :class="{ active: mode === 'samples' }" @click="mode = 'samples'">SAMPLES</button>
       <button :class="{ active: mode === 'upload' }" @click="mode = 'upload'">UPLOAD</button>
       <button :class="{ active: mode === 'youtube' }" @click="mode = 'youtube'">YOUTUBE</button>
       <button :class="{ active: mode === 'storage' }" @click="mode = 'storage'">STORAGE</button>
     </div>
 
+    <!-- Sample Music Mode (신규 플레이어용) -->
+    <div v-if="mode === 'samples'" class="tab-content">
+      <p class="section-desc">CC0 무료 음악 - 저작권 걱정 없이 바로 플레이!</p>
+      <div class="sample-list">
+        <div 
+          v-for="sample in sampleTracks" 
+          :key="sample.id" 
+          class="sample-item"
+          :class="{ selected: selectedSample?.id === sample.id, loading: loadingSampleId === sample.id }"
+          @click="selectSample(sample)"
+        >
+          <div class="sample-info">
+            <span class="sample-name">{{ sample.name }}</span>
+            <span class="sample-meta">{{ sample.genre }} • {{ sample.duration }}</span>
+          </div>
+          <span v-if="loadingSampleId === sample.id" class="loading-indicator">◆</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Upload Mode -->
-    <div v-if="mode === 'upload'" class="tab-content">
+    <div v-else-if="mode === 'upload'" class="tab-content">
       <div 
         class="drop-zone"
         @dragover.prevent
@@ -58,7 +79,7 @@
       <p v-else class="empty-msg">NO RECENT DATA FOUND</p>
     </div>
 
-    <button class="confirm-btn" :disabled="(!currentSelection && !selectedStorageItem) || isYoutubeLoading" @click="confirm">
+    <button class="confirm-btn" :disabled="(!currentSelection && !selectedStorageItem && !selectedSample) || isYoutubeLoading || loadingSampleId" @click="confirm">
       SELECT
     </button>
   </div>
@@ -68,12 +89,52 @@
 import { ref, watch, onMounted } from 'vue';
 
 const emit = defineEmits(['select']);
-const mode = ref<'upload' | 'youtube'>('upload');
+const mode = ref<'samples' | 'upload' | 'youtube' | 'storage'>('samples');
 
 const selectedFile = ref<File | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const currentSelection = ref<File | null>(null);
+
+// Sample tracks (CC0 / Public Domain)
+interface SampleTrack {
+  id: string;
+  name: string;
+  genre: string;
+  duration: string;
+  url: string;
+}
+
+const sampleTracks = ref<SampleTrack[]>([
+  { id: '1', name: 'Bit Bit Loop', genre: 'Electronic', duration: '1:30', url: '/api/samples?id=1' },
+  { id: '2', name: 'Soliloquy', genre: 'Ambient', duration: '2:00', url: '/api/samples?id=2' },
+  { id: '3', name: 'Orbital Colossus', genre: 'Epic Electronic', duration: '3:00', url: '/api/samples?id=3' },
+]);
+
+const selectedSample = ref<SampleTrack | null>(null);
+const loadingSampleId = ref<string | null>(null);
+
+async function selectSample(sample: SampleTrack) {
+  selectedSample.value = sample;
+  selectedStorageItem.value = null;
+  currentSelection.value = null;
+  
+  // 샘플 파일을 미리 로드하여 File 객체로 변환
+  loadingSampleId.value = sample.id;
+  try {
+    const response = await fetch(sample.url);
+    if (!response.ok) throw new Error('Failed to load sample');
+    const blob = await response.blob();
+    const file = new File([blob], sample.name + '.mp3', { type: 'audio/mpeg' });
+    currentSelection.value = file;
+    selectedFile.value = file;
+  } catch (e) {
+    console.error('Failed to load sample:', e);
+    selectedSample.value = null;
+  } finally {
+    loadingSampleId.value = null;
+  }
+}
 
 // Storage logic
 const storageItems = ref<any[]>([]);
@@ -97,7 +158,8 @@ watch(mode, (newMode) => {
 
 function selectStorageItem(item: any) {
   selectedStorageItem.value = item;
-  currentSelection.value = null; // Clear file selection
+  currentSelection.value = null;
+  selectedSample.value = null;
 }
 
 // YouTube refs
@@ -112,6 +174,7 @@ async function fetchYoutube() {
   youtubeError.value = '';
   selectedFile.value = null;
   currentSelection.value = null;
+  selectedSample.value = null;
   
   try {
     const response = await fetch('/api/youtube', {
@@ -129,8 +192,8 @@ async function fetchYoutube() {
     const contentDisposition = response.headers.get('content-disposition');
     let filename = 'youtube_audio.mp3';
     if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?(.+)"?/);
-        if (match && match[1]) filename = match[1];
+        const match = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (match && match[1]) filename = decodeURIComponent(match[1]);
     }
 
     const blob = await response.blob();
@@ -161,7 +224,8 @@ function handleDrop(e: DragEvent) {
 function handleFile(file: File) {
   selectedFile.value = file;
   currentSelection.value = file;
-  selectedStorageItem.value = null; // Clear storage selection
+  selectedStorageItem.value = null;
+  selectedSample.value = null;
 }
 
 async function confirm() {
@@ -176,7 +240,7 @@ async function confirm() {
 <style scoped>
 .song-selector {
   width: 100%;
-  max-width: 400px;
+  max-width: 450px;
   background: rgba(0,0,0,0.5);
   border: 1px solid #333;
   padding: 1rem;
@@ -196,11 +260,81 @@ async function confirm() {
   border-bottom: 2px solid #333;
   color: #666;
   cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: bold;
 }
 
 .tabs button.active {
   border-color: var(--primary, #00f3ff);
   color: white;
+}
+
+.section-desc {
+  color: #888;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.sample-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.sample-item {
+  padding: 0.8rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.sample-item:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: #444;
+}
+
+.sample-item.selected {
+  border-color: var(--primary, #00f3ff);
+  background: rgba(0, 243, 255, 0.1);
+}
+
+.sample-item.loading {
+  opacity: 0.7;
+}
+
+.sample-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sample-name {
+  color: white;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.sample-meta {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+.loading-indicator {
+  color: var(--primary, #00f3ff);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .drop-zone {
@@ -281,7 +415,7 @@ async function confirm() {
 
 .youtube-input-container .fetch-btn {
   padding: 0 1.5rem;
-  background: #ff0000; /* YouTube red */
+  background: #ff0000;
   color: white;
   border: none;
   font-weight: bold;
@@ -306,5 +440,11 @@ async function confirm() {
   border: 1px solid #00ff00;
   border-radius: 4px;
   text-align: center;
+}
+
+.empty-msg {
+  color: #666;
+  text-align: center;
+  padding: 2rem;
 }
 </style>

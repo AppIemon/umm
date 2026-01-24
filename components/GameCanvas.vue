@@ -1005,12 +1005,29 @@ const draw = () => {
     ctx.lineWidth = 2;
     ctx.strokeRect(px - size, py - size, size * 2, size * 2);
     
-    // 장애물 히트박스
+    // 장애물 히트박스 (이동/회전 오브젝트는 실시간 위치 반영)
     ctx.strokeStyle = '#ff0000';
     engine.value.obstacles.forEach((obs: Obstacle) => {
       if (obs.x + obs.width < engine.value.cameraX - 50) return;
       if (obs.x > engine.value.cameraX + w + 100) return;
-      ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+      
+      // 이동/회전 오브젝트의 경우 실시간 상태 가져오기
+      const state = engine.value.getObstacleStateAt(obs, currentTrackTime.value);
+      const obsY = state.y;
+      const obsAngle = state.angle;
+      
+      ctx.save();
+      
+      if (obsAngle !== 0) {
+        // 회전된 히트박스
+        ctx.translate(obs.x + obs.width / 2, obsY + obs.height / 2);
+        ctx.rotate(obsAngle * Math.PI / 180);
+        ctx.strokeRect(-obs.width / 2, -obs.height / 2, obs.width, obs.height);
+      } else {
+        ctx.strokeRect(obs.x, obsY, obs.width, obs.height);
+      }
+      
+      ctx.restore();
     });
   }
   

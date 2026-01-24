@@ -120,6 +120,16 @@ const getDifficultyColor = (d: number) => {
   if (d < 8) return '#00ff88';
   if (d < 16) return '#ffff00';
   if (d < 24) return '#ff8800';
+  return '#ff0000';
+};
+
+// 난이도별 최대 노래 길이 (초)
+// EASY는 짧게, 높은 난이도로 갈수록 더 긴 곡
+const getMaxDuration = (d: number): number => {
+  if (d < 8) return 30;      // EASY: 30초
+  if (d < 16) return 60;     // NORMAL: 60초  
+  if (d < 24) return 90;     // HARD: 90초
+  return Infinity;            // IMPOSSIBLE: 전체 노래
 };
 
 
@@ -165,6 +175,14 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
     obstacles.value = result.obstacles;
     sections.value = result.sections;
 
+    // 난이도별 노래 길이 제한 적용
+    const maxDuration = getMaxDuration(difficulty.value);
+    const effectiveDuration = Math.min(result.duration, maxDuration);
+    
+    // 제한된 시간 내의 비트/섹션만 사용
+    const filteredBeatTimes = result.obstacles.filter(t => t <= effectiveDuration);
+    const filteredSections = result.sections.filter(s => s.start <= effectiveDuration);
+
     // 2. Map Generation & Validation
     const tempEngine = new GameEngine({ difficulty: difficulty.value, density: 1.0, portalFrequency: 0.15 });
     
@@ -176,8 +194,8 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
       const stepMsg = i === 0 ? 'AI가 맵을 분석하고 있습니다...' : `맵 보정 중... (${i + 1}회차)`;
       analysisProgress.value = { step: stepMsg, percent: 0 };
       
-      // 맵 생성 (매 시도시마다 간격이 조금씩 넓어짐)
-      tempEngine.generateMap(result.obstacles, result.sections, result.duration, uniqueSeed + i, false, i, result.bpm, result.measureLength);
+      // 맵 생성 (제한된 duration과 필터링된 beatTimes 사용)
+      tempEngine.generateMap(filteredBeatTimes, filteredSections, effectiveDuration, uniqueSeed + i, false, i, result.bpm, result.measureLength);
       
       // 비동기 검증 (프로그레스 바 업데이트)
       success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
@@ -211,9 +229,9 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         engineObstacles: tempEngine.obstacles,
         enginePortals: tempEngine.portals,
         autoplayLog: tempEngine.autoplayLog,
-        duration: result.duration,
-        beatTimes: result.obstacles,
-        sections: result.sections,
+        duration: effectiveDuration,
+        beatTimes: filteredBeatTimes,
+        sections: filteredSections,
         bpm: result.bpm,
         measureLength: result.measureLength,
         audioData: null // We'll fill this if we save to storage
