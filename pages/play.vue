@@ -57,8 +57,7 @@
           </div>
         </div>
       </div>
-        </div>
-      </div>
+
       
       <button class="help-btn" @click="showGuide = true">?</button>
     </div>
