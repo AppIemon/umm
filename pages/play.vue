@@ -262,21 +262,15 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
 const saveToRecentStorage = async (map: any) => {
   const recent = JSON.parse(localStorage.getItem('umm_recent_maps') || '[]');
   
-  // If we have selectedSong, we might want to embed for storage fallback
-  let audioData = null;
-  if (selectedSong.value && selectedSong.value.size < 50 * 1024 * 1024) {
-     const reader = new FileReader();
-     audioData = await new Promise((resolve) => {
-        reader.onload = () => resolve(reader.result);
-        reader.readAsDataURL(selectedSong.value!);
-     });
-  }
-
+  // LocalStorage is limited (approx 5MB). DO NOT store audio data here.
   const item = {
     id: Date.now(),
     name: map.title,
     timestamp: Date.now(),
-    mapData: { ...map, audioData }
+    mapData: { 
+      ...map, 
+      audioData: null // Explicitly remove audio data for local history
+    }
   };
 
   recent.unshift(item);
@@ -381,8 +375,8 @@ const handleMapReady = async (mapData: any) => {
     if (selectedSong.value) {
       body.audioUrl = `/audio/${selectedSong.value.name}`;
       
-      // Convert file to Base64 (size limit: 100MB)
-      if (selectedSong.value.size < 100 * 1024 * 1024) {
+      // Convert file to Base64 (Server limit: ~4.5MB for Vercel/Serverless)
+      if (selectedSong.value.size < 4.5 * 1024 * 1024) {
         const reader = new FileReader();
         const base64Promise = new Promise<string>((resolve) => {
           reader.onload = () => resolve(reader.result as string);
