@@ -183,7 +183,9 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
       success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
         analysisProgress.value.percent = Math.floor(p * 100);
       });
+      
       if (success) {
+        analysisProgress.value.step = '맵 저장 중...';
         validationFailure.value = null; // 성공 시 리셋
         break; 
       }
@@ -221,7 +223,8 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
       saveToRecentStorage(loadedMapData.value);
 
       // --- AUTO-SAVE TO SERVER "MY MAPS" ---
-      handleMapReady(loadedMapData.value);
+      await handleMapReady(loadedMapData.value);
+      analysisProgress.value.step = '준비 완료!';
       
     } else {
       throw new Error("지나갈 수 있는 맵을 생성하지 못했습니다. 다시 시도해 주세요.");

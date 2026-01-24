@@ -792,35 +792,42 @@ export class GameEngine {
         // 1. 배속 포탈
         // 첫 포탈이거나 속도가 변할 때 포탈 생성
         if (portalType !== lastSpeedType || lastPortalX === 0) {
+          // 같은 포탈 2개 놓기
+          portalTypes.push(portalType);
           portalTypes.push(portalType);
           lastSpeedType = portalType;
         }
 
         // 2. 변곡점 중력반전 포탈 (EASY 모드: diff 3 이상부터 등장, 낮은 확률)
-        // Impossible 모드는 90% 확률로 중력 반전을 시도하여 혼란을 줌
         const gravityChance = diff >= 24 ? 0.9 : (diff < 8 ? 0.35 : 0.75);
-        if (rng() < gravityChance && diff >= 3) { // diff >= 3 부터 중력 반전 허용
+        if (rng() < gravityChance && diff >= 3) {
           const wantInverted = rng() > 0.5;
           if (wantInverted !== currentInverted) {
-            portalTypes.push(wantInverted ? 'gravity_yellow' : 'gravity_blue');
+            const gType: PortalType = wantInverted ? 'gravity_yellow' : 'gravity_blue';
+            // 같은 포탈 2개 놓기
+            portalTypes.push(gType);
+            portalTypes.push(gType);
             currentInverted = wantInverted;
           }
         }
 
         // 3. 미니 포탈 (난이도 2부터 등장)
-        // Impossible 모드는 미니 모드를 매우 적극적으로 사용
-        const miniThreshold = diff >= 24 ? 0.3 : 0.8; // 30% 확률 이상이면 미니 적용 (Highly frequent in Impossible)
+        const miniThreshold = diff >= 24 ? 0.3 : 0.8;
         if (this.mapConfig.difficulty >= 2) {
           if (diff >= 24) {
-            // Impossible: Random chaos
-            if (rng() > 0.4) { // 60% chance to toggle
-              portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
+            if (rng() > 0.4) {
+              const mType: PortalType = !currentMini ? 'mini_pink' : 'mini_green';
+              // 같은 포탈 2개 놓기
+              portalTypes.push(mType);
+              portalTypes.push(mType);
               currentMini = !currentMini;
             }
           } else {
-            // Normal logic
             if (intensity > miniThreshold || (intensity > 0.6 && rng() < 0.4)) {
-              portalTypes.push(!currentMini ? 'mini_pink' : 'mini_green');
+              const mType: PortalType = !currentMini ? 'mini_pink' : 'mini_green';
+              // 같은 포탈 2개 놓기
+              portalTypes.push(mType);
+              portalTypes.push(mType);
               currentMini = !currentMini;
             }
           }
@@ -828,7 +835,16 @@ export class GameEngine {
 
         if (portalTypes.length > 0) {
           this.generatePortalWithType(portalX, portalTypes[0]!, rng, portalTypes.slice(1));
-          lastPortalX = portalX;
+
+          // 포탈 그룹의 총 너비를 계산하여 lastPortalX를 그룹의 끝으로 설정
+          const portalWidth = 50;
+          const portalSpacing = 600; // 넓어진 간격 반영
+          const totalPortalWidth = portalTypes.length * portalWidth + (portalTypes.length - 1) * portalSpacing;
+          lastPortalX = portalX + totalPortalWidth;
+
+          // 포탈 영점 이후에 장애물이 바로 나오지 않도록 시간 지연 추가
+          const speedMultiplier = this.getSpeedMultiplierFromType(lastSpeedType);
+          lastPatternEndTime = event.time + totalPortalWidth / (this.baseSpeed * speedMultiplier) + 0.5;
         }
       } else {
         // 비트 이벤트: 장애물 배치
@@ -1086,7 +1102,7 @@ export class GameEngine {
   private generatePortalWithType(xPos: number, firstType: PortalType, rng: () => number, extraTypes: PortalType[] = []) {
     const portalHeight = 100;
     const portalWidth = 50;
-    const spacing = 40; // 포탈 간 간격
+    const spacing = 600; // 매우 넓은 간격 (사용자 요청: 포탈 2개 간격 이상)
     const playH = this.maxY - this.minY;
     const centerY = this.minY + 80 + rng() * (playH - 160);
 

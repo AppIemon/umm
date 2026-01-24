@@ -270,10 +270,11 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
   }
 
   if (e.button === 2) { // Right click selection box
+    if (!canvasRef.value) return;
     isSelectionBoxActive.value = true;
-    const rect = canvasRef.value!.getBoundingClientRect();
-    const scaleX = canvasRef.value!.width / rect.width;
-    const scaleY = canvasRef.value!.height / rect.height;
+    const rect = canvasRef.value.getBoundingClientRect();
+    const scaleX = canvasRef.value.width / rect.width;
+    const scaleY = canvasRef.value.height / rect.height;
     const x = ((e.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
     const y = ((e.clientY - rect.top) * scaleY) / zoom.value;
     selectionBox.value = { x1: x, y1: y, x2: x, y2: y };
@@ -288,8 +289,14 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
   const scaleX = canvasRef.value.width / rect.width;
   const scaleY = canvasRef.value.height / rect.height;
   
-  const x = ((e.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
-  const y = ((e.clientY - rect.top) * scaleY) / zoom.value;
+  let x = ((e.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
+  let y = ((e.clientY - rect.top) * scaleY) / zoom.value;
+  
+  // Snap to grid if Shift is pressed
+  if (isShiftPressed.value) {
+    x = Math.round(x / 25) * 25;
+    y = Math.round(y / 25) * 25;
+  }
   
   // 1. Check resize handles on selected object (only if one is selected)
   if (selectedObjects.value.length === 1) {
@@ -323,14 +330,15 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
       });
     }
   } else {
-    // 3. Clicked empty space
+    // 3. Clicked empty space: Always place new object (no Shift required now)
+    // Clear selection first unless Shift is pressed (for potentially adding more without clearing? 
+    // Actually, usually placing a new one selects only that one.)
     if (!isShiftPressed.value) {
       selectedObjects.value = [];
-    } else {
-      // Shift-click empty space: Place new
-      addObject(x, y);
-      saveState();
     }
+    
+    addObject(x, y);
+    saveState();
   }
 };
 
