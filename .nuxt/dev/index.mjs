@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1b28c-dM1vZZ1L4dD2TUiVgSc3+r7jBVc\"",
-    "mtime": "2026-01-24T06:44:57.268Z",
-    "size": 111244,
+    "etag": "\"1b3bd-G9d+wES/UCAgYzUMNO7mFN+lC0c\"",
+    "mtime": "2026-01-24T06:47:37.379Z",
+    "size": 111549,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"64932-O1DdKSifgJAXnNjuz0Ji9JAk3DY\"",
-    "mtime": "2026-01-24T06:44:57.270Z",
-    "size": 411954,
+    "etag": "\"64cf7-nLHttOslwr1yddw8AMYJm1MVO1s\"",
+    "mtime": "2026-01-24T06:47:37.366Z",
+    "size": 412919,
     "path": "index.mjs.map"
   }
 };
@@ -2976,49 +2976,63 @@ const youtube_post = defineEventHandler(async (event) => {
   try {
     let agent;
     const projectRoot = process.cwd();
-    const cookiesJsonPath = path.resolve(projectRoot, "youtube-cookies.json");
-    const cookiesTxtPath = path.resolve(projectRoot, "youtube-cookies.txt");
-    console.log(`[YouTube] Searching for cookies in: ${projectRoot}`);
-    if (fs.existsSync(cookiesJsonPath)) {
+    const envCookies = process.env.YOUTUBE_COOKIES;
+    const parseNetscapeCookies = (content) => {
+      const cookies = [];
+      content.split(/\r?\n/).forEach((line) => {
+        line = line.trim();
+        if (!line || line.startsWith("#")) return;
+        const parts = line.split(/\t/);
+        if (parts.length >= 7) {
+          cookies.push({
+            domain: parts[0],
+            path: parts[2],
+            secure: parts[3] === "TRUE",
+            expires: parseInt(parts[4]),
+            name: parts[5],
+            value: parts[6]
+          });
+        }
+      });
+      return cookies;
+    };
+    if (envCookies) {
       try {
-        const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, "utf8"));
-        agent = ytdl.createAgent(cookies);
-        console.log("[YouTube] Successfully loaded cookies from JSON");
-      } catch (e) {
-        console.error("[YouTube] Failed to parse cookies JSON:", e);
-      }
-    } else if (fs.existsSync(cookiesTxtPath)) {
-      try {
-        const content = fs.readFileSync(cookiesTxtPath, "utf8");
-        const cookies = [];
-        content.split(/\r?\n/).forEach((line) => {
-          line = line.trim();
-          if (!line || line.startsWith("#")) return;
-          const parts = line.split(/\t/);
-          if (parts.length >= 7) {
-            cookies.push({
-              domain: parts[0],
-              path: parts[2],
-              secure: parts[3] === "TRUE",
-              expires: parseInt(parts[4]),
-              name: parts[5],
-              value: parts[6]
-            });
-          }
-        });
+        const cookies = parseNetscapeCookies(envCookies);
         if (cookies.length > 0) {
           agent = ytdl.createAgent(cookies);
-          console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from txt`);
-        } else {
-          console.warn("[YouTube] Found cookies.txt but it appears to be empty or malformed");
+          console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from Environment Variable`);
         }
       } catch (e) {
-        console.error("[YouTube] Failed to parse cookies txt:", e);
+        console.error("[YouTube] Failed to parse cookies from Environment Variable:", e);
       }
-    } else {
-      console.log("[YouTube] No cookie files (json/txt) found in project root. Proceeding without auth.");
     }
     if (!agent) {
+      const cookiesJsonPath = path.resolve(projectRoot, "youtube-cookies.json");
+      const cookiesTxtPath = path.resolve(projectRoot, "youtube-cookies.txt");
+      if (fs.existsSync(cookiesJsonPath)) {
+        try {
+          const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, "utf8"));
+          agent = ytdl.createAgent(cookies);
+          console.log("[YouTube] Successfully loaded cookies from JSON file");
+        } catch (e) {
+          console.error("[YouTube] Failed to parse cookies JSON:", e);
+        }
+      } else if (fs.existsSync(cookiesTxtPath)) {
+        try {
+          const content = fs.readFileSync(cookiesTxtPath, "utf8");
+          const cookies = parseNetscapeCookies(content);
+          if (cookies.length > 0) {
+            agent = ytdl.createAgent(cookies);
+            console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from txt file`);
+          }
+        } catch (e) {
+          console.error("[YouTube] Failed to parse cookies txt:", e);
+        }
+      }
+    }
+    if (!agent) {
+      console.log("[YouTube] No cookies found (ENV or File). Proceeding without authentication.");
       agent = ytdl.createAgent();
     }
     const requestOptions = {
@@ -3056,7 +3070,7 @@ const youtube_post = defineEventHandler(async (event) => {
     });
     let message = error.message;
     if (message.includes("confirm you are not a bot") || message.includes("\uB85C\uADF8\uC778\uD558\uC5EC \uBD07\uC774 \uC544\uB2D8\uC744 \uD655\uC778\uD558\uC138\uC694")) {
-      message = "YouTube is blocking the request. Please provide cookies in youtube-cookies.json or try again later.";
+      message = `YouTube is blocking the request (Bot Detection). Please ensure 'youtube-cookies.txt' is in the project root (${process.cwd()}) and contains valid cookies.`;
     }
     throw createError({
       statusCode: error.statusCode && error.statusCode >= 400 && error.statusCode < 600 ? error.statusCode : 500,

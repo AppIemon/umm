@@ -17,52 +17,70 @@ export default defineEventHandler(async (event) => {
     // Attempt to load cookies
     let agent;
     const projectRoot = process.cwd();
-    const cookiesJsonPath = path.resolve(projectRoot, 'youtube-cookies.json');
-    const cookiesTxtPath = path.resolve(projectRoot, 'youtube-cookies.txt');
+    const envCookies = process.env.YOUTUBE_COOKIES;
 
-    console.log(`[YouTube] Searching for cookies in: ${projectRoot}`);
+    const parseNetscapeCookies = (content: string) => {
+      const cookies: any[] = [];
+      content.split(/\r?\n/).forEach(line => {
+        line = line.trim();
+        if (!line || line.startsWith('#')) return;
+        const parts = line.split(/\t/);
+        if (parts.length >= 7) {
+          cookies.push({
+            domain: parts[0],
+            path: parts[2],
+            secure: parts[3] === 'TRUE',
+            expires: parseInt(parts[4]),
+            name: parts[5],
+            value: parts[6]
+          });
+        }
+      });
+      return cookies;
+    };
 
-    if (fs.existsSync(cookiesJsonPath)) {
+    // 1. Check environment variable (Priority for Vercel)
+    if (envCookies) {
       try {
-        const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, 'utf8'));
-        agent = ytdl.createAgent(cookies);
-        console.log('[YouTube] Successfully loaded cookies from JSON');
-      } catch (e) {
-        console.error('[YouTube] Failed to parse cookies JSON:', e);
-      }
-    } else if (fs.existsSync(cookiesTxtPath)) {
-      try {
-        const content = fs.readFileSync(cookiesTxtPath, 'utf8');
-        const cookies: any[] = [];
-        content.split(/\r?\n/).forEach(line => {
-          line = line.trim();
-          if (!line || line.startsWith('#')) return;
-          const parts = line.split(/\t/);
-          if (parts.length >= 7) {
-            cookies.push({
-              domain: parts[0],
-              path: parts[2],
-              secure: parts[3] === 'TRUE',
-              expires: parseInt(parts[4]),
-              name: parts[5],
-              value: parts[6]
-            });
-          }
-        });
+        const cookies = parseNetscapeCookies(envCookies);
         if (cookies.length > 0) {
           agent = ytdl.createAgent(cookies);
-          console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from txt`);
-        } else {
-          console.warn('[YouTube] Found cookies.txt but it appears to be empty or malformed');
+          console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from Environment Variable`);
         }
       } catch (e) {
-        console.error('[YouTube] Failed to parse cookies txt:', e);
+        console.error('[YouTube] Failed to parse cookies from Environment Variable:', e);
       }
-    } else {
-      console.log('[YouTube] No cookie files (json/txt) found in project root. Proceeding without auth.');
+    }
+
+    // 2. Fallback to files if environment variable is not set
+    if (!agent) {
+      const cookiesJsonPath = path.resolve(projectRoot, 'youtube-cookies.json');
+      const cookiesTxtPath = path.resolve(projectRoot, 'youtube-cookies.txt');
+
+      if (fs.existsSync(cookiesJsonPath)) {
+        try {
+          const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, 'utf8'));
+          agent = ytdl.createAgent(cookies);
+          console.log('[YouTube] Successfully loaded cookies from JSON file');
+        } catch (e) {
+          console.error('[YouTube] Failed to parse cookies JSON:', e);
+        }
+      } else if (fs.existsSync(cookiesTxtPath)) {
+        try {
+          const content = fs.readFileSync(cookiesTxtPath, 'utf8');
+          const cookies = parseNetscapeCookies(content);
+          if (cookies.length > 0) {
+            agent = ytdl.createAgent(cookies);
+            console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from txt file`);
+          }
+        } catch (e) {
+          console.error('[YouTube] Failed to parse cookies txt:', e);
+        }
+      }
     }
 
     if (!agent) {
+      console.log('[YouTube] No cookies found (ENV or File). Proceeding without authentication.');
       agent = ytdl.createAgent();
     }
 
@@ -109,7 +127,7 @@ export default defineEventHandler(async (event) => {
 
     let message = error.message;
     if (message.includes('confirm you are not a bot') || message.includes('로그인하여 봇이 아님을 확인하세요')) {
-      message = 'YouTube is blocking the request. Please provide cookies in youtube-cookies.json or try again later.';
+      message = `YouTube is blocking the request (Bot Detection). Please ensure 'youtube-cookies.txt' is in the project root (${process.cwd()}) and contains valid cookies.`;
     }
 
     throw createError({
