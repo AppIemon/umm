@@ -162,43 +162,53 @@ async function startMatchmaking(category: string) {
   step.value = 'MATCHMAKING';
   matchStatus.value = 'SCANNING FOR COMPETITORS...';
   
-  // REAL: Fetch maps and pick one
   try {
-    const maps: any = await $fetch('/api/maps', { 
-      query: { 
-        shared: 'true'
-      } 
+    const response: any = await $fetch('/api/matchmaking/find', {
+      method: 'POST',
+      body: {
+        category: category,
+        rating: user.value?.rating || 1000
+      }
     });
 
-    if (!maps || !maps.length) {
-      matchStatus.value = 'NO MAPS AVAILABLE FOR THIS CATEGORY. RETRYING...';
-      setTimeout(() => step.value = 'MODESELECT', 2000);
-      return;
+    if (!response || !response.map) {
+      throw new Error("No opponent found.");
     }
 
-    selectedMap.value = maps[Math.floor(Math.random() * maps.length)];
-    opponentName.value = selectedMap.value.bestPlayer || 'ELITE_GHOST';
-
+    selectedMap.value = response.map;
+    opponentName.value = response.opponent?.username || 'GHOST';
+    
     // Auto-load audio if available
-    if (selectedMap.value.audioUrl) {
+    matchStatus.value = 'DOWNLOADING BATTLE TRACK...';
+    
+    if (selectedMap.value.audioData || selectedMap.value.audioUrl) {
        try {
-         matchStatus.value = 'DOWNLOADING BATTLE TRACK...';
-         const res = await fetch(selectedMap.value.audioUrl);
-         const arrayBuffer = await res.arrayBuffer();
-         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-         audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+         let arrayBuffer: ArrayBuffer | null = null;
+
+         if (selectedMap.value.audioData) {
+            const res = await fetch(selectedMap.value.audioData);
+            arrayBuffer = await res.arrayBuffer();
+         } else if (selectedMap.value.audioUrl) {
+            const res = await fetch(selectedMap.value.audioUrl);
+            arrayBuffer = await res.arrayBuffer();
+         }
+
+         if (arrayBuffer) {
+            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+         }
        } catch (e) {
          console.warn("Could not auto-load audio, using silent buffer", e);
        }
     }
-
   } catch (e: any) {
     console.error("Matchmaking failed", e);
-    matchStatus.value = `CONNECTION ERROR: ${e.message || 'Unknown Error'}`;
-    // Stay on screen longer to read error
+    matchStatus.value = `MATCHMAKING ERROR: ${e.statusMessage || e.message || 'Server Error'}`;
     setTimeout(() => step.value = 'MODESELECT', 4000);
     return;
   }
+
+
 
   matchStatus.value = 'OPPONENT FOUND: SYNCHRONIZING...';
   await new Promise(r => setTimeout(r, 1000));

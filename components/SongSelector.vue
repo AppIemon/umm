@@ -4,6 +4,7 @@
     <div class="tabs">
       <button :class="{ active: mode === 'upload' }" @click="mode = 'upload'">UPLOAD</button>
       <button :class="{ active: mode === 'storage' }" @click="mode = 'storage'">STORAGE</button>
+      <button :class="{ active: mode === 'youtube' }" @click="mode = 'youtube'">YOUTUBE</button>
     </div>
 
     <!-- Upload Mode -->
@@ -25,8 +26,28 @@
       </div>
     </div>
 
+    <!-- YouTube Mode -->
+    <div v-else-if="mode === 'youtube'" class="tab-content">
+      <div class="youtube-input-container">
+        <input 
+          v-model="youtubeUrl" 
+          type="text" 
+          placeholder="Paste YouTube URL here..." 
+          @keyup.enter="fetchYoutube"
+          :disabled="isYoutubeLoading"
+        />
+        <button class="fetch-btn" @click="fetchYoutube" :disabled="!youtubeUrl || isYoutubeLoading">
+          {{ isYoutubeLoading ? 'LOADING...' : 'LOAD' }}
+        </button>
+      </div>
+      <p v-if="youtubeError" class="error-msg">{{ youtubeError }}</p>
+      <div v-if="selectedFile && mode === 'youtube'" class="youtube-preview">
+        <p class="highlight">Loaded: {{ selectedFile.name }}</p>
+      </div>
+    </div>
+
     <!-- Storage Mode -->
-    <div v-else class="tab-content storage-list">
+    <div v-else-if="mode === 'storage'" class="tab-content storage-list">
       <div v-if="songs.length === 0" class="empty">No songs in storage</div>
       <div 
         v-for="song in songs" 
@@ -39,7 +60,7 @@
       </div>
     </div>
 
-    <button class="confirm-btn" :disabled="!currentSelection" @click="confirm">
+    <button class="confirm-btn" :disabled="!currentSelection || isYoutubeLoading" @click="confirm">
       SELECT
     </button>
   </div>
@@ -49,7 +70,7 @@
 import { ref, watch, onMounted } from 'vue';
 
 const emit = defineEmits(['select']);
-const mode = ref<'upload' | 'storage'>('upload');
+const mode = ref<'upload' | 'storage' | 'youtube'>('upload');
 const { saveSong, getSongs } = useSongStorage();
 
 const selectedFile = ref<File | null>(null);
@@ -59,6 +80,54 @@ const saveToStorage = ref(false);
 const songs = ref<StoredSong[]>([]);
 const selectedSongId = ref<string | null>(null);
 const currentSelection = ref<File | null>(null);
+
+// YouTube refs
+const youtubeUrl = ref('');
+const isYoutubeLoading = ref(false);
+const youtubeError = ref('');
+
+async function fetchYoutube() {
+  if (!youtubeUrl.value) return;
+  
+  isYoutubeLoading.value = true;
+  youtubeError.value = '';
+  selectedFile.value = null;
+  currentSelection.value = null;
+  
+  try {
+    const response = await fetch('/api/youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: youtubeUrl.value })
+    });
+    
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to download');
+    }
+    
+    // Get filename from header if possible, or default
+    const contentDisposition = response.headers.get('content-disposition');
+    let filename = 'youtube_audio.mp3';
+    if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?(.+)"?/);
+        if (match && match[1]) filename = match[1];
+    } else {
+        // Construct basic name from ID or something? 
+        // We can just use "YouTube Audio"
+    }
+
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: blob.type || 'audio/mpeg' });
+    
+    handleFile(file);
+  } catch (e: any) {
+    console.error(e);
+    youtubeError.value = e.message || "Failed to load YouTube video";
+  } finally {
+    isYoutubeLoading.value = false;
+  }
+}
 
 onMounted(async () => {
   songs.value = await getSongs();
@@ -193,5 +262,49 @@ async function confirm() {
   margin-top: 0.5rem;
   font-size: 0.9rem;
   color: #aaa;
+}
+
+.youtube-input-container {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.youtube-input-container input {
+  flex: 1;
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #444;
+  color: white;
+  border-radius: 4px;
+}
+
+.youtube-input-container .fetch-btn {
+  padding: 0 1.5rem;
+  background: #ff0000; /* YouTube red */
+  color: white;
+  border: none;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.youtube-input-container .fetch-btn:disabled {
+  background: #550000;
+  cursor: not-allowed;
+}
+
+.error-msg {
+  color: #ff4444;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.youtube-preview {
+  padding: 1rem;
+  background: rgba(0, 255, 0, 0.1);
+  border: 1px solid #00ff00;
+  border-radius: 4px;
+  text-align: center;
 }
 </style>

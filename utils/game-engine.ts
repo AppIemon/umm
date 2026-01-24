@@ -1103,8 +1103,12 @@ export class GameEngine {
         const o = sortedObs[i]!;
         if (o.x + o.width < tx - 50) continue;
         if (o.x > tx + 100) break;
+
+        // 움직이는 장애물에 대해서는 추가적인 안전 마진을 적용 (타이밍 오차 보정)
+        const moveMargin = o.movement ? 5.0 : 0;
+
         // 장애물 충돌 체크에도 마진(sz + margin) 적용
-        if (this.checkObstacleCollision(o, tx, ty, sz + margin, tm)) return true;
+        if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm)) return true;
       }
       return false;
     };
@@ -1144,8 +1148,8 @@ export class GameEngine {
         const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
         sy += amp * vy * dt;
 
-        // 생존 확인 시에는 1.5px 정도의 마진을 둠 (too much margin can make it fail to find path)
-        if (checkColl(sx, sy, sz, sTime, 1.5)) return false;
+        // 생존 확인 시에는 2.0px 정도의 마진을 둠 (too much margin can make it fail to find path)
+        if (checkColl(sx, sy, sz, sTime, 2.0)) return false;
       }
       return true;
     };
@@ -1195,8 +1199,8 @@ export class GameEngine {
       const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
-      const dH = checkColl(nX, nYH, sz, nT, 2.0); // 2px safety margin for immediate action
-      const dR = checkColl(nX, nYR, sz, nT, 2.0);
+      const dH = checkColl(nX, nYH, sz, nT, 2.5); // 2.5px safety margin for immediate action
+      const dR = checkColl(nX, nYR, sz, nT, 2.5);
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
@@ -1262,9 +1266,9 @@ export class GameEngine {
 
           // 장애물이 현재 Y 근처에 있는지 확인
           let currentObsY = o.y;
-          if (o.movement && o.movement.type === 'updown' && o.initialY !== undefined) {
-            const { range, speed, phase } = o.movement;
-            currentObsY = o.initialY + Math.sin(nT * speed + phase) * range;
+          if (o.movement) {
+            const state = this.getObstacleStateAt(o, nT);
+            currentObsY = state.y;
           }
 
           const obsTop = currentObsY;
@@ -1665,14 +1669,9 @@ export class GameEngine {
 
     // 시뮬레이션 중이거나 움직임이 있는 경우 현재 시간 기준으로 위치 및 각도 계산
     if (simTime !== undefined && obs.movement) {
-      if (obs.movement.type === 'updown' && obs.initialY !== undefined) {
-        const { range, speed, phase } = obs.movement;
-        obsY = obs.initialY + Math.sin(simTime * speed + phase) * range;
-      } else if (obs.movement.type === 'rotate') {
-        const { speed, phase } = obs.movement;
-        const rad = simTime * speed + phase;
-        obsAngle = (rad * 180 / Math.PI) % 360;
-      }
+      const state = this.getObstacleStateAt(obs, simTime);
+      obsY = state.y;
+      obsAngle = state.angle;
     }
 
     const isRotated = obsAngle !== 0;
@@ -1920,22 +1919,30 @@ export class GameEngine {
     }
   }
 
+  public getObstacleStateAt(obs: Obstacle, time: number): { y: number, angle: number } {
+    let y = obs.y;
+    let angle = obs.angle || 0;
+
+    if (obs.movement) {
+      if (obs.movement.type === 'updown' && obs.initialY !== undefined) {
+        const { range, speed, phase } = obs.movement;
+        y = obs.initialY + Math.sin(time * speed + phase) * range;
+      } else if (obs.movement.type === 'rotate') {
+        const { speed, phase } = obs.movement;
+        const rad = time * speed + phase;
+        angle = (rad * 180 / Math.PI) % 360;
+      }
+    }
+    return { y, angle };
+  }
+
   private updateMovingObstacles(time: number) {
     for (const obs of this.obstacles) {
       if (obs.movement) {
-        if (obs.movement.type === 'updown' && obs.initialY !== undefined) {
-          const { range, speed, phase } = obs.movement;
-          obs.y = obs.initialY + Math.sin(time * speed + phase) * range;
-        } else if (obs.movement.type === 'rotate') {
-          const { speed, phase } = obs.movement;
-          // 1 radian/sec = 180/PI deg/sec approx 57.
-          // Let's treat speed as Multiplier for standard rotation speed (e.g. 1.0 = 1 full rotation per 2 sec?)
-          // Or just treat speed as radians per second?
-          // Existing 'updown' uses sin(time * speed), so speed is frequency in rad/s.
-          // Let's use same time scale. width/height doesn't matter for angle calculation itself.
-          // angle is in degrees.
-          const rad = time * speed + phase;
-          obs.angle = (rad * 180 / Math.PI) % 360;
+        const state = this.getObstacleStateAt(obs, time);
+        obs.y = state.y;
+        if (obs.movement.type === 'rotate') {
+          obs.angle = state.angle;
         }
       }
     }

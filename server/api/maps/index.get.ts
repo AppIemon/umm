@@ -13,7 +13,10 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const maps = await GameMap.find(filter).sort({ createdAt: -1 }).limit(50)
+    const maps = await GameMap.find(filter)
+      .select('-audioData -engineObstacles -enginePortals -autoplayLog -sections')
+      .sort({ createdAt: -1 })
+      .limit(50)
     return maps
   } catch (e: any) {
     console.error("Map Fetch Error:", e);

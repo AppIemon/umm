@@ -202,6 +202,9 @@ const startGame = () => {
   score.value = 0;
   isGravityInverted.value = false;
   
+  // UI 즉시 리셋 (재시작 시 잔상 제거)
+  emit('progress-update', { progress: 0, ghostProgress: 0 });
+  
   draw();
   startCountdown();
   attempts.value++;
