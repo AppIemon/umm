@@ -546,15 +546,41 @@ const saveMap = async () => {
       mapData.value.creatorName = user.value?.username || 'Guest';
     }
 
-    const res = await $fetch(url, {
-      method,
-      body: mapData.value
-    });
+    // 4.5MB 청크 크기 (Vercel 제한 고려)
+    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB (안전 여유)
+    const audioData = mapData.value.audioData;
     
-    if (isNew) mapData.value._id = (res as any)._id;
-    alert("Map saved successfully!");
-  } catch (e) {
-    alert("Failed to save map.");
+    // 오디오 데이터가 크면 청크로 분할
+    if (audioData && audioData.length > CHUNK_SIZE) {
+      const chunks: string[] = [];
+      for (let i = 0; i < audioData.length; i += CHUNK_SIZE) {
+        chunks.push(audioData.substring(i, i + CHUNK_SIZE));
+      }
+      
+      // 먼저 맵 데이터를 오디오 없이 저장
+      const mapWithoutAudio = { ...mapData.value, audioData: null, audioChunks: [] };
+      const res = await $fetch(url, { method, body: mapWithoutAudio }) as any;
+      const mapId = res._id;
+      if (isNew) mapData.value._id = mapId;
+      
+      // 각 청크를 순차적으로 업로드
+      for (let i = 0; i < chunks.length; i++) {
+        await $fetch(`/api/maps/${mapId}/audio-chunk`, {
+          method: 'POST',
+          body: { chunkIndex: i, chunkData: chunks[i], totalChunks: chunks.length }
+        });
+      }
+      
+      alert(`Map saved! (Audio: ${chunks.length} chunks)`);
+    } else {
+      // 작은 파일은 기존 방식으로 저장
+      const res = await $fetch(url, { method, body: mapData.value });
+      if (isNew) mapData.value._id = (res as any)._id;
+      alert("Map saved successfully!");
+    }
+  } catch (e: any) {
+    console.error('Save error:', e);
+    alert(`Failed to save map: ${e.message || 'Unknown error'}`);
   }
 };
 

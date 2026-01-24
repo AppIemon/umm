@@ -22,7 +22,8 @@ export interface IMap extends Document {
   bestScore: number
   bestPlayer: string | null
   audioUrl: string | null // 노래 파일 URL
-  audioData: string | null // 노래 파일 데이터 (Base64)
+  audioData: string | null // 노래 파일 데이터 (Base64) - 4.5MB 이하
+  audioChunks: string[]    // 4.5MB씩 분할된 오디오 데이터 청크
   bpm: number
   measureLength: number
   ratingSum: number      // 유저들이 투표한 레이팅 합계
@@ -54,6 +55,10 @@ const mapSchema = new mongoose.Schema<IMap>({
   audioData: {
     type: String,
     default: null
+  },
+  audioChunks: {
+    type: [String],
+    default: []
   },
   difficulty: {
     type: Number,

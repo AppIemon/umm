@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   const {
     _id, title, difficulty, seed, beatTimes, sections,
     engineObstacles, enginePortals, autoplayLog,
-    duration, creatorName, audioUrl, audioData,
+    duration, creatorName, audioUrl, audioData, audioChunks,
     isShared, bpm, measureLength
   } = body
 
@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
     enginePortals: enginePortals || [],
     autoplayLog: autoplayLog || [],
     duration: duration || 60,
+    audioChunks: audioChunks || [],
     isShared: isShared !== undefined ? isShared : false,
     bpm: bpm || 120,
     measureLength: measureLength || 2.0
