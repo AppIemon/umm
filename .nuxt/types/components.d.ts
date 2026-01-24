@@ -15,6 +15,7 @@ type LazyComponent<T> = DefineComponent<HydrationStrategies, {}, {}, {}, {}, {},
 
 interface _GlobalComponents {
   'GameCanvas': typeof import("../../components/GameCanvas.vue").default
+  'GameGuide': typeof import("../../components/GameGuide.vue").default
   'NavBar': typeof import("../../components/NavBar.vue").default
   'SongSelector': typeof import("../../components/SongSelector.vue").default
   'NuxtWelcome': typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue").default
@@ -41,6 +42,7 @@ interface _GlobalComponents {
   'Body': typeof import("../../node_modules/nuxt/dist/head/runtime/components").Body
   'NuxtIsland': typeof import("../../node_modules/nuxt/dist/app/components/nuxt-island").default
   'LazyGameCanvas': LazyComponent<typeof import("../../components/GameCanvas.vue").default>
+  'LazyGameGuide': LazyComponent<typeof import("../../components/GameGuide.vue").default>
   'LazyNavBar': LazyComponent<typeof import("../../components/NavBar.vue").default>
   'LazySongSelector': LazyComponent<typeof import("../../components/SongSelector.vue").default>
   'LazyNuxtWelcome': LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue").default>

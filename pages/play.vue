@@ -57,6 +57,10 @@
           </div>
         </div>
       </div>
+        </div>
+      </div>
+      
+      <button class="help-btn" @click="showGuide = true">?</button>
     </div>
 
     <!-- Step 2: Game -->
@@ -72,6 +76,7 @@
       @map-ready="handleMapReady"
       @record-update="handleRecordUpdate"
     />
+    <GameGuide v-model="showGuide" @close="handleGuideClose" />
   </div>
 </template>
 
@@ -81,6 +86,7 @@ import { useAudioAnalyzer, type SongSection } from '@/composables/useAudioAnalyz
 import { useAuth } from '@/composables/useAuth';
 import { useRoute } from 'vue-router';
 import { GameEngine } from '@/utils/game-engine';
+import GameGuide from '@/components/GameGuide.vue'; // Guide Component
 
 // 플레이 중에는 navbar 숨기기
 definePageMeta({
@@ -89,6 +95,7 @@ definePageMeta({
 
 const step = ref<'upload' | 'play'>('upload');
 const selectedSong = ref<File | null>(null);
+const showGuide = ref(false); // Guide visibility
 const { analyzeAudio } = useAudioAnalyzer();
 
 // Game Data
@@ -453,6 +460,12 @@ const handleMapOnlyStart = async (targetMap: any) => {
 };
 
 const initFromQuery = async () => {
+  // Check if guide should be shown (first time user)
+  const hasSeenGuide = localStorage.getItem('umm_guide_seen');
+  if (!hasSeenGuide) {
+    showGuide.value = true;
+  }
+
   // 1. Check for map data passed from Maps tab (sessionStorage)
   const sessionMap = sessionStorage.getItem('umm_load_map');
   if (sessionMap) {
@@ -791,6 +804,31 @@ watch(() => route.query.mapId, (newMapId) => {
   border-radius: 4px;
   margin-bottom: 0.5rem;
   border: 1px solid #333;
+}
+
+.help-btn {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-btn:hover {
+  border-color: #00ffff;
+  color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+  transform: rotate(15deg);
 }
 
 .fail-details {
