@@ -155,15 +155,17 @@ const isRunning = ref(false);
 
 const speedColor = computed(() => {
   const mult = engine.value.speedMultiplier;
-  if (mult < 0.8) return '#ff8800';
-  if (mult < 1.1) return '#4488ff';
-  if (mult < 1.5) return '#44ff44';
-  if (mult < 1.8) return '#ff44ff';
-  return '#ff4444';
+  if (mult < 0.6) return '#aa5500'; // 0.25x (Speed 0.5)
+  if (mult < 0.8) return '#ff8800'; // 0.5x (Speed 0.7)
+  if (mult < 1.1) return '#4488ff'; // 1x
+  if (mult < 1.5) return '#44ff44'; // 2x
+  if (mult < 1.8) return '#ff44ff'; // 3x
+  return '#ff4444'; // 4x
 });
 
 const speedLabel = computed(() => {
   const mult = engine.value.speedMultiplier;
+  if (mult < 0.6) return '0.25x';
   if (mult < 0.8) return '0.5x';
   if (mult < 1.1) return '1x';
   if (mult < 1.5) return '2x';

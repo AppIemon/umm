@@ -4,7 +4,7 @@
  */
 
 export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb';
-export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green';
+export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green';
 
 export interface ObstacleMovement {
   type: 'updown' | 'rotate';
@@ -988,6 +988,7 @@ export class GameEngine {
   }
 
   private getSpeedMultiplierFromType(type: PortalType): number {
+    if (type === 'speed_0.25') return Math.sqrt(0.25);
     if (type === 'speed_0.5') return Math.sqrt(0.5);
     if (type === 'speed_1') return 1.0;
     if (type === 'speed_2') return Math.sqrt(2);
@@ -1179,7 +1180,7 @@ export class GameEngine {
       return `${xi}_${yi}_${s.g ? 1 : 0}_${s.sm}_${s.m ? 1 : 0}`;
     };
 
-    const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 3): boolean => {
+    const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 1.0): boolean => {
       // 바닥/천장 충돌 체크에도 마진 적용
       if (ty < this.minY + sz + margin || ty > this.maxY - sz - margin) return true;
       for (let i = 0; i < sortedObs.length; i++) {
@@ -1187,8 +1188,8 @@ export class GameEngine {
         if (o.x + o.width < tx - 50) continue;
         if (o.x > tx + 100) break;
 
-        // 움직이는 장애물에 대해서는 추가적인 안전 마진을 적용 (타이밍 오차 보정)
-        const moveMargin = o.movement ? 5.0 : 0;
+        // 움직이는 장애물에 대해서는 추가적인 안전 마진을 최소화 (타이밍 오차 보정용 1.2px)
+        const moveMargin = o.movement ? 1.2 : 0;
 
         // 장애물 충돌 체크에도 마진(sz + margin) 적용
         if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm)) return true;
@@ -1231,8 +1232,8 @@ export class GameEngine {
         const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
         sy += amp * vy * dt;
 
-        // 생존 확인 시에는 2.0px 정도의 마진을 둠 (too much margin can make it fail to find path)
-        if (checkColl(sx, sy, sz, sTime, 2.0)) return false;
+        // 생존 확인 시에는 매우 작은 마진(0.5px)만 둠
+        if (checkColl(sx, sy, sz, sTime, 0.5)) return false;
       }
       return true;
     };
@@ -1282,8 +1283,8 @@ export class GameEngine {
       const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
-      const dH = checkColl(nX, nYH, sz, nT, 2.5); // 2.5px safety margin for immediate action
-      const dR = checkColl(nX, nYR, sz, nT, 2.5);
+      const dH = checkColl(nX, nYH, sz, nT, 0.8); // 0.8px safety margin for immediate action
+      const dR = checkColl(nX, nYR, sz, nT, 0.8);
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
@@ -1608,6 +1609,7 @@ export class GameEngine {
     switch (type) {
       case 'gravity_yellow': this.isGravityInverted = true; break;
       case 'gravity_blue': this.isGravityInverted = false; break;
+      case 'speed_0.25':
       case 'speed_0.5':
       case 'speed_1':
       case 'speed_2':
@@ -1648,6 +1650,7 @@ export class GameEngine {
     switch (type) {
       case 'gravity_yellow': return '#ffff00';
       case 'gravity_blue': return '#4488ff';
+      case 'speed_0.25': return '#aa5500'; // Dark orange/brown
       case 'speed_0.5': return '#ff8800';
       case 'speed_1': return '#4488ff';
       case 'speed_2': return '#44ff44';
@@ -1663,6 +1666,7 @@ export class GameEngine {
     switch (type) {
       case 'gravity_yellow': return '⟲';
       case 'gravity_blue': return '⟳';
+      case 'speed_0.25': return '<<';
       case 'speed_0.5': return '<';
       case 'speed_1': return '>';
       case 'speed_2': return '>>';

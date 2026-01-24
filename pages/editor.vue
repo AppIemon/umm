@@ -76,60 +76,68 @@
       <aside class="sidebar right-sidebar glass-panel">
         <h3>PROPERTIES</h3>
         
-        <div v-if="selectedObject" class="properties-list">
+        <div v-if="selectedObjects.length === 1" class="properties-list">
           <div class="prop-group">
             <label>TYPE</label>
-            <span class="prop-val-static">{{ selectedObject.type.toUpperCase() }}</span>
+            <span class="prop-val-static">{{ selectedObjects[0].type.toUpperCase() }}</span>
           </div>
           
           <div class="prop-group">
             <label>POSITION X / Y</label>
             <div class="input-pair">
-              <input type="number" v-model.number="selectedObject.x" />
-              <input type="number" v-model.number="selectedObject.y" />
+              <input type="number" v-model.number="selectedObjects[0].x" />
+              <input type="number" v-model.number="selectedObjects[0].y" />
             </div>
           </div>
           
           <div class="prop-group">
             <label>SIZE W / H</label>
             <div class="input-pair">
-              <input type="number" v-model.number="selectedObject.width" />
-              <input type="number" v-model.number="selectedObject.height" />
+              <input type="number" v-model.number="selectedObjects[0].width" />
+              <input type="number" v-model.number="selectedObjects[0].height" />
             </div>
           </div>
           
-          <div class="prop-group" v-if="'angle' in selectedObject">
+          <div class="prop-group" v-if="'angle' in selectedObjects[0]">
             <label>ROTATION (DEG)</label>
             <div class="rotation-controls">
               <button @click="rotateSelected(-45)" class="rot-btn">↺ -45°</button>
               <button @click="rotateSelected(45)" class="rot-btn">45° ↻</button>
             </div>
-            <input type="number" v-model.number="selectedObject.angle" />
-            <input type="range" min="0" max="360" v-model.number="selectedObject.angle" />
+            <input type="number" v-model.number="selectedObjects[0].angle" />
+            <input type="range" min="0" max="360" v-model.number="selectedObjects[0].angle" />
           </div>
 
-          <div class="prop-group" v-if="'movement' in selectedObject">
+          <div class="prop-group" v-if="'movement' in selectedObjects[0]">
              <label>MOVEMENT</label>
-             <select v-model="selectedObject.movement.type" v-if="selectedObject.movement">
+             <select v-model="selectedObjects[0].movement.type" v-if="selectedObjects[0].movement">
                <option value="none">NONE</option>
                <option value="updown">UP-DOWN BOUNCE</option>
                <option value="rotate">CONTINUOUS ROTATE</option>
              </select>
-             <div v-if="selectedObject.movement && selectedObject.movement.type !== 'none'" class="movement-details">
+             <div v-if="selectedObjects[0].movement && selectedObjects[0].movement.type !== 'none'" class="movement-details">
                 <label>SPEED</label>
-                <input type="number" step="0.1" v-model.number="selectedObject.movement.speed" />
+                <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.speed" />
                 <label>RANGE</label>
-                <input type="number" v-model.number="selectedObject.movement.range" />
+                <input type="number" v-model.number="selectedObjects[0].movement.range" />
                 <label>PHASE OFFSET</label>
-                <input type="number" step="0.1" v-model.number="selectedObject.movement.phase" />
+                <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.phase" />
              </div>
           </div>
 
           <button @click="deleteSelected" class="delete-btn">DELETE OBJECT</button>
         </div>
         
+        <div v-else-if="selectedObjects.length > 1" class="properties-list">
+          <div class="prop-group">
+            <label>MULTIPLE SELECTION</label>
+            <span class="prop-val-static">{{ selectedObjects.length }} OBJECTS</span>
+          </div>
+          <button @click="deleteSelected" class="delete-btn">DELETE ALL</button>
+        </div>
+
         <div v-else class="empty-selection">
-          SELECT AN OBJECT TO MODIFY
+          SELECT OBJECTS TO MODIFY
         </div>
 
         <div class="global-settings prop-group">
@@ -188,14 +196,14 @@ const mapData = ref<any>({
 const totalLength = ref(60 * 350 + 500); // Duration * BaseSpeed
 const cameraX = ref(0);
 const zoom = ref(1.0);
-const selectedObject = ref<any>(null);
+const selectedObjects = ref<any[]>([]);
 const selectedPaletteType = ref<string>('spike');
 const workspaceRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const audioInputRef = ref<HTMLInputElement | null>(null);
 
 const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb'];
-const portalTypes: PortalType[] = ['gravity_yellow', 'gravity_blue', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'];
+const portalTypes: PortalType[] = ['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'];
 
 const getSymbol = (type: string) => engine.getPortalSymbol(type as any) || '■';
 const getPortalSymbol = (type: string) => engine.getPortalSymbol(type as any);
@@ -203,8 +211,11 @@ const getPortalSymbol = (type: string) => engine.getPortalSymbol(type as any);
 // Undo/Redo & Clipboard State
 const history = ref<string[]>([]);
 const historyIdx = ref(-1);
-const clipboard = ref<any>(null);
+const clipboard = ref<any[]>([]);
 const isShiftPressed = ref(false);
+
+const isSelectionBoxActive = ref(false);
+const selectionBox = ref({ x1: 0, y1: 0, x2: 0, y2: 0 });
 
 const saveState = () => {
   const state = JSON.stringify(mapData.value);
@@ -235,10 +246,9 @@ let isDragging = false;
 let isDraggingObject = false;
 let isResizing = false;
 let resizeHandle = '';
-let dragOffsetX = 0;
-let dragOffsetY = 0;
 let startDragX = 0;
 let startDragCamX = 0;
+let dragInitialPos = new Map<any, { x: number, y: number }>();
 
 const getResizeHandle = (x: number, y: number, obj: any) => {
   const threshold = 10 / zoom.value;
@@ -266,9 +276,9 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
   const x = ((e.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
   const y = ((e.clientY - rect.top) * scaleY) / zoom.value;
   
-  // 1. Check resize handles on selected object
-  if (selectedObject.value) {
-    const handle = getResizeHandle(x, y, selectedObject.value);
+  // 1. Check resize handles on selected object (only if one is selected)
+  if (selectedObjects.value.length === 1) {
+    const handle = getResizeHandle(x, y, selectedObjects.value[0]);
     if (handle) {
       isResizing = true;
       resizeHandle = handle;
@@ -279,14 +289,36 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
   // 2. Check for object selection and move drag
   const found = findObjectAt(x, y);
   if (found) {
-    selectedObject.value = found;
-    isDraggingObject = true;
-    dragOffsetX = x - found.x;
-    dragOffsetY = y - found.y;
+    if (isShiftPressed.value) {
+      const idx = selectedObjects.value.indexOf(found);
+      if (idx === -1) selectedObjects.value.push(found);
+      else selectedObjects.value.splice(idx, 1);
+    } else {
+      if (!selectedObjects.value.includes(found)) {
+        selectedObjects.value = [found];
+      }
+      // If already includes, we keep it for multi-drag
+    }
+    
+    if (selectedObjects.value.includes(found)) {
+      isDraggingObject = true;
+      dragInitialPos.clear();
+      selectedObjects.value.forEach(obj => {
+        dragInitialPos.set(obj, { x: obj.x - x, y: obj.y - y });
+      });
+    }
   } else {
-    // 3. Place new
-    addObject(x, y);
-    saveState();
+    // 3. Clicked empty space
+    if (!isShiftPressed.value) {
+      selectedObjects.value = [];
+      // Start selection box
+      isSelectionBoxActive.value = true;
+      selectionBox.value = { x1: x, y1: y, x2: x, y2: y };
+    } else {
+      // Shift-click empty space: Place new
+      addObject(x, y);
+      saveState();
+    }
   }
 };
 
@@ -298,8 +330,11 @@ const onWorkspaceMouseMove = (e: MouseEvent) => {
   let x = ((e.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
   let y = ((e.clientY - rect.top) * scaleY) / zoom.value;
 
+  const rawX = x;
+  const rawY = y;
+
   // Snapping
-  if (isShiftPressed.value) {
+  if (isShiftPressed.value && !isSelectionBoxActive.value) {
     x = Math.round(x / 25) * 25;
     y = Math.round(y / 25) * 25;
   }
@@ -307,8 +342,11 @@ const onWorkspaceMouseMove = (e: MouseEvent) => {
   if (isDragging) {
     const dx = e.clientX - startDragX;
     cameraX.value = Math.max(0, startDragCamX - dx / zoom.value);
-  } else if (isResizing && selectedObject.value) {
-    const obj = selectedObject.value;
+  } else if (isSelectionBoxActive.value) {
+    selectionBox.value.x2 = rawX;
+    selectionBox.value.y2 = rawY;
+  } else if (isResizing && selectedObjects.value.length === 1) {
+    const obj = selectedObjects.value[0];
     if (resizeHandle === 'br') {
       obj.width = Math.max(10, x - obj.x);
       obj.height = Math.max(10, y - obj.y);
@@ -330,19 +368,47 @@ const onWorkspaceMouseMove = (e: MouseEvent) => {
       obj.width = right - obj.x;
       obj.height = bottom - obj.y;
     }
-  } else if (isDraggingObject && selectedObject.value) {
-    selectedObject.value.x = x - dragOffsetX;
-    selectedObject.value.y = y - dragOffsetY;
-    
-    // Sync initialY for movement
-    if ('initialY' in selectedObject.value) {
-       selectedObject.value.initialY = selectedObject.value.y;
-    }
+  } else if (isDraggingObject) {
+    selectedObjects.value.forEach(obj => {
+      const offset = dragInitialPos.get(obj);
+      if (offset) {
+        let nx = rawX + offset.x;
+        let ny = rawY + offset.y;
+        if (isShiftPressed.value) {
+          nx = Math.round(nx / 25) * 25;
+          ny = Math.round(ny / 25) * 25;
+        }
+        obj.x = nx;
+        obj.y = ny;
+        if ('initialY' in obj) obj.initialY = ny;
+      }
+    });
   }
 };
 
 const onWorkspaceMouseUp = () => {
-  if (isDraggingObject || isResizing) {
+  if (isSelectionBoxActive.value) {
+    // Select objects within box
+    const xMin = Math.min(selectionBox.value.x1, selectionBox.value.x2);
+    const xMax = Math.max(selectionBox.value.x1, selectionBox.value.x2);
+    const yMin = Math.min(selectionBox.value.y1, selectionBox.value.y2);
+    const yMax = Math.max(selectionBox.value.y1, selectionBox.value.y2);
+
+    const match = (obj: any) => {
+      const oxMin = obj.x;
+      const oxMax = obj.x + obj.width;
+      const oyMin = obj.y;
+      const oyMax = obj.y + obj.height;
+      return !(oxMax < xMin || oxMin > xMax || oyMax < yMin || oyMin > yMax);
+    };
+
+    const inBox = [
+      ...mapData.value.engineObstacles.filter(match),
+      ...mapData.value.enginePortals.filter(match)
+    ];
+    selectedObjects.value = inBox;
+    isSelectionBoxActive.value = false;
+  } else if (isDraggingObject || isResizing) {
     saveState();
   }
   isDragging = false;
@@ -384,7 +450,7 @@ const addObject = (x: number, y: number) => {
       movement: { type: 'none' as any, range: 0, speed: 0, phase: 0 }
     };
     mapData.value.engineObstacles.push(newObs);
-    selectedObject.value = newObs;
+    selectedObjects.value = [newObs];
   } else {
     const newPortal: Portal = {
       x, y: y - 30, width: 60, height: 80,
@@ -392,15 +458,16 @@ const addObject = (x: number, y: number) => {
       activated: false
     };
     mapData.value.enginePortals.push(newPortal);
-    selectedObject.value = newPortal;
+    selectedObjects.value = [newPortal];
   }
 };
 
 const deleteSelected = () => {
-  if (!selectedObject.value) return;
-  mapData.value.engineObstacles = mapData.value.engineObstacles.filter((o: any) => o !== selectedObject.value);
-  mapData.value.enginePortals = mapData.value.enginePortals.filter((p: any) => p !== selectedObject.value);
-  selectedObject.value = null;
+  if (selectedObjects.value.length === 0) return;
+  mapData.value.engineObstacles = mapData.value.engineObstacles.filter((o: any) => !selectedObjects.value.includes(o));
+  mapData.value.enginePortals = mapData.value.enginePortals.filter((p: any) => !selectedObjects.value.includes(p));
+  selectedObjects.value = [];
+  saveState();
 };
 
 const updateTotalLength = () => {
@@ -542,7 +609,7 @@ const draw = () => {
     ctx.fillText(engine.getPortalSymbol(p.type), p.x + p.width/2, p.y + p.height/2 + 8);
     ctx.restore();
 
-    if (selectedObject.value === p) {
+    if (selectedObjects.value.includes(p)) {
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 3;
       ctx.strokeRect(p.x - 5, p.y - 5, p.width + 10, p.height + 10);
@@ -686,21 +753,37 @@ const draw = () => {
   ctx.textAlign = 'left';
 
   // Draw Selection & Handles at BASE positions
-  if (selectedObject.value) {
-    const obs = selectedObject.value;
+  selectedObjects.value.forEach(obs => {
+    ctx.save();
     ctx.strokeStyle = '#00ffff';
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
     ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
     ctx.setLineDash([]);
     
-    // Resize Handles
-    ctx.fillStyle = '#fff';
-    const handleSize = 6 / zoom.value;
-    ctx.fillRect(obs.x - handleSize, obs.y - handleSize, handleSize * 2, handleSize * 2);
-    ctx.fillRect(obs.x + obs.width - handleSize, obs.y - handleSize, handleSize * 2, handleSize * 2);
-    ctx.fillRect(obs.x - handleSize, obs.y + obs.height - handleSize, handleSize * 2, handleSize * 2);
-    ctx.fillRect(obs.x + obs.width - handleSize, obs.y + obs.height - handleSize, handleSize * 2, handleSize * 2);
+    // Resize Handles (only for single selection)
+    if (selectedObjects.value.length === 1) {
+      ctx.fillStyle = '#fff';
+      const handleSize = 6 / zoom.value;
+      ctx.fillRect(obs.x - handleSize, obs.y - handleSize, handleSize * 2, handleSize * 2);
+      ctx.fillRect(obs.x + obs.width - handleSize, obs.y - handleSize, handleSize * 2, handleSize * 2);
+      ctx.fillRect(obs.x - handleSize, obs.y + obs.height - handleSize, handleSize * 2, handleSize * 2);
+      ctx.fillRect(obs.x + obs.width - handleSize, obs.y + obs.height - handleSize, handleSize * 2, handleSize * 2);
+    }
+    ctx.restore();
+  });
+
+  // Draw Selection Box
+  if (isSelectionBoxActive.value) {
+    ctx.fillStyle = 'rgba(0, 255, 255, 0.1)';
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 1;
+    const x = Math.min(selectionBox.value.x1, selectionBox.value.x2);
+    const y = Math.min(selectionBox.value.y1, selectionBox.value.y2);
+    const w_box = Math.abs(selectionBox.value.x2 - selectionBox.value.x1);
+    const h_box = Math.abs(selectionBox.value.y2 - selectionBox.value.y1);
+    ctx.fillRect(x, y, w_box, h_box);
+    ctx.strokeRect(x, y, w_box, h_box);
   }
 
   ctx.restore();
@@ -708,11 +791,14 @@ const draw = () => {
 };
 
 const rotateSelected = (degrees: number) => {
-  if (selectedObject.value && 'angle' in selectedObject.value) {
-    selectedObject.value.angle = (selectedObject.value.angle || 0) + degrees;
-    if (selectedObject.value.angle < 0) selectedObject.value.angle += 360;
-    if (selectedObject.value.angle >= 360) selectedObject.value.angle -= 360;
-  }
+  selectedObjects.value.forEach(obj => {
+    if ('angle' in obj) {
+      obj.angle = (obj.angle || 0) + degrees;
+      if (obj.angle < 0) obj.angle += 360;
+      if (obj.angle >= 360) obj.angle -= 360;
+    }
+  });
+  saveState();
 };
 
 onMounted(() => {
@@ -734,19 +820,27 @@ onMounted(() => {
     
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'c') {
-        if (selectedObject.value) clipboard.value = { ...selectedObject.value, _id: undefined };
+        if (selectedObjects.value.length > 0) {
+          clipboard.value = selectedObjects.value.map(o => ({ ...o, _id: undefined }));
+        }
       } else if (e.key === 'x') {
-        if (selectedObject.value) {
-          clipboard.value = { ...selectedObject.value, _id: undefined };
+        if (selectedObjects.value.length > 0) {
+          clipboard.value = selectedObjects.value.map(o => ({ ...o, _id: undefined }));
           deleteSelected();
-          saveState();
         }
       } else if (e.key === 'v') {
-        if (clipboard.value) {
-          const newItem = { ...clipboard.value, x: cameraX.value + 100, y: 360 };
-          if (obstacleTypes.includes(newItem.type)) mapData.value.engineObstacles.push(newItem);
-          else mapData.value.enginePortals.push(newItem);
-          selectedObject.value = newItem;
+        if (clipboard.value.length > 0) {
+          // Calculate bounding box center of clipboard items to offset correctly
+          const minX = Math.min(...clipboard.value.map(o => o.x));
+          const minY = Math.min(...clipboard.value.map(o => o.y));
+          
+          const newItems = clipboard.value.map(o => {
+            const newItem = { ...o, x: cameraX.value + (o.x - minX) + 100, y: o.y };
+            if (obstacleTypes.includes(newItem.type)) mapData.value.engineObstacles.push(newItem);
+            else mapData.value.enginePortals.push(newItem);
+            return newItem;
+          });
+          selectedObjects.value = newItems;
           saveState();
         }
       } else if (e.key === 'z') {
@@ -755,9 +849,8 @@ onMounted(() => {
         redo();
       }
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (selectedObject.value) {
+      if (selectedObjects.value.length > 0) {
         deleteSelected();
-        saveState();
       }
     }
   };
