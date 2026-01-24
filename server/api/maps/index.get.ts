@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     const maps = await GameMap.find(filter)
-      .select('-audioData')
+      .select('-audioData -engineObstacles -enginePortals -autoplayLog -sections -beatTimes')
       .sort({ createdAt: -1 })
       .limit(50)
     return maps
