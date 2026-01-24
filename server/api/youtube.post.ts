@@ -105,7 +105,19 @@ export default defineEventHandler(async (event) => {
     console.log(`[YouTube] Fetching info for: ${url}`);
     const info = await ytdl.getInfo(url, { agent, requestOptions });
     const title = info.videoDetails.title.replace(/[\/\\:*?"<>|]/g, '_'); // Sanitize filename for standard FS
-    const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+    // Try to find audio only first, fallback to lowest video quality with audio
+    let format;
+    try {
+      format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+    } catch (e) {
+      // Fallback: try finding any format with audio
+      const audioFormats = ytdl.filterFormats(info.formats, 'audioandvideo');
+      if (audioFormats.length > 0) {
+        format = audioFormats[0];
+      } else {
+        throw new Error('No playable formats found (audioonly or audioandvideo)');
+      }
+    }
 
     console.log(`[YouTube] Successfully fetched info for: ${title}`);
 
