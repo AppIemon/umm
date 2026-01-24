@@ -9,18 +9,29 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing matchId' })
   }
 
-  const match = await Match.findById(matchId)
-  if (!match) {
-    throw createError({ statusCode: 404, statusMessage: 'Match not found' })
+  // Atomic update for progress and lastSeen, while also getting the match data
+  let match;
+  if (userId) {
+    match = await Match.findOneAndUpdate(
+      { _id: matchId, 'players.userId': userId },
+      {
+        $set: {
+          'players.$.progress': progress || 0,
+          'players.$.y': y || 360,
+          'players.$.lastSeen': new Date()
+        }
+      },
+      { new: true }
+    )
   }
 
-  // Update caller's progress, y and lastSeen
-  const player = match.players.find(p => p.userId === userId)
-  if (player) {
-    player.progress = progress || 0
-    player.y = y || 360
-    player.lastSeen = new Date()
-    await match.save()
+  // Fallback if userId not provided or matching failed
+  if (!match) {
+    match = await Match.findById(matchId)
+  }
+
+  if (!match) {
+    throw createError({ statusCode: 404, statusMessage: 'Match not found' })
   }
 
   // Find opponent
@@ -28,7 +39,7 @@ export default defineEventHandler(async (event) => {
 
   // If status is 'ready', fetch map data for the client (only once at start)
   let mapData = null
-  if (match.status === 'ready') {
+  if (match.status === 'ready' || match.status === 'playing') {
     mapData = await GameMap.findById(match.map)
   }
 

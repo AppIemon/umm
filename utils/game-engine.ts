@@ -145,36 +145,36 @@ export class GameEngine {
     const playH = this.maxY - this.minY;
     const diff = this.mapConfig.difficulty;
 
-    // 물리적 한계치 설정 (플레이어 크기의 최소 3.5배는 되어야 통과 가능)
-    const MIN_GAP = this.basePlayerSize * 3.5;
+    // 물리적 한계치 설정 (플레이어 크기의 최소 4.0배는 되어야 통과 가능)
+    const MIN_GAP = this.basePlayerSize * 4.0;
 
-    // 난이도별 격차 극대화: Difficulties are 1~30
-    // Easy (1~7): 널널함 (1.5 ~ 1.0)
-    // Normal (8~15): 적당함 (1.0 ~ 0.6)
-    // Hard (16~23): 빡빡함 (0.6 ~ 0.3)
-    // Impossible (24~30): 극한 (0.3 ~ 0.05) - 물리적 한계치 근접
+    // 난이도별 격차: Difficulties are 1~30
+    // Easy (1~7): 튜토리얼 수준 (2.5 ~ 1.8)
+    // Normal (8~15): 적당함 (1.3 ~ 0.8)
+    // Hard (16~23): 빡빡함 (0.8 ~ 0.45)
+    // Impossible (24~30): 극한 (0.45 ~ 0.15)
 
     let gapMultiplier = 1.0;
     if (diff < 8) {
-      // Easy: 1.5 -> 1.0
-      gapMultiplier = 1.5 - ((diff - 1) / 7) * 0.5;
+      // Easy: 2.5 -> 1.8
+      gapMultiplier = 2.5 - ((diff - 1) / 7) * 0.7;
     } else if (diff < 16) {
-      // Normal: 1.0 -> 0.6
-      gapMultiplier = 1.0 - ((diff - 8) / 8) * 0.4;
+      // Normal: 1.3 -> 0.8
+      gapMultiplier = 1.3 - ((diff - 8) / 8) * 0.5;
     } else if (diff < 24) {
-      // Hard: 0.6 -> 0.3
-      gapMultiplier = 0.6 - ((diff - 16) / 8) * 0.3;
+      // Hard: 0.8 -> 0.45
+      gapMultiplier = 0.8 - ((diff - 16) / 8) * 0.35;
     } else {
-      // Impossible: 0.3 -> 0.05
-      gapMultiplier = 0.3 - ((diff - 24) / 7) * 0.25;
+      // Impossible: 0.45 -> 0.15
+      gapMultiplier = 0.45 - ((diff - 24) / 7) * 0.3;
     }
 
-    // 블록 간격 배수 (Easy는 넓게, Impossible은 좁게)
+    // 블록 간격 배수 (튜토리얼 수준은 매우 넓게)
     let blockGapFactor = 1.0;
-    if (diff < 8) blockGapFactor = 2.0; // Easy
-    else if (diff < 16) blockGapFactor = 1.2; // Normal
-    else if (diff < 24) blockGapFactor = 1.0; // Hard
-    else blockGapFactor = 0.8; // Impossible
+    if (diff < 8) blockGapFactor = 4.0; // Easy (Tutorial level)
+    else if (diff < 16) blockGapFactor = 1.5; // Normal
+    else if (diff < 24) blockGapFactor = 1.2; // Hard
+    else blockGapFactor = 1.0; // Impossible
     const SPIKE_H = 40;
 
     // 패턴 1-10: 바닥 가시 (위로 피하기)
@@ -843,17 +843,17 @@ export class GameEngine {
         let gapScale: number;
 
         if (diff < 8) {
-          // EASY: 조금 더 촘촘하게 (0.5 ~ 0.3)
-          gapScale = 0.5 - ((diff - 1) / 7) * 0.2;
+          // EASY: 튜토리얼 수준의 매우 넓은 간격 (1.5 ~ 1.0)
+          gapScale = 1.5 - ((diff - 1) / 7) * 0.5;
         } else if (diff < 16) {
-          // NORMAL: 적당한 간격 (0.4 ~ 0.22)
-          gapScale = 0.4 - ((diff - 8) / 8) * 0.18;
+          // NORMAL: 적당한 간격 (0.65 ~ 0.45)
+          gapScale = 0.65 - ((diff - 8) / 8) * 0.2;
         } else if (diff < 24) {
-          // HARD: 빡빡한 간격 (0.22 ~ 0.10)
-          gapScale = 0.22 - ((diff - 16) / 8) * 0.12;
+          // HARD: 빡빡한 간격 (0.45 ~ 0.25)
+          gapScale = 0.45 - ((diff - 16) / 8) * 0.2;
         } else {
-          // IMPOSSIBLE: 극도로 좁은 간격 (0.10 ~ 0.05)
-          gapScale = 0.10 - ((diff - 24) / 6) * 0.05;
+          // IMPOSSIBLE: 극한이나 이전보다 완화 (0.25 ~ 0.12)
+          gapScale = 0.25 - ((diff - 24) / 6) * 0.13;
         }
 
         gapScale *= this.patternGapMultiplier;
@@ -861,45 +861,54 @@ export class GameEngine {
         // Speed compensation (고속에서는 간격 살짝 넓힘)
         gapScale *= Math.pow(speedM, 0.6);
 
-        // GLOBAL DENSITY INCREASE (3X) as requested
-        gapScale *= 0.33;
+        // GLOBAL DENSITY ADJUSTMENT (Reduced from previous 0.33)
+        gapScale *= 0.8;
 
         // --- Difficulty Specific Adjustments ---
 
-        // Hard/Impossible: 0.5x 배속에서 장애물 밀도 6배 (저속 고밀도 순간)
+        // Hard/Impossible: 0.5x 배속에서 장애물 밀도 완화
         if (diff >= 16 && lastSpeedType === 'speed_0.5') {
-          gapScale *= 0.16; // 6배 밀도
+          gapScale *= 0.4; // 이전 0.16에서 0.4로 대폭 완화
         }
 
         // Impossible settings
         if (diff >= 24) {
           if (currentMini) {
-            // 4배속 미니웨이브 (장애물이 비교적 적음 - 통과 가능하게)
-            gapScale *= 1.5;
+            gapScale *= 1.4;
           } else {
-            // 4배속 (장애물이 매우 많음)
-            gapScale *= 0.7;
+            gapScale *= 0.85; // 이전 0.7에서 상향
             if (currentInverted) {
-              gapScale *= 0.85;
+              gapScale *= 0.95;
             }
           }
         } else if (diff >= 16) {
-          // HARD: 전반적으로 더 빡빡하게
-          gapScale *= 0.85;
+          gapScale *= 0.95; // 이전 0.85에서 상향
           if (currentMini) gapScale *= 1.1;
         } else {
           // Normal/Easy mini scaling
-          if (currentMini) gapScale *= 1.2;
+          if (currentMini) gapScale *= 1.25;
         }
 
         const xPos = currentX;
         // 패턴 간 최소 간격 (난이도에 따라 조절)
-        const baseMinGap = diff >= 24 ? 180 : (diff >= 16 ? 220 : 280);
+        const baseMinGap = diff >= 24 ? 180 : (diff >= 16 ? 220 : (diff < 8 ? 600 : 280));
         const minGapSeconds = (baseMinGap * gapScale) / (this.baseSpeed * speedM);
 
         if (beatTime < lastPatternEndTime + minGapSeconds) continue;
 
-        const validPatterns = this.getValidPatterns(lastRequiredY, rng, lastPatternType);
+        let validPatterns = this.getValidPatterns(lastRequiredY, rng, lastPatternType);
+
+        // Easy 난이도에서는 복잡한 패턴(레이저, 움직이는 장애물 등) 제외
+        if (diff < 8) {
+          validPatterns = validPatterns.filter(p =>
+            !p.type?.includes('laser') &&
+            !p.type?.includes('moving') &&
+            !p.type?.includes('spike_ball') &&
+            !p.type?.includes('mine') &&
+            !p.type?.includes('orb')
+          );
+        }
+
         if (validPatterns.length === 0) continue;
 
         // --- WEIGHTED PATTERN SELECTION ---

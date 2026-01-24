@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1b3bd-G9d+wES/UCAgYzUMNO7mFN+lC0c\"",
-    "mtime": "2026-01-24T06:47:37.379Z",
-    "size": 111549,
+    "etag": "\"1b8af-GwDgl00N6t8TV+z4AcplClhRRxc\"",
+    "mtime": "2026-01-24T06:59:22.979Z",
+    "size": 112815,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"64cf7-nLHttOslwr1yddw8AMYJm1MVO1s\"",
-    "mtime": "2026-01-24T06:47:37.366Z",
-    "size": 412919,
+    "etag": "\"66173-JoHAiHmsQ5/eGpLeDnMcsntG85M\"",
+    "mtime": "2026-01-24T06:59:22.979Z",
+    "size": 418163,
     "path": "index.mjs.map"
   }
 };
@@ -2837,87 +2837,117 @@ const Match = mongoose.models.Match || mongoose.model("Match", matchSchema);
 const find_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { category, rating, userId } = body;
-  const matchFilter = {
-    category,
-    status: "waiting"
-  };
-  if (userId) {
-    matchFilter["players.userId"] = { $ne: userId };
+  if (!userId) {
+    throw createError({ statusCode: 400, statusMessage: "Missing userId" });
   }
-  let match = await Match.findOne(matchFilter);
+  console.log(`[Matchmaking] User ${userId} searching for category: ${category}`);
+  const existingMatch = await Match.findOne({
+    category,
+    status: { $in: ["waiting", "ready", "playing"] },
+    "players.userId": userId
+  });
+  if (existingMatch) {
+    console.log(`[Matchmaking] User ${userId} already in match ${existingMatch._id} (${existingMatch.status})`);
+    const opponent = existingMatch.players.find((p) => p.userId !== userId);
+    const map = await GameMap.findById(existingMatch.map);
+    return {
+      matchId: existingMatch._id,
+      status: existingMatch.status,
+      opponent: opponent ? {
+        username: opponent.username,
+        rating: 1e3
+      } : null,
+      map
+    };
+  }
+  const activeThreshold = new Date(Date.now() - 15e3);
+  const isValidId = mongoose.Types.ObjectId.isValid(userId);
+  const user = isValidId ? await User.findById(userId) : null;
+  const username = (user == null ? void 0 : user.displayName) || (user == null ? void 0 : user.username) || `Guest_${Math.floor(Math.random() * 1e3)}`;
+  const match = await Match.findOneAndUpdate(
+    {
+      category,
+      status: "waiting",
+      "players.userId": { $ne: userId },
+      "players.0.lastSeen": { $gte: activeThreshold }
+    },
+    {
+      $push: {
+        players: {
+          userId,
+          username,
+          progress: 0,
+          y: 360,
+          lastSeen: /* @__PURE__ */ new Date(),
+          isReady: false
+        }
+      },
+      $set: { status: "ready" }
+    },
+    { new: true }
+  );
   if (match) {
-    const isValidId = userId && mongoose.Types.ObjectId.isValid(userId);
-    const user = isValidId ? await User.findById(userId) : null;
-    const username = (user == null ? void 0 : user.displayName) || (user == null ? void 0 : user.username) || `Guest_${Math.floor(Math.random() * 1e3)}`;
-    match.players.push({
-      userId,
-      username,
-      progress: 0,
-      lastSeen: /* @__PURE__ */ new Date(),
-      isReady: false
-    });
-    match.status = "ready";
-    await match.save();
+    console.log(`[Matchmaking] User ${userId} joined match ${match._id}`);
     const fullMap = await GameMap.findById(match.map);
+    const opponent = match.players.find((p) => p.userId !== userId);
     return {
       matchId: match._id,
       status: "ready",
       opponent: {
-        username: match.players[0].username,
+        username: (opponent == null ? void 0 : opponent.username) || "Opponent",
         rating: 1e3
-        // Placeholder
       },
       map: fullMap
     };
+  }
+  let minDiff = 1;
+  let maxDiff = 100;
+  const userRating = rating || 1e3;
+  if (userRating < 1200) maxDiff = 12;
+  else if (userRating < 1600) {
+    minDiff = 8;
+    maxDiff = 20;
+  } else if (userRating < 2200) {
+    minDiff = 15;
+    maxDiff = 30;
+  } else minDiff = 25;
+  const mapQuery = { isShared: true, difficulty: { $gte: minDiff, $lte: maxDiff } };
+  const count = await GameMap.countDocuments(mapQuery);
+  let randomMapId;
+  if (count > 0) {
+    const skip = Math.floor(Math.random() * count);
+    const m = await GameMap.findOne(mapQuery).skip(skip).select("_id");
+    randomMapId = m == null ? void 0 : m._id;
   } else {
-    let minDiff = 1;
-    let maxDiff = 100;
-    const userRating = rating || 1e3;
-    if (userRating < 1200) maxDiff = 12;
-    else if (userRating < 1600) {
-      minDiff = 8;
-      maxDiff = 20;
-    } else if (userRating < 2200) {
-      minDiff = 15;
-      maxDiff = 30;
-    } else minDiff = 25;
-    const matchQuery = { isShared: true, difficulty: { $gte: minDiff, $lte: maxDiff } };
-    let randomMapId;
-    const count = await GameMap.countDocuments(matchQuery);
-    if (count > 0) {
-      const skip = Math.floor(Math.random() * count);
-      const m = await GameMap.findOne(matchQuery).skip(skip).select("_id");
-      randomMapId = m._id;
-    } else {
-      const anyCount = await GameMap.countDocuments({ isShared: true });
+    const anyCount = await GameMap.countDocuments({ isShared: true });
+    if (anyCount > 0) {
       const skip = Math.floor(Math.random() * anyCount);
       const m = await GameMap.findOne({ isShared: true }).skip(skip).select("_id");
       randomMapId = m == null ? void 0 : m._id;
     }
-    if (!randomMapId) {
-      throw createError({ statusCode: 404, statusMessage: "No maps available" });
-    }
-    const isValidId = userId && mongoose.Types.ObjectId.isValid(userId);
-    const userObj = isValidId ? await User.findById(userId) : null;
-    const username = (userObj == null ? void 0 : userObj.displayName) || (userObj == null ? void 0 : userObj.username) || `Guest_${Math.floor(Math.random() * 1e3)}`;
-    const newMatch = await Match.create({
-      category,
-      map: randomMapId,
-      status: "waiting",
-      players: [{
-        userId,
-        username,
-        progress: 0,
-        lastSeen: /* @__PURE__ */ new Date(),
-        isReady: false
-      }]
-    });
-    return {
-      matchId: newMatch._id,
-      status: "waiting",
-      message: "Searching for opponent..."
-    };
   }
+  if (!randomMapId) {
+    throw createError({ statusCode: 404, statusMessage: "No maps available" });
+  }
+  const newMatch = await Match.create({
+    category,
+    map: randomMapId,
+    status: "waiting",
+    players: [{
+      userId,
+      username,
+      progress: 0,
+      y: 360,
+      lastSeen: /* @__PURE__ */ new Date(),
+      isReady: false
+    }]
+  });
+  console.log(`[Matchmaking] User ${userId} created new match ${newMatch._id}`);
+  return {
+    matchId: newMatch._id,
+    status: "waiting",
+    message: "Searching for opponent..."
+  };
 });
 
 const find_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
@@ -2931,20 +2961,29 @@ const status_post = defineEventHandler(async (event) => {
   if (!matchId) {
     throw createError({ statusCode: 400, statusMessage: "Missing matchId" });
   }
-  const match = await Match.findById(matchId);
+  let match;
+  if (userId) {
+    match = await Match.findOneAndUpdate(
+      { _id: matchId, "players.userId": userId },
+      {
+        $set: {
+          "players.$.progress": progress || 0,
+          "players.$.y": y || 360,
+          "players.$.lastSeen": /* @__PURE__ */ new Date()
+        }
+      },
+      { new: true }
+    );
+  }
+  if (!match) {
+    match = await Match.findById(matchId);
+  }
   if (!match) {
     throw createError({ statusCode: 404, statusMessage: "Match not found" });
   }
-  const player = match.players.find((p) => p.userId === userId);
-  if (player) {
-    player.progress = progress || 0;
-    player.y = y || 360;
-    player.lastSeen = /* @__PURE__ */ new Date();
-    await match.save();
-  }
   const opponent = match.players.find((p) => p.userId !== userId);
   let mapData = null;
-  if (match.status === "ready") {
+  if (match.status === "ready" || match.status === "playing") {
     mapData = await GameMap.findById(match.map);
   }
   return {
