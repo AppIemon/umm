@@ -70,6 +70,7 @@
       @retry="startGame"
       @exit="handleExit"
       @map-ready="handleMapReady"
+      @record-update="handleRecordUpdate"
     />
   </div>
 </template>
@@ -394,7 +395,31 @@ const handleMapReady = async (mapData: any) => {
 
   } catch (e: any) {
     console.error("Failed to save map auto-registration:", e);
-    // Don't alert here to avoid annoying the user if it's just a background save
+  }
+};
+
+const handleRecordUpdate = async (data: { score: number, progress: number }) => {
+  if (!loadedMapData.value?._id) return;
+  
+  // Update local bestScore for immediate UI feedback
+  if (data.score > (loadedMapData.value.bestScore || 0)) {
+     loadedMapData.value.bestScore = data.score;
+  }
+
+  try {
+    const res: any = await $fetch(`/api/maps/${loadedMapData.value._id}/record`, {
+      method: 'POST',
+      body: {
+        score: data.score,
+        username: user.value?.username || 'Guest'
+      }
+    });
+    
+    if (res.updated) {
+       console.log(`[Record] New best record: ${data.score}`);
+    }
+  } catch (e) {
+    console.error("Failed to update record:", e);
   }
 };
 

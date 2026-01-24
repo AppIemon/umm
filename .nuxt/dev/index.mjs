@@ -1497,19 +1497,19 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 ];
 
 const assets = {
-  "/index.mjs": {
-    "type": "text/javascript; charset=utf-8",
-    "etag": "\"1b8af-GwDgl00N6t8TV+z4AcplClhRRxc\"",
-    "mtime": "2026-01-24T06:59:22.979Z",
-    "size": 112815,
-    "path": "index.mjs"
-  },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"66173-JoHAiHmsQ5/eGpLeDnMcsntG85M\"",
-    "mtime": "2026-01-24T06:59:22.979Z",
-    "size": 418163,
+    "etag": "\"670e4-+UBeHOwPP4UBwSvmeDIPluePQK4\"",
+    "mtime": "2026-01-24T07:23:56.439Z",
+    "size": 422116,
     "path": "index.mjs.map"
+  },
+  "/index.mjs": {
+    "type": "text/javascript; charset=utf-8",
+    "etag": "\"1bdab-RzDg6Q0alCP1lPn5AwCtPysjwkk\"",
+    "mtime": "2026-01-24T07:23:56.438Z",
+    "size": 114091,
+    "path": "index.mjs"
   }
 };
 
@@ -1943,6 +1943,7 @@ const _lazy_su95aX = () => Promise.resolve().then(function () { return updateSta
 const _lazy_ItOqgi = () => Promise.resolve().then(function () { return _id__delete$1; });
 const _lazy_dtHPno = () => Promise.resolve().then(function () { return _id__get$1; });
 const _lazy_wh0PQr = () => Promise.resolve().then(function () { return _id__patch$1; });
+const _lazy_vSvfPH = () => Promise.resolve().then(function () { return record_post$1; });
 const _lazy_tYJqVb = () => Promise.resolve().then(function () { return index_get$1; });
 const _lazy_DwrcjF = () => Promise.resolve().then(function () { return index_post$1; });
 const _lazy_bVOdlf = () => Promise.resolve().then(function () { return find_post$1; });
@@ -1961,6 +1962,7 @@ const handlers = [
   { route: '/api/maps/:id', handler: _lazy_ItOqgi, lazy: true, middleware: false, method: "delete" },
   { route: '/api/maps/:id', handler: _lazy_dtHPno, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps/:id', handler: _lazy_wh0PQr, lazy: true, middleware: false, method: "patch" },
+  { route: '/api/maps/:id/record', handler: _lazy_vSvfPH, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps', handler: _lazy_tYJqVb, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps', handler: _lazy_DwrcjF, lazy: true, middleware: false, method: "post" },
   { route: '/api/matchmaking/find', handler: _lazy_bVOdlf, lazy: true, middleware: false, method: "post" },
@@ -2685,11 +2687,38 @@ const _id__get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty
 const _id__patch = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
   const body = await readBody(event);
-  const { isShared, title } = body;
+  const {
+    title,
+    difficulty,
+    seed,
+    beatTimes,
+    sections,
+    engineObstacles,
+    enginePortals,
+    autoplayLog,
+    duration,
+    audioUrl,
+    audioData,
+    isShared,
+    bpm,
+    measureLength
+  } = body;
   const updateData = {};
-  if (isShared !== void 0) updateData.isShared = isShared;
   if (title !== void 0) updateData.title = title;
-  const updatedMap = await GameMap.findByIdAndUpdate(id, updateData, { new: true });
+  if (difficulty !== void 0) updateData.difficulty = difficulty;
+  if (seed !== void 0) updateData.seed = seed;
+  if (beatTimes !== void 0) updateData.beatTimes = beatTimes;
+  if (sections !== void 0) updateData.sections = sections;
+  if (engineObstacles !== void 0) updateData.engineObstacles = engineObstacles;
+  if (enginePortals !== void 0) updateData.enginePortals = enginePortals;
+  if (autoplayLog !== void 0) updateData.autoplayLog = autoplayLog;
+  if (duration !== void 0) updateData.duration = duration;
+  if (audioUrl !== void 0) updateData.audioUrl = audioUrl;
+  if (audioData !== void 0) updateData.audioData = audioData;
+  if (isShared !== void 0) updateData.isShared = isShared;
+  if (bpm !== void 0) updateData.bpm = bpm;
+  if (measureLength !== void 0) updateData.measureLength = measureLength;
+  const updatedMap = await GameMap.findByIdAndUpdate(id, { $set: updateData }, { new: true });
   if (!updatedMap) {
     throw createError({
       statusCode: 404,
@@ -2702,6 +2731,37 @@ const _id__patch = defineEventHandler(async (event) => {
 const _id__patch$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: _id__patch
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const record_post = defineEventHandler(async (event) => {
+  const id = getRouterParam(event, "id");
+  const body = await readBody(event);
+  const { score, username } = body;
+  if (!id || score === void 0) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Missing mapId or score"
+    });
+  }
+  const map = await GameMap.findById(id);
+  if (!map) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Map not found"
+    });
+  }
+  if (score > (map.bestScore || 0)) {
+    map.bestScore = score;
+    map.bestPlayer = username || "Guest";
+    await map.save();
+    return { success: true, updated: true, bestScore: map.bestScore };
+  }
+  return { success: true, updated: false, bestScore: map.bestScore };
+});
+
+const record_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: record_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const index_get = defineEventHandler(async (event) => {

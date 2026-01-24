@@ -31,6 +31,15 @@
           </div>
           <div class="progress-bar-container">
             <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+            <!-- Best Record Marker -->
+            <div 
+              v-if="bestProgress > 0" 
+              class="best-record-marker" 
+              :style="{ left: bestProgress + '%' }"
+            >
+              <div class="marker-line"></div>
+              <span class="marker-text">BEST</span>
+            </div>
             <span class="progress-text">{{ Math.floor(progress) }}%</span>
           </div>
         </div>
@@ -105,7 +114,7 @@ const props = defineProps<{
   opponentProgress?: number;
 }>();
 
-const emit = defineEmits(['retry', 'exit', 'complete', 'map-ready', 'progress-update']);
+const emit = defineEmits(['retry', 'exit', 'complete', 'map-ready', 'progress-update', 'record-update']);
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 const engine = ref(new GameEngine());
@@ -167,6 +176,14 @@ const difficultyName = computed(() => {
   if (difficulty.value < 16) return 'NORMAL';
   if (difficulty.value < 24) return 'HARD';
   return 'IMPOSSIBLE';
+});
+
+const bestProgress = computed(() => {
+  if (props.loadMap?.bestScore) {
+    // Score is progress * 10, so progress = score / 10
+    return Math.min(100, props.loadMap.bestScore / 10);
+  }
+  return 0;
 });
 
 const startGame = () => {
@@ -326,6 +343,7 @@ const runGame = () => {
     if (!gameOver.value && isRunning.value) {
       victory.value = true;
       isRunning.value = false;
+      emit('record-update', { score: score.value, progress: 100 });
     }
   };
 
@@ -377,6 +395,8 @@ const handleGameOver = () => {
   if (audioSource) {
     try { audioSource.stop(); } catch(e){}
   }
+  
+  emit('record-update', { score: score.value, progress: progress.value });
   
   // 히트박스 모드로 3초간 보여준 후 재시작
   // 게임 오버 상태에서도 계속 그리기
@@ -1119,6 +1139,35 @@ canvas {
   font-size: 0.6rem;
   font-weight: bold;
   color: white;
+}
+
+.best-record-marker {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 2px;
+  pointer-events: none;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.marker-line {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  box-shadow: 0 0 5px #fff;
+}
+
+.marker-text {
+  position: absolute;
+  top: -14px;
+  font-size: 0.5rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 5px rgba(0,0,0,0.8);
+  white-space: nowrap;
 }
 
 .score-container {
