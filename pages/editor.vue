@@ -56,7 +56,8 @@
             @mousedown="onWorkspaceMouseDown" 
             @mousemove="onWorkspaceMouseMove" 
             @mouseup="onWorkspaceMouseUp"
-            @wheel="onWorkspaceWheel">
+            @wheel="onWorkspaceWheel"
+            @contextmenu.prevent>
         
         <canvas ref="canvasRef" width="1200" height="600" class="editor-canvas"></canvas>
         
@@ -267,6 +268,20 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
     e.preventDefault();
     return;
   }
+
+  if (e.button === 2) { // Right click selection box
+    isSelectionBoxActive.value = true;
+    const rect = canvasRef.value!.getBoundingClientRect();
+    const scaleX = canvasRef.value!.width / rect.width;
+    const scaleY = canvasRef.value!.height / rect.height;
+    const x = ((e.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
+    const y = ((e.clientY - rect.top) * scaleY) / zoom.value;
+    selectionBox.value = { x1: x, y1: y, x2: x, y2: y };
+    e.preventDefault();
+    return;
+  }
+  
+  if (e.button !== 0) return; // Only allow left click for others
   
   if (!canvasRef.value) return;
   const rect = canvasRef.value.getBoundingClientRect();
@@ -311,9 +326,6 @@ const onWorkspaceMouseDown = (e: MouseEvent) => {
     // 3. Clicked empty space
     if (!isShiftPressed.value) {
       selectedObjects.value = [];
-      // Start selection box
-      isSelectionBoxActive.value = true;
-      selectionBox.value = { x1: x, y1: y, x2: x, y2: y };
     } else {
       // Shift-click empty space: Place new
       addObject(x, y);

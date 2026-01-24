@@ -27,6 +27,12 @@
             <span class="diff-tag" :style="{ color: getDiffColor(map.difficulty) }">
               DIFF: {{ map.difficulty }}
             </span>
+            <span v-if="map.rating > 0" class="rating-tag">
+              RATE: ★{{ map.rating }}
+            </span>
+            <span v-else class="rating-tag empty">
+              RATE: -
+            </span>
             <span class="date">{{ new Date(map.createdAt).toLocaleDateString() }}</span>
           </div>
           <h3 class="map-title">{{ map.title }}</h3>
@@ -266,6 +272,15 @@ onMounted(fetchMaps);
 }
 
 .date { color: #555; }
+.rating-tag {
+  color: #00ffaa;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 255, 170, 0.3);
+}
+.rating-tag.empty {
+  color: #444;
+  text-shadow: none;
+}
 
 .map-title {
   font-size: 1.25rem;

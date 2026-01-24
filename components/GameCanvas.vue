@@ -75,6 +75,19 @@
             <div class="status-stats">
               <span>SCORE {{ Math.floor(score) }}</span>
             </div>
+
+            <!-- Map Rating Vote -->
+            <div v-if="loadMap && loadMap._id && !hasVoted" class="rating-vote pointer-events-auto">
+               <p class="rating-label">RATE THIS MAP (1-30)</p>
+               <div class="rating-controls">
+                 <input type="range" min="1" max="30" v-model.number="userRating" class="rating-slider" />
+                 <span class="rating-value">{{ userRating }}</span>
+               </div>
+               <button @click="submitRating" class="submit-rating-btn">SUBMIT VOTE</button>
+            </div>
+            <div v-else-if="hasVoted" class="rating-done">
+               THANK YOU FOR VOTING!
+            </div>
           </div>
         </div>
 
@@ -131,6 +144,22 @@ const isMini = ref(false);
 const difficulty = ref(props.difficulty || 10);
 const isAutoplayUI = ref(false);
 const hasSaved = ref(false);
+
+const userRating = ref(15);
+const hasVoted = ref(false);
+
+const submitRating = async () => {
+  if (!props.loadMap?._id || hasVoted.value) return;
+  try {
+    await $fetch(`/api/maps/${props.loadMap._id}/rate`, {
+      method: 'POST',
+      body: { rating: userRating.value }
+    });
+    hasVoted.value = true;
+  } catch (e) {
+    alert("Failed to submit rating.");
+  }
+};
 
 const currentTrackTime = ref(0);
 const isComputingPath = ref(false);
@@ -1475,6 +1504,7 @@ button.secondary:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  pointer-events: auto;
 }
 
 .status-text {
@@ -1517,6 +1547,85 @@ button.secondary:hover {
 
 .stat-divider {
   opacity: 0.3;
+}
+
+.rating-vote {
+  margin-top: 30px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 170, 0.2);
+  display: inline-block;
+  align-self: center;
+  backdrop-filter: blur(10px);
+}
+
+.rating-label {
+  font-size: 0.8rem;
+  color: #00ffaa;
+  margin-bottom: 15px;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+.rating-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.rating-slider {
+  -webkit-appearance: none;
+  width: 200px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+}
+
+.rating-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #00ffaa;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 255, 170, 0.5);
+}
+
+.rating-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #fff;
+  min-width: 40px;
+}
+
+.submit-rating-btn {
+  background: #00ffaa;
+  color: #000;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 4px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.submit-rating-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(0, 255, 170, 0.4);
+}
+
+.rating-done {
+  margin-top: 20px;
+  color: #00ffaa;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+.pointer-events-auto {
+  pointer-events: auto !important;
 }
 
 

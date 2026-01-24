@@ -1497,19 +1497,19 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 ];
 
 const assets = {
-  "/index.mjs.map": {
-    "type": "application/json",
-    "etag": "\"670e4-+UBeHOwPP4UBwSvmeDIPluePQK4\"",
-    "mtime": "2026-01-24T07:23:56.439Z",
-    "size": 422116,
-    "path": "index.mjs.map"
-  },
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1bdab-RzDg6Q0alCP1lPn5AwCtPysjwkk\"",
-    "mtime": "2026-01-24T07:23:56.438Z",
-    "size": 114091,
+    "etag": "\"1c226-qgRRMQ/S9LhZXgHSn/mXoI2UVbs\"",
+    "mtime": "2026-01-24T07:49:59.331Z",
+    "size": 115238,
     "path": "index.mjs"
+  },
+  "/index.mjs.map": {
+    "type": "application/json",
+    "etag": "\"68346-rBtpr7xb92N4QyIXpqxk1AgI3DI\"",
+    "mtime": "2026-01-24T07:49:59.331Z",
+    "size": 426822,
+    "path": "index.mjs.map"
   }
 };
 
@@ -1943,6 +1943,7 @@ const _lazy_su95aX = () => Promise.resolve().then(function () { return updateSta
 const _lazy_ItOqgi = () => Promise.resolve().then(function () { return _id__delete$1; });
 const _lazy_dtHPno = () => Promise.resolve().then(function () { return _id__get$1; });
 const _lazy_wh0PQr = () => Promise.resolve().then(function () { return _id__patch$1; });
+const _lazy_gy6T5E = () => Promise.resolve().then(function () { return rate_post$1; });
 const _lazy_vSvfPH = () => Promise.resolve().then(function () { return record_post$1; });
 const _lazy_tYJqVb = () => Promise.resolve().then(function () { return index_get$1; });
 const _lazy_DwrcjF = () => Promise.resolve().then(function () { return index_post$1; });
@@ -1962,6 +1963,7 @@ const handlers = [
   { route: '/api/maps/:id', handler: _lazy_ItOqgi, lazy: true, middleware: false, method: "delete" },
   { route: '/api/maps/:id', handler: _lazy_dtHPno, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps/:id', handler: _lazy_wh0PQr, lazy: true, middleware: false, method: "patch" },
+  { route: '/api/maps/:id/rate', handler: _lazy_gy6T5E, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps/:id/record', handler: _lazy_vSvfPH, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps', handler: _lazy_tYJqVb, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps', handler: _lazy_DwrcjF, lazy: true, middleware: false, method: "post" },
@@ -2640,6 +2642,18 @@ const mapSchema = new mongoose.Schema({
   measureLength: {
     type: Number,
     default: 2
+  },
+  ratingSum: {
+    type: Number,
+    default: 0
+  },
+  ratingCount: {
+    type: Number,
+    default: 0
+  },
+  rating: {
+    type: Number,
+    default: 0
   }
 });
 mapSchema.index({ creator: 1 });
@@ -2648,6 +2662,7 @@ mapSchema.index({ clearCount: -1 });
 mapSchema.index({ likes: -1 });
 mapSchema.index({ createdAt: -1 });
 mapSchema.index({ difficulty: 1 });
+mapSchema.index({ rating: -1 });
 const GameMap = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
 
 const _id__delete = defineEventHandler(async (event) => {
@@ -2731,6 +2746,39 @@ const _id__patch = defineEventHandler(async (event) => {
 const _id__patch$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: _id__patch
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const rate_post = defineEventHandler(async (event) => {
+  const mapId = getRouterParam(event, "id");
+  const body = await readBody(event);
+  const { rating } = body;
+  if (!rating || rating < 1 || rating > 30) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Invalid rating. Must be between 1 and 30."
+    });
+  }
+  const map = await GameMap.findById(mapId);
+  if (!map) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Map not found"
+    });
+  }
+  map.ratingSum += rating;
+  map.ratingCount += 1;
+  map.rating = Number((map.ratingSum / map.ratingCount).toFixed(1));
+  await map.save();
+  return {
+    success: true,
+    newRating: map.rating,
+    count: map.ratingCount
+  };
+});
+
+const rate_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: rate_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const record_post = defineEventHandler(async (event) => {

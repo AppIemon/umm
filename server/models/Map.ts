@@ -25,6 +25,9 @@ export interface IMap extends Document {
   audioData: string | null // 노래 파일 데이터 (Base64)
   bpm: number
   measureLength: number
+  ratingSum: number      // 유저들이 투표한 레이팅 합계
+  ratingCount: number    // 투표한 유저 수
+  rating: number         // 평균 레이팅 (1~30)
 }
 
 const mapSchema = new mongoose.Schema<IMap>({
@@ -120,6 +123,18 @@ const mapSchema = new mongoose.Schema<IMap>({
   measureLength: {
     type: Number,
     default: 2.0
+  },
+  ratingSum: {
+    type: Number,
+    default: 0
+  },
+  ratingCount: {
+    type: Number,
+    default: 0
+  },
+  rating: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -130,5 +145,6 @@ mapSchema.index({ clearCount: -1 })
 mapSchema.index({ likes: -1 })
 mapSchema.index({ createdAt: -1 })
 mapSchema.index({ difficulty: 1 })
+mapSchema.index({ rating: -1 })
 
 export const GameMap = mongoose.models.GameMap || mongoose.model<IMap>('GameMap', mapSchema)
