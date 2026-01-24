@@ -368,9 +368,7 @@ const runGame = () => {
   
   audioSource.onended = () => {
     if (!gameOver.value && isRunning.value) {
-      victory.value = true;
-      isRunning.value = false;
-      emit('record-update', { score: score.value, progress: 100 });
+      handleVictory();
     }
   };
 
@@ -449,6 +447,21 @@ const handleGameOver = () => {
       startGame();
     }
   }, 3000);
+  }, 3000);
+};
+
+const handleVictory = () => {
+  victory.value = true;
+  isRunning.value = false;
+  score.value = Math.floor(score.value + 1000); // Bonus for clear
+  progressPct.value = 100;
+  
+  if (audioSource) {
+    try { audioSource.stop(); } catch(e){}
+  }
+  
+  emit('record-update', { score: score.value, progress: 100 });
+  emit('complete', { score: score.value });
 };
 
 const loop = () => {
@@ -486,6 +499,9 @@ const update = () => {
   
   if (engine.value.isDead && !gameOver.value) {
     handleGameOver();
+  } else if (!engine.value.isPlaying && isRunning.value && !gameOver.value && !victory.value) {
+    // Game engine finished (reached end) and not dead -> Victory
+    handleVictory();
   }
 
   // progress emission for multiplayer
