@@ -1250,8 +1250,8 @@ export class GameEngine {
         const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
         sy += amp * vy * dt;
 
-        // 생존 확인: 실제 게임과 동일하게 마진 0 (이동 오브젝트만 내부에서 마진 적용)
-        if (checkColl(sx, sy, sz, sTime, 0)) return false;
+        // 생존 확인: 안전 마진 3px 적용 (아슬아슬한 경로 방지)
+        if (checkColl(sx, sy, sz, sTime, 3)) return false;
       }
       return true;
     };
@@ -1301,8 +1301,8 @@ export class GameEngine {
       const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
-      const dH = checkColl(nX, nYH, sz, nT, 0); // 실제 게임과 동일하게 마진 없음
-      const dR = checkColl(nX, nYR, sz, nT, 0);
+      const dH = checkColl(nX, nYH, sz, nT, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
+      const dR = checkColl(nX, nYR, sz, nT, 3);
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
@@ -1824,12 +1824,23 @@ export class GameEngine {
       obsAngle = state.angle;
     }
 
+    // 최소 히트박스 크기 적용 (10px 이하의 얇은 장애물도 충돌하도록)
+    const minHitboxSize = 10;
+    const effectiveWidth = Math.max(obs.width, minHitboxSize);
+    const effectiveHeight = Math.max(obs.height, minHitboxSize);
+
+    // 크기가 조정된 경우 중심을 유지하기 위해 오프셋 계산
+    const widthOffset = (effectiveWidth - obs.width) / 2;
+    const heightOffset = (effectiveHeight - obs.height) / 2;
+    const effectiveX = obs.x - widthOffset;
+    const effectiveY = obsY - heightOffset;
+
     const isRotated = obsAngle !== 0;
 
     // 1단계: 기본 AABB 체크 (기울어진 경우 여유를 둠)
-    const margin = isRotated ? Math.max(obs.width, obs.height) : 0;
-    if (px + pSize <= obs.x - margin || px - pSize >= obs.x + obs.width + margin ||
-      py + pSize <= obsY - margin || py - pSize >= obsY + obs.height + margin) {
+    const margin = isRotated ? Math.max(effectiveWidth, effectiveHeight) : 0;
+    if (px + pSize <= effectiveX - margin || px - pSize >= effectiveX + effectiveWidth + margin ||
+      py + pSize <= effectiveY - margin || py - pSize >= effectiveY + effectiveHeight + margin) {
       return false;
     }
 

@@ -106,9 +106,9 @@ interface SampleTrack {
 }
 
 const sampleTracks = ref<SampleTrack[]>([
-  { id: '1', name: 'Bit Bit Loop', genre: 'Electronic', duration: '1:30', url: '/api/samples?id=1' },
-  { id: '2', name: 'Soliloquy', genre: 'Ambient', duration: '2:00', url: '/api/samples?id=2' },
-  { id: '3', name: 'Orbital Colossus', genre: 'Epic Electronic', duration: '3:00', url: '/api/samples?id=3' },
+  { id: '1', name: 'Electronic Future Beats', genre: 'Electronic', duration: '2:30', url: '/api/samples?id=1' },
+  { id: '2', name: 'Synthwave Retro', genre: 'Synthwave', duration: '2:00', url: '/api/samples?id=2' },
+  { id: '3', name: 'Epic Cinematic', genre: 'Cinematic', duration: '2:45', url: '/api/samples?id=3' },
 ]);
 
 const selectedSample = ref<SampleTrack | null>(null);

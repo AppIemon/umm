@@ -59,6 +59,7 @@
         <div v-if="gameOver" class="status-overlay fail">
           <div class="status-content">
             <h1 class="status-text fail">CRASHED</h1>
+            <p v-if="isNewBest" class="new-best-text">🎉 NEW BEST! {{ progressPct }}%</p>
             <p class="status-sub">{{ failReason }}</p>
             <div class="status-stats">
               <span>{{ progressPct }}% PROGRESS</span>
@@ -144,6 +145,8 @@ const isMini = ref(false);
 const difficulty = ref(props.difficulty || 10);
 const isAutoplayUI = ref(false);
 const hasSaved = ref(false);
+const bestProgress = ref(0);
+const isNewBest = ref(false);
 
 const userRating = ref(15);
 const hasVoted = ref(false);
@@ -346,21 +349,13 @@ const startAutoplay = async () => {
 
 
 const startCountdown = () => {
-  let count = 3;
-  countdown.value = '3';
+  // 빠른 재시작: GO!만 표시
+  countdown.value = 'GO!';
   
-  const timer = setInterval(() => {
-    count--;
-    if (count > 0) {
-      countdown.value = count.toString();
-    } else if (count === 0) {
-      countdown.value = 'GO!';
-    } else {
-      clearInterval(timer);
-      countdown.value = null;
-      runGame();
-    }
-  }, 500);
+  setTimeout(() => {
+    countdown.value = null;
+    runGame();
+  }, 400);
 };
 
 const runGame = () => {
@@ -423,6 +418,15 @@ const handleGameOver = () => {
   failReason.value = engine.value.failReason || 'CRASHED';
   progressPct.value = engine.value.getProgress();
   isRunning.value = false;
+  
+  // 최고 기록 체크
+  if (progressPct.value > bestProgress.value) {
+    bestProgress.value = progressPct.value;
+    isNewBest.value = true;
+  } else {
+    isNewBest.value = false;
+  }
+  
   if (audioSource) {
     try { audioSource.stop(); } catch(e){}
   }
@@ -1564,6 +1568,21 @@ button.secondary:hover {
 
 .stat-divider {
   opacity: 0.3;
+}
+
+.new-best-text {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffaa00;
+  text-shadow: 0 0 20px rgba(255, 170, 0, 0.8), 0 0 40px rgba(255, 170, 0, 0.4);
+  letter-spacing: 3px;
+  animation: newBestPulse 0.5s ease-out;
+}
+
+@keyframes newBestPulse {
+  0% { transform: scale(1.5); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .rating-vote {

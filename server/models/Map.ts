@@ -28,6 +28,7 @@ export interface IMap extends Document {
   ratingSum: number      // 유저들이 투표한 레이팅 합계
   ratingCount: number    // 투표한 유저 수
   rating: number         // 평균 레이팅 (1~30)
+  isVerified: boolean    // 튜토리얼 없이 클리어된 맵
 }
 
 const mapSchema = new mongoose.Schema<IMap>({
@@ -135,6 +136,10 @@ const mapSchema = new mongoose.Schema<IMap>({
   rating: {
     type: Number,
     default: 0
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
   }
 })
 

@@ -27,8 +27,9 @@
             <span class="diff-tag" :style="{ color: getDiffColor(map.difficulty) }">
               DIFF: {{ map.difficulty }}
             </span>
+            <span v-if="map.isVerified" class="verified-tag">✓ VERIFIED</span>
             <span v-if="map.rating > 0" class="rating-tag">
-              RATE: ★{{ map.rating }}
+              RATE: ★{{ map.rating.toFixed(1) }}
             </span>
             <span v-else class="rating-tag empty">
               RATE: -
@@ -46,10 +47,18 @@
               <template v-if="currentTab === 'my'">
                 <button @click="startEdit(map)" class="action-btn edit">EDIT</button>
                 <button @click="startRename(map)" class="action-btn rename">RENAME</button>
-                <button @click="toggleShare(map)" class="action-btn share">
+                <button 
+                  @click="toggleShare(map)" 
+                  class="action-btn share"
+                  :disabled="!map.autoplayLog || map.autoplayLog.length === 0"
+                  :title="!map.autoplayLog || map.autoplayLog.length === 0 ? 'AI 검증된 맵만 공유 가능' : ''"
+                >
                   {{ map.isShared ? 'PRIVATE' : 'SHARE' }}
                 </button>
                 <button @click="deleteMap(map)" class="action-btn delete">DEL</button>
+              </template>
+              <template v-if="currentTab === 'shared' && map.isVerified">
+                <button @click="openRating(map)" class="action-btn rate">RATE</button>
               </template>
             </div>
         </div>
@@ -61,6 +70,28 @@
             <div class="modal-actions">
               <button @click="renameMap" class="confirm">CONFIRM</button>
               <button @click="renamingMap = null" class="cancel">CANCEL</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rating Modal -->
+        <div v-if="ratingMap" class="rename-modal">
+          <div class="modal-content glass-panel">
+            <h3>RATE_MAP</h3>
+            <p class="rating-info">{{ ratingMap.title }}</p>
+            <div class="rating-slider-container">
+              <input 
+                type="range" 
+                min="1" 
+                max="30" 
+                v-model.number="newRating" 
+                class="rating-slider"
+              >
+              <span class="rating-value" :style="{ color: getDiffColor(newRating) }">{{ newRating }}</span>
+            </div>
+            <div class="modal-actions">
+              <button @click="submitRating" class="confirm">SUBMIT</button>
+              <button @click="ratingMap = null" class="cancel">CANCEL</button>
             </div>
           </div>
         </div>
@@ -90,6 +121,8 @@ const maps = ref<any[]>([]);
 const loading = ref(true);
 const renamingMap = ref<any>(null);
 const newTitle = ref('');
+const ratingMap = ref<any>(null);
+const newRating = ref(15);
 
 const fetchMaps = async () => {
   loading.value = true;
@@ -171,9 +204,30 @@ const toggleShare = async (map: any) => {
 };
 
 const getDiffColor = (d: number) => {
-  if (d < 4) return '#00ff88';
-  if (d < 7) return '#ffff00';
+  if (d < 8) return '#00ff88';
+  if (d < 16) return '#ffff00';
+  if (d < 24) return '#ff8800';
   return '#ff4444';
+};
+
+const openRating = (map: any) => {
+  ratingMap.value = map;
+  newRating.value = Math.round(map.rating) || 15;
+};
+
+const submitRating = async () => {
+  if (!ratingMap.value) return;
+  try {
+    const updated: any = await $fetch(`/api/maps/${ratingMap.value._id}/rate`, {
+      method: 'POST',
+      body: { rating: newRating.value }
+    });
+    ratingMap.value.rating = updated.rating;
+    ratingMap.value.ratingCount = updated.ratingCount;
+    ratingMap.value = null;
+  } catch (e) {
+    alert("Rating failed.");
+  }
 };
 
 watch(currentTab, fetchMaps);
@@ -412,5 +466,63 @@ onMounted(fetchMaps);
   padding: 5rem;
   color: #555;
   letter-spacing: 2px;
+}
+
+.verified-tag {
+  color: #00ffaa;
+  font-weight: 700;
+  font-size: 0.75rem;
+  background: rgba(0, 255, 170, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.action-btn.rate {
+  background: linear-gradient(135deg, #ffaa00 0%, #ff6600 100%);
+  color: #000;
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rating-info {
+  color: #888;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.rating-slider-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.rating-slider {
+  -webkit-appearance: none;
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  outline: none;
+}
+
+.rating-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.rating-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  min-width: 40px;
+  text-align: center;
 }
 </style>
