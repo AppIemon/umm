@@ -1,15 +1,16 @@
+import { connectDB } from '~/server/utils/db'
 import { User } from '~/server/models/User'
-import mongoose from 'mongoose'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { username, password } = body
 
-  // Ensure DB is connected before proceeding
-  if (mongoose.connection.readyState !== 1) {
+  try {
+    await connectDB()
+  } catch (e: any) {
     throw createError({
       statusCode: 503,
-      statusMessage: 'Database connection is not ready. Please check if MONGODB_URI is correct and IP is whitelisted (0.0.0.0/0).'
+      statusMessage: 'DB Connection Error: ' + e.message
     })
   }
 

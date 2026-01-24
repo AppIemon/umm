@@ -1,4 +1,6 @@
 import ytdl from '@distube/ytdl-core';
+import fs from 'fs';
+import path from 'path';
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -12,8 +14,47 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    // Create an agent to maintain session
-    const agent = ytdl.createAgent(undefined);
+    // Attempt to load cookies
+    let agent;
+    const cookiesJsonPath = path.resolve(process.cwd(), 'youtube-cookies.json');
+    const cookiesTxtPath = path.resolve(process.cwd(), 'youtube-cookies.txt');
+
+    if (fs.existsSync(cookiesJsonPath)) {
+      try {
+        const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, 'utf8'));
+        agent = ytdl.createAgent(cookies);
+        console.log('[YouTube] Using cookies from JSON');
+      } catch (e) {
+        console.error('[YouTube] Failed to parse cookies JSON:', e);
+      }
+    } else if (fs.existsSync(cookiesTxtPath)) {
+      try {
+        const content = fs.readFileSync(cookiesTxtPath, 'utf8');
+        const cookies: any[] = [];
+        content.split('\n').forEach(line => {
+          if (!line || line.startsWith('#')) return;
+          const parts = line.split('\t');
+          if (parts.length >= 7) {
+            cookies.push({
+              domain: parts[0],
+              path: parts[2],
+              secure: parts[3] === 'TRUE',
+              expirationDate: parseInt(parts[4]),
+              name: parts[5],
+              value: parts[6].trim()
+            });
+          }
+        });
+        agent = ytdl.createAgent(cookies);
+        console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+      } catch (e) {
+        console.error('[YouTube] Failed to parse cookies txt:', e);
+      }
+    }
+
+    if (!agent) {
+      agent = ytdl.createAgent();
+    }
 
     const requestOptions = {
       headers: {
@@ -55,9 +96,15 @@ export default defineEventHandler(async (event) => {
       status: error.status,
       url: url
     });
+
+    let message = error.message;
+    if (message.includes('confirm you are not a bot') || message.includes('로그인하여 봇이 아님을 확인하세요')) {
+      message = 'YouTube is blocking the request. Please provide cookies in youtube-cookies.json or try again later.';
+    }
+
     throw createError({
       statusCode: (error.statusCode && error.statusCode >= 400 && error.statusCode < 600) ? error.statusCode : 500,
-      statusMessage: `Failed to process YouTube video: ${error.message}`
+      statusMessage: `Failed to process YouTube video: ${message}`
     });
   }
 });

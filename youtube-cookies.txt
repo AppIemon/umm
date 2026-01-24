@@ -1,0 +1,5 @@
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+192.168.0.70	FALSE	/	FALSE	1769839720	auth_user	%7B%22_id%22%3A%22697375077a8972c8774f4974%22%2C%22username%22%3A%22%EC%95%A0%ED%94%8C%EB%AA%AC%22%2C%22displayName%22%3A%22%EC%95%A0%ED%94%8C%EB%AA%AC%22%2C%22rating%22%3A1000%2C%22matchHistory%22%3A%5B%5D%2C%22isGuest%22%3Afalse%7D

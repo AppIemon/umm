@@ -1,12 +1,13 @@
 import process from 'node:process';globalThis._importMeta_={url:import.meta.url,env:process.env};import { tmpdir } from 'node:os';
 import { Server } from 'node:http';
-import { resolve, dirname, join } from 'node:path';
+import path, { resolve, dirname, join } from 'node:path';
 import nodeCrypto from 'node:crypto';
 import { parentPort, threadId } from 'node:worker_threads';
 import { defineEventHandler, handleCacheHeaders, splitCookiesString, createEvent, fetchWithEvent, isEvent, eventHandler, setHeaders, sendRedirect, proxyRequest, getRequestHeader, setResponseHeaders, setResponseStatus, send, getRequestHeaders, setResponseHeader, appendResponseHeader, getRequestURL, getResponseHeader, removeResponseHeader, createError, getQuery as getQuery$1, readBody, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getResponseStatus, getRouterParam, setCookie, deleteCookie, getCookie, sendStream, getResponseStatusText } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/h3/dist/index.mjs';
 import { escapeHtml } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/@vue/shared/dist/shared.cjs.js';
 import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
 import ytdl from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/@distube/ytdl-core/lib/index.js';
+import fs, { promises } from 'node:fs';
 import { createRenderer, getRequestDependencies, getPreloadLinks, getPrefetchLinks } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { parseURL, withoutBase, joinURL, getQuery, withQuery, withTrailingSlash, decodePath, withLeadingSlash, withoutTrailingSlash, joinRelativeURL } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/ufo/dist/index.mjs';
 import destr, { destr as destr$1 } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/destr/dist/index.mjs';
@@ -33,7 +34,6 @@ import { SourceMapConsumer } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%E
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getContext } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/unctx/dist/index.mjs';
 import { captureRawStackTrace, parseRawStackTrace } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/errx/dist/index.js';
-import { promises } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname as dirname$1, resolve as resolve$1 } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/pathe/dist/index.mjs';
 import { walkResolver } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/unhead/dist/utils.mjs';
@@ -1448,35 +1448,45 @@ function defineNitroPlugin(def) {
 
 mongoose.set("bufferCommands", false);
 let cachedPromise = null;
-const _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk = defineNitroPlugin(async (nitroApp) => {
-  const config = useRuntimeConfig();
+const connectDB = async () => {
   if (mongoose.connection.readyState === 1) {
-    return;
+    return mongoose.connection;
   }
   if (!cachedPromise) {
+    const config = useRuntimeConfig();
     const uri = config.mongodbUri;
     if (!uri) {
-      console.error("[Nitro] DB ERROR: MONGODB_URI is empty");
-      return;
+      throw new Error("MONGODB_URI is not defined in runtime config");
     }
     const opts = {
       bufferCommands: false,
-      // Disable buffering to catch connection issues early
       serverSelectionTimeoutMS: 5e3,
       connectTimeoutMS: 1e4
     };
+    console.log("[DB] Connecting to MongoDB...");
     cachedPromise = mongoose.connect(uri, opts).then((m) => {
-      console.log("[Nitro] Successfully connected to MongoDB Atlas");
+      console.log("[DB] Connected");
       return m;
     }).catch((err) => {
       cachedPromise = null;
-      console.error("[Nitro] DB Connection Error:", err.message);
+      console.error("[DB] Error:", err.message);
       throw err;
     });
   }
   try {
     await cachedPromise;
+    return mongoose.connection;
   } catch (e) {
+    cachedPromise = null;
+    throw e;
+  }
+};
+
+const _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk = defineNitroPlugin(async (nitroApp) => {
+  try {
+    await connectDB();
+  } catch (e) {
+    console.error("[Nitro Plugin] DB Init Error:", e);
   }
 });
 
@@ -1489,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"1a94f-zgCaPVi2D9G4c3EKm0L/6YYa6xc\"",
-    "mtime": "2026-01-24T06:26:14.159Z",
-    "size": 108879,
+    "etag": "\"1ae5a-BdQow+C12ttNIfiJc9H3q+KmqiQ\"",
+    "mtime": "2026-01-24T06:34:32.936Z",
+    "size": 110170,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"626bb-U62Tc94bzYYdDECViUVhr29yjJQ\"",
-    "mtime": "2026-01-24T06:26:14.159Z",
-    "size": 403131,
+    "etag": "\"637d3-7785SS5qkdxF8Mm9wF7ndkFYeOI\"",
+    "mtime": "2026-01-24T06:34:32.936Z",
+    "size": 407507,
     "path": "index.mjs.map"
   }
 };
@@ -1588,6 +1598,20 @@ const _ps_ONP = eventHandler((event) => {
     setResponseHeader(event, "Content-Length", asset.size);
   }
   return readAsset(id);
+});
+
+const _GI7qvb = defineEventHandler(async (event) => {
+  if (event.path.startsWith("/api/")) {
+    try {
+      await connectDB();
+    } catch (e) {
+      console.error("[DB Middleware] Error:", e.message);
+      throw createError({
+        statusCode: 503,
+        statusMessage: "Service Unavailable: Database connection failed. " + e.message
+      });
+    }
+  }
 });
 
 const VueResolver = (_, value) => {
@@ -1928,6 +1952,7 @@ const _lazy_Lesw2n = () => Promise.resolve().then(function () { return renderer$
 
 const handlers = [
   { route: '', handler: _ps_ONP, lazy: false, middleware: true, method: undefined },
+  { route: '', handler: _GI7qvb, lazy: false, middleware: true, method: undefined },
   { route: '/api/auth/login', handler: _lazy_QlGAJG, lazy: true, middleware: false, method: "post" },
   { route: '/api/auth/logout', handler: _lazy_7tLEHb, lazy: true, middleware: false, method: "post" },
   { route: '/api/auth/me', handler: _lazy_Wwtgsn, lazy: true, middleware: false, method: "get" },
@@ -2331,10 +2356,12 @@ const User = mongoose.models.User || mongoose.model("User", userSchema);
 const login_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { username, password } = body;
-  if (mongoose.connection.readyState !== 1) {
+  try {
+    await connectDB();
+  } catch (e) {
     throw createError({
       statusCode: 503,
-      statusMessage: "Database connection is not ready. Please check if MONGODB_URI is correct and IP is whitelisted (0.0.0.0/0)."
+      statusMessage: "DB Connection Error: " + e.message
     });
   }
   if (!username || !password) {
@@ -2410,10 +2437,12 @@ const me_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
 const register_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { username, password, displayName } = body;
-  if (mongoose.connection.readyState !== 1) {
+  try {
+    await connectDB();
+  } catch (e) {
     throw createError({
       statusCode: 503,
-      statusMessage: "Database connection is not ready. Please verify MONGODB_URI and IP whitelist."
+      statusMessage: "DB Connection Error: " + e.message
     });
   }
   if (!username || !password || !displayName) {
@@ -2678,10 +2707,12 @@ const _id__patch$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProper
 const index_get = defineEventHandler(async (event) => {
   const query = getQuery$1(event);
   const { creator, shared } = query;
-  if (mongoose.connection.readyState !== 1) {
+  try {
+    await connectDB();
+  } catch (e) {
     throw createError({
       statusCode: 503,
-      statusMessage: "DB Connection Lagging. Please try again or check Atlas IP Whitelist."
+      statusMessage: "DB Connection Error. Please check Atlas IP Whitelist (0.0.0.0/0). " + e.message
     });
   }
   const filter = {};
@@ -2943,7 +2974,44 @@ const youtube_post = defineEventHandler(async (event) => {
     });
   }
   try {
-    const agent = ytdl.createAgent(void 0);
+    let agent;
+    const cookiesJsonPath = path.resolve(process.cwd(), "youtube-cookies.json");
+    const cookiesTxtPath = path.resolve(process.cwd(), "youtube-cookies.txt");
+    if (fs.existsSync(cookiesJsonPath)) {
+      try {
+        const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, "utf8"));
+        agent = ytdl.createAgent(cookies);
+        console.log("[YouTube] Using cookies from JSON");
+      } catch (e) {
+        console.error("[YouTube] Failed to parse cookies JSON:", e);
+      }
+    } else if (fs.existsSync(cookiesTxtPath)) {
+      try {
+        const content = fs.readFileSync(cookiesTxtPath, "utf8");
+        const cookies = [];
+        content.split("\n").forEach((line) => {
+          if (!line || line.startsWith("#")) return;
+          const parts = line.split("	");
+          if (parts.length >= 7) {
+            cookies.push({
+              domain: parts[0],
+              path: parts[2],
+              secure: parts[3] === "TRUE",
+              expirationDate: parseInt(parts[4]),
+              name: parts[5],
+              value: parts[6].trim()
+            });
+          }
+        });
+        agent = ytdl.createAgent(cookies);
+        console.log(`[YouTube] Using cookies from txt (${cookies.length} cookies)`);
+      } catch (e) {
+        console.error("[YouTube] Failed to parse cookies txt:", e);
+      }
+    }
+    if (!agent) {
+      agent = ytdl.createAgent();
+    }
     const requestOptions = {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
@@ -2977,9 +3045,13 @@ const youtube_post = defineEventHandler(async (event) => {
       status: error.status,
       url
     });
+    let message = error.message;
+    if (message.includes("confirm you are not a bot") || message.includes("\uB85C\uADF8\uC778\uD558\uC5EC \uBD07\uC774 \uC544\uB2D8\uC744 \uD655\uC778\uD558\uC138\uC694")) {
+      message = "YouTube is blocking the request. Please provide cookies in youtube-cookies.json or try again later.";
+    }
     throw createError({
       statusCode: error.statusCode && error.statusCode >= 400 && error.statusCode < 600 ? error.statusCode : 500,
-      statusMessage: `Failed to process YouTube video: ${error.message}`
+      statusMessage: `Failed to process YouTube video: ${message}`
     });
   }
 });

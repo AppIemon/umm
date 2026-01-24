@@ -1,14 +1,16 @@
+import { connectDB } from '~/server/utils/db'
 import { GameMap } from '~/server/models/Map'
-import mongoose from 'mongoose'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const { creator, shared } = query
 
-  if (mongoose.connection.readyState !== 1) {
+  try {
+    await connectDB()
+  } catch (e: any) {
     throw createError({
       statusCode: 503,
-      statusMessage: 'DB Connection Lagging. Please try again or check Atlas IP Whitelist.'
+      statusMessage: 'DB Connection Error. Please check Atlas IP Whitelist (0.0.0.0/0). ' + e.message
     })
   }
 
