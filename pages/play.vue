@@ -594,6 +594,7 @@ const initFromQuery = async () => {
        // View-only mode for maps with no audio config
        await handleMapOnlyStart(targetMap);
     }
+    }
   } catch (e) {
     console.error("Failed to load map:", e);
   } finally {
