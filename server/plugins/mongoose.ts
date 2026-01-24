@@ -1,5 +1,8 @@
 import mongoose from 'mongoose'
 
+// Explicitly disable buffering globally to prevent 10s hangs in serverless
+mongoose.set('bufferCommands', false);
+
 /**
  * Caching connection for serverless longevity
  */

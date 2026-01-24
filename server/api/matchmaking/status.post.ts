@@ -26,9 +26,9 @@ export default defineEventHandler(async (event) => {
   // Find opponent
   const opponent = match.players.find(p => p.userId !== userId)
 
-  // If status is 'ready', fetch map data for the client
+  // If status is 'ready', fetch map data for the client (only once at start)
   let mapData = null
-  if (match.status === 'ready' || match.status === 'playing') {
+  if (match.status === 'ready') {
     mapData = await GameMap.findById(match.map)
   }
 

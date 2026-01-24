@@ -129,6 +129,11 @@ const computingProgress = ref(0);
 const isMapValidated = ref(false);
 let autoRetryTimer: any = null;
 
+// Multiplayer Interpolation
+const interpOpponentY = ref(360);
+const interpOpponentProgress = ref(0);
+const interpolationFactor = 0.1; // Smoothing speed
+
 // Audio
 let audioCtx: AudioContext | null = null;
 let audioSource: AudioBufferSourceNode | null = null;
@@ -437,6 +442,14 @@ const update = () => {
       y: engine.value.playerY,
       ghostProgress: props.opponentProgress || 0
     });
+
+    // Interpolate opponent position
+    const targetY = props.opponentY !== undefined ? props.opponentY : 360;
+    const targetProg = props.opponentProgress || 0;
+    
+    // Smooth transition (Lerp)
+    interpOpponentY.value += (targetY - interpOpponentY.value) * interpolationFactor;
+    interpOpponentProgress.value += (targetProg - interpOpponentProgress.value) * interpolationFactor;
   }
 };
 const draw = () => {
@@ -853,9 +866,9 @@ const draw = () => {
   
   // Draw Ghost (Opponent)
   if (props.multiplayerMode) {
-    const oppProg = props.opponentProgress || 0;
+    const oppProg = interpOpponentProgress.value;
     const ghostX = (oppProg / 100) * engine.value.totalLength;
-    const ghostY = props.opponentY !== undefined ? props.opponentY : 360;
+    const ghostY = interpOpponentY.value;
 
     ctx.save();
     // 가상 플레이어 그리기 (멀티플레이어 상대방)

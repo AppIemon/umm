@@ -306,7 +306,7 @@ async function startGame() {
         opponentY.value = res.opponent.y;
       }
     } catch(e) {}
-  }, 500); // Poll faster during play
+  }, 200); // Poll faster during play
 }
 
 function updateProgress(data: { progress: number, ghostProgress: number, y: number }) {
