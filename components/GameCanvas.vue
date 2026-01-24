@@ -101,6 +101,8 @@ const props = defineProps<{
   isViewOnly?: boolean; // 맵 탭에서 확인용
   multiplayerMode?: boolean; // 멀티플레이어 레이싱 모드
   difficulty?: number; // 외부에서 전달받은 난이도
+  opponentY?: number;
+  opponentProgress?: number;
 }>();
 
 const emit = defineEmits(['retry', 'exit', 'complete', 'map-ready', 'progress-update']);
@@ -430,19 +432,10 @@ const update = () => {
     // Player progress
     const currentProgress = (engine.value.playerX / engine.value.totalLength) * 100;
     
-    // Ghost (Opponent) progress simulation
-    // The ghost follows the track time perfectly (60fps simulation)
-    const ghostIndex = Math.floor((currentTrackTime.value || 0) * 60);
-    const ghostLogEntry = engine.value.autoplayLog[ghostIndex] || 
-                          engine.value.autoplayLog[engine.value.autoplayLog.length - 1];
-    
-    const ghostX = ghostLogEntry ? ghostLogEntry.x : 0;
-    const ghostProgress = engine.value.totalLength > 0 ? 
-      Math.min(100, (ghostX / engine.value.totalLength) * 100) : 0;
-
     emit('progress-update', {
       progress: Math.min(100, currentProgress),
-      ghostProgress: Math.min(100, ghostProgress)
+      y: engine.value.playerY,
+      ghostProgress: props.opponentProgress || 0
     });
   }
 };
@@ -858,39 +851,35 @@ const draw = () => {
     ctx.shadowBlur = 0;
   }
   
-  // Draw Ghost (Validated route)
-  if (props.multiplayerMode && engine.value.autoplayLog.length > 0) {
-    // 고스트 실시간 위치 추적 (시간 기준)
-    const ghostIndex = Math.floor((currentTrackTime.value || 0) * 60);
-    const ghostLog = engine.value.autoplayLog[ghostIndex] || 
-                     engine.value.autoplayLog[engine.value.autoplayLog.length - 1];
-    if (ghostLog) {
-      ctx.save();
-      // 가상 플레이어 그리기 (멀티플레이어 상대방)
-      ctx.fillStyle = props.multiplayerMode ? 'rgba(255, 0, 255, 0.8)' : 'rgba(255, 255, 255, 0.3)';
-      ctx.shadowBlur = props.multiplayerMode ? 20 : 15;
-      ctx.shadowColor = props.multiplayerMode ? '#ff00ff' : '#ffffff';
-      
-      const size = props.multiplayerMode ? 35 : 30;
-      ctx.translate(ghostLog.x, ghostLog.y); // FIXED: Use actual Y from log
-      
-      // Draw a small wave shape for opponent
-      ctx.beginPath();
-      ctx.moveTo(size/2, 0);
-      ctx.lineTo(-size/3, -size/3);
-      ctx.lineTo(-size/6, 0);
-      ctx.lineTo(-size/3, size/3);
-      ctx.closePath();
-      ctx.fill();
-      
-      if (props.multiplayerMode) {
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Outfit';
-        ctx.textAlign = 'center';
-        ctx.fillText('OPPONENT', 0, -30);
-      }
-      ctx.restore();
-    }
+  // Draw Ghost (Opponent)
+  if (props.multiplayerMode) {
+    const oppProg = props.opponentProgress || 0;
+    const ghostX = (oppProg / 100) * engine.value.totalLength;
+    const ghostY = props.opponentY !== undefined ? props.opponentY : 360;
+
+    ctx.save();
+    // 가상 플레이어 그리기 (멀티플레이어 상대방)
+    ctx.fillStyle = 'rgba(255, 0, 255, 0.8)';
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#ff00ff';
+    
+    const size = 35;
+    ctx.translate(ghostX, ghostY);
+    
+    // Draw a small wave shape for opponent
+    ctx.beginPath();
+    ctx.moveTo(size/2, 0);
+    ctx.lineTo(-size/3, -size/3);
+    ctx.lineTo(-size/6, 0);
+    ctx.lineTo(-size/3, size/3);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 16px Outfit';
+    ctx.textAlign = 'center';
+    ctx.fillText('OPPONENT', 0, -30);
+    ctx.restore();
   }
   
   // Draw particles

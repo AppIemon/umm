@@ -21,6 +21,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const userData = {
+      _id: user._id,
       username: user.username,
       displayName: user.displayName,
       rating: user.rating,

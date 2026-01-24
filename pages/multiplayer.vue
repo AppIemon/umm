@@ -111,6 +111,8 @@
         :sections="sections"
         :loadMap="selectedMap"
         :multiplayerMode="true"
+        :opponentY="opponentY"
+        :opponentProgress="opponentProgress"
         @retry="startGame" 
         @exit="handleRoundFinish" 
         @progress-update="updateProgress"
@@ -138,6 +140,8 @@ const selectedCategory = ref('');
 
 const playerProgress = ref(0);
 const opponentProgress = ref(0);
+const playerY = ref(360);
+const opponentY = ref(360);
 const results = ref({ p1: 0, p2: 0 });
 const winner = ref<'player' | 'opponent' | 'draw'>('draw');
 
@@ -155,6 +159,22 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearInterval(matchTimer);
+  clearInterval(statusInterval);
+});
+
+const matchId = ref<string | null>(null);
+let statusInterval: any = null;
+
+// Unique ID for the current session (to support guests in matchmaking)
+const playerId = computed(() => {
+  if (user.value?._id) return user.value._id;
+  
+  let tid = sessionStorage.getItem('umm_player_id');
+  if (!tid) {
+    tid = 'guest_' + Math.random().toString(36).substring(2, 15);
+    sessionStorage.setItem('umm_player_id', tid);
+  }
+  return tid;
 });
 
 async function startMatchmaking(category: string) {
@@ -167,39 +187,35 @@ async function startMatchmaking(category: string) {
       method: 'POST',
       body: {
         category: category,
-        rating: user.value?.rating || 1000
+        rating: user.value?.rating || 1000,
+        userId: playerId.value
       }
     });
 
-    if (!response || !response.map) {
-      throw new Error("No opponent found.");
-    }
+    matchId.value = response.matchId;
 
-    selectedMap.value = response.map;
-    opponentName.value = response.opponent?.username || 'GHOST';
-    
-    // Auto-load audio if available
-    matchStatus.value = 'DOWNLOADING BATTLE TRACK...';
-    
-    if (selectedMap.value.audioData || selectedMap.value.audioUrl) {
-       try {
-         let arrayBuffer: ArrayBuffer | null = null;
+    if (response.status === 'ready') {
+      setupMatch(response);
+    } else {
+      // Start polling for opponent
+      statusInterval = setInterval(async () => {
+        try {
+          const statusRes: any = await $fetch('/api/matchmaking/status', {
+            method: 'POST',
+            body: {
+              matchId: matchId.value,
+              userId: playerId.value
+            }
+          });
 
-         if (selectedMap.value.audioData) {
-            const res = await fetch(selectedMap.value.audioData);
-            arrayBuffer = await res.arrayBuffer();
-         } else if (selectedMap.value.audioUrl) {
-            const res = await fetch(selectedMap.value.audioUrl);
-            arrayBuffer = await res.arrayBuffer();
-         }
-
-         if (arrayBuffer) {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-         }
-       } catch (e) {
-         console.warn("Could not auto-load audio, using silent buffer", e);
-       }
+          if (statusRes.status === 'ready' || statusRes.status === 'playing') {
+            clearInterval(statusInterval);
+            setupMatch(statusRes);
+          }
+        } catch (pollError) {
+          console.error("Polling error", pollError);
+        }
+      }, 2000);
     }
   } catch (e: any) {
     console.error("Matchmaking failed", e);
@@ -207,8 +223,35 @@ async function startMatchmaking(category: string) {
     setTimeout(() => step.value = 'MODESELECT', 4000);
     return;
   }
+}
 
+async function setupMatch(data: any) {
+  selectedMap.value = data.map;
+  opponentName.value = data.opponent?.username || 'GHOST';
+  
+  // Auto-load audio if available
+  matchStatus.value = 'DOWNLOADING BATTLE TRACK...';
+  
+  if (selectedMap.value.audioData || selectedMap.value.audioUrl) {
+     try {
+       let arrayBuffer: ArrayBuffer | null = null;
 
+       if (selectedMap.value.audioData) {
+          const res = await fetch(selectedMap.value.audioData);
+          arrayBuffer = await res.arrayBuffer();
+       } else if (selectedMap.value.audioUrl) {
+          const res = await fetch(selectedMap.value.audioUrl);
+          arrayBuffer = await res.arrayBuffer();
+       }
+
+       if (arrayBuffer) {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+       }
+     } catch (e) {
+       console.warn("Could not auto-load audio, using silent buffer", e);
+     }
+  }
 
   matchStatus.value = 'OPPONENT FOUND: SYNCHRONIZING...';
   await new Promise(r => setTimeout(r, 1000));
@@ -244,12 +287,31 @@ async function startGame() {
       handleTimeout();
     }
   }, 1000);
+
+  // Start Progress Sync Loop
+  clearInterval(statusInterval);
+  statusInterval = setInterval(async () => {
+    try {
+      const res: any = await $fetch('/api/matchmaking/status', {
+        method: 'POST',
+        body: {
+          matchId: matchId.value,
+          userId: playerId.value,
+          progress: playerProgress.value,
+          y: playerY.value
+        }
+      });
+      if (res.opponent) {
+        opponentProgress.value = res.opponent.progress;
+        opponentY.value = res.opponent.y;
+      }
+    } catch(e) {}
+  }, 500); // Poll faster during play
 }
 
-function updateProgress(data: { progress: number, ghostProgress: number }) {
+function updateProgress(data: { progress: number, ghostProgress: number, y: number }) {
   playerProgress.value = data.progress;
-  // Opponent progress is provided by GameCanvas which simulates it based on map's autoplay log
-  opponentProgress.value = data.ghostProgress;
+  playerY.value = data.y;
   
   // Instant clear detection
   if (playerProgress.value >= 100) {

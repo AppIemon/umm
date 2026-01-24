@@ -3,8 +3,8 @@
     <!-- Tabs -->
     <div class="tabs">
       <button :class="{ active: mode === 'upload' }" @click="mode = 'upload'">UPLOAD</button>
-      <button :class="{ active: mode === 'storage' }" @click="mode = 'storage'">STORAGE</button>
       <button :class="{ active: mode === 'youtube' }" @click="mode = 'youtube'">YOUTUBE</button>
+      <button :class="{ active: mode === 'storage' }" @click="mode = 'storage'">STORAGE</button>
     </div>
 
     <!-- Upload Mode -->
@@ -19,11 +19,6 @@
         <p v-else class="highlight">{{ selectedFile.name }}</p>
       </div>
       <input type="file" ref="fileInput" accept="audio/*" style="display:none" @change="handleFileSelect" />
-      <div class="save-option" v-if="selectedFile">
-        <label>
-          <input type="checkbox" v-model="saveToStorage" /> Save to Storage?
-        </label>
-      </div>
     </div>
 
     <!-- YouTube Mode -->
@@ -47,20 +42,23 @@
     </div>
 
     <!-- Storage Mode -->
-    <div v-else-if="mode === 'storage'" class="tab-content storage-list">
-      <div v-if="songs.length === 0" class="empty">No songs in storage</div>
-      <div 
-        v-for="song in songs" 
-        :key="song.id" 
-        class="storage-item"
-        :class="{ selected: selectedSongId === song.id }"
-        @click="selectStoredSong(song)"
-      >
-        {{ song.name }}
+    <div v-else-if="mode === 'storage'" class="tab-content">
+      <div v-if="storageItems.length > 0" class="storage-list">
+        <div 
+          v-for="item in storageItems" 
+          :key="item.id" 
+          class="storage-item" 
+          :class="{ selected: selectedStorageItem?.id === item.id }"
+          @click="selectStorageItem(item)"
+        >
+          <span class="name">{{ item.name }}</span>
+          <span class="date">{{ new Date(item.timestamp).toLocaleDateString() }}</span>
+        </div>
       </div>
+      <p v-else class="empty-msg">NO RECENT DATA FOUND</p>
     </div>
 
-    <button class="confirm-btn" :disabled="!currentSelection || isYoutubeLoading" @click="confirm">
+    <button class="confirm-btn" :disabled="(!currentSelection && !selectedStorageItem) || isYoutubeLoading" @click="confirm">
       SELECT
     </button>
   </div>
@@ -70,16 +68,37 @@
 import { ref, watch, onMounted } from 'vue';
 
 const emit = defineEmits(['select']);
-const mode = ref<'upload' | 'storage' | 'youtube'>('upload');
-const { saveSong, getSongs } = useSongStorage();
+const mode = ref<'upload' | 'youtube'>('upload');
 
 const selectedFile = ref<File | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
-const saveToStorage = ref(false);
 
-const songs = ref<StoredSong[]>([]);
-const selectedSongId = ref<string | null>(null);
 const currentSelection = ref<File | null>(null);
+
+// Storage logic
+const storageItems = ref<any[]>([]);
+const selectedStorageItem = ref<any>(null);
+
+function loadStorage() {
+  const data = localStorage.getItem('umm_recent_maps');
+  if (data) {
+    try {
+      storageItems.value = JSON.parse(data).sort((a: any, b: any) => b.timestamp - a.timestamp);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
+
+onMounted(loadStorage);
+watch(mode, (newMode) => {
+  if (newMode === 'storage') loadStorage();
+});
+
+function selectStorageItem(item: any) {
+  selectedStorageItem.value = item;
+  currentSelection.value = null; // Clear file selection
+}
 
 // YouTube refs
 const youtubeUrl = ref('');
@@ -112,9 +131,6 @@ async function fetchYoutube() {
     if (contentDisposition) {
         const match = contentDisposition.match(/filename="?(.+)"?/);
         if (match && match[1]) filename = match[1];
-    } else {
-        // Construct basic name from ID or something? 
-        // We can just use "YouTube Audio"
     }
 
     const blob = await response.blob();
@@ -128,10 +144,6 @@ async function fetchYoutube() {
     isYoutubeLoading.value = false;
   }
 }
-
-onMounted(async () => {
-  songs.value = await getSongs();
-});
 
 function triggerFileInput() {
   fileInput.value?.click();
@@ -149,27 +161,15 @@ function handleDrop(e: DragEvent) {
 function handleFile(file: File) {
   selectedFile.value = file;
   currentSelection.value = file;
-  selectedSongId.value = null; // Reset storage selection
-}
-
-async function selectStoredSong(song: StoredSong) {
-  selectedSongId.value = song.id;
-  // Convert blob to File if needed, or just keep as Blob. 
-  // API expects File usually but Blob is fine for audio context.
-  // StoredSong.blob is stored as Blob/File.
-  currentSelection.value = song.blob as File;
-  selectedFile.value = null; // Reset upload selection
+  selectedStorageItem.value = null; // Clear storage selection
 }
 
 async function confirm() {
-  if (!currentSelection.value) return;
-  
-  if (mode.value === 'upload' && saveToStorage.value && selectedFile.value) {
-    await saveSong(selectedFile.value);
-    songs.value = await getSongs(); // refresh
+  if (mode.value === 'storage' && selectedStorageItem.value) {
+    emit('select', { type: 'storage', data: selectedStorageItem.value });
+  } else if (currentSelection.value) {
+    emit('select', currentSelection.value);
   }
-
-  emit('select', currentSelection.value);
 }
 </script>
 

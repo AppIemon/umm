@@ -68,7 +68,7 @@
       :loadMap="loadedMapData"
       :difficulty="difficulty"
       @retry="startGame"
-      @exit="step = 'upload'"
+      @exit="handleExit"
       @map-ready="handleMapReady"
     />
   </div>
@@ -103,6 +103,7 @@ const validationFailure = ref<any>(null);
 const failCanvas = ref<HTMLCanvasElement | null>(null);
 const { user } = useAuth();
 const route = useRoute();
+const router = useRouter();
 
 // Difficulty
 const difficulty = ref(10);
@@ -121,7 +122,26 @@ const getDifficultyColor = (d: number) => {
 };
 
 
-const handleSongSelect = async (file: File) => {
+const handleSongSelect = async (input: File | { type: string, data: any }) => {
+  if ('type' in input && input.type === 'storage') {
+     const item = input.data;
+     loadedMapData.value = item.mapData;
+     obstacles.value = item.mapData.beatTimes;
+     sections.value = item.mapData.sections;
+     difficulty.value = item.mapData.difficulty;
+     
+     if (item.mapData.audioData) {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const res = await fetch(item.mapData.audioData);
+        const arrayBuffer = await res.arrayBuffer();
+        audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+     }
+     
+     step.value = 'play';
+     return;
+  }
+
+  const file = input as File;
   selectedSong.value = file;
   isAnalyzing.value = true;
   startTime.value = Date.now();
@@ -174,11 +194,10 @@ const handleSongSelect = async (file: File) => {
           y: Math.floor(tempEngine.validationFailureInfo.y),
           rawObstacles: tempEngine.validationFailureInfo.nearObstacles
         };
-        // 캔버스 업데이트를 위해 다음 틱에 실행
         nextTick(() => drawFailurePreview());
       }
 
-      if (i > 100) break; // 극단적인 안전장치는 유지 (100번)
+      if (i > 100) break; 
     }
 
     if (success) {
@@ -193,9 +212,16 @@ const handleSongSelect = async (file: File) => {
         beatTimes: result.obstacles,
         sections: result.sections,
         bpm: result.bpm,
-        measureLength: result.measureLength
+        measureLength: result.measureLength,
+        audioData: null // We'll fill this if we save to storage
       };
-      // 더 이상 자동으로 저장하지 않음 (사용자의 명시적 요청시에만 저장)
+
+      // Save to local recent storage
+      saveToRecentStorage(loadedMapData.value);
+
+      // --- AUTO-SAVE TO SERVER "MY MAPS" ---
+      handleMapReady(loadedMapData.value);
+      
     } else {
       throw new Error("지나갈 수 있는 맵을 생성하지 못했습니다. 다시 시도해 주세요.");
     }
@@ -211,8 +237,42 @@ const handleSongSelect = async (file: File) => {
   }
 };
 
+const saveToRecentStorage = async (map: any) => {
+  const recent = JSON.parse(localStorage.getItem('umm_recent_maps') || '[]');
+  
+  // If we have selectedSong, we might want to embed for storage fallback
+  let audioData = null;
+  if (selectedSong.value && selectedSong.value.size < 50 * 1024 * 1024) {
+     const reader = new FileReader();
+     audioData = await new Promise((resolve) => {
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(selectedSong.value!);
+     });
+  }
+
+  const item = {
+    id: Date.now(),
+    name: map.title,
+    timestamp: Date.now(),
+    mapData: { ...map, audioData }
+  };
+
+  recent.unshift(item);
+  localStorage.setItem('umm_recent_maps', JSON.stringify(recent.slice(0, 10))); // Keep last 10
+};
+
 const startGame = () => {
   step.value = 'play';
+};
+
+const handleExit = () => {
+  const isTest = sessionStorage.getItem('umm_is_test');
+  if (isTest) {
+    sessionStorage.removeItem('umm_is_test');
+    router.push('/editor');
+  } else {
+    step.value = 'upload';
+  }
 };
 
 const hasSavedCurrentMap = ref(false);
@@ -353,6 +413,39 @@ const handleMapOnlyStart = async (targetMap: any) => {
 };
 
 const initFromQuery = async () => {
+  // 1. Check for map data passed from Maps tab (sessionStorage)
+  const sessionMap = sessionStorage.getItem('umm_load_map');
+  if (sessionMap) {
+    try {
+      const targetMap = JSON.parse(sessionMap);
+      sessionStorage.removeItem('umm_load_map'); // Use once
+      
+      loadedMapData.value = targetMap;
+      obstacles.value = targetMap.beatTimes;
+      sections.value = targetMap.sections;
+      difficulty.value = targetMap.difficulty;
+
+      if (targetMap.audioData) {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const res = await fetch(targetMap.audioData);
+        const arrayBuffer = await res.arrayBuffer();
+        audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+        step.value = 'play';
+        return;
+      } else if (targetMap.audioUrl) {
+         // We still need the song file if audioData is missing
+         console.log("Map session data found but missing audioData. Waiting for user file.");
+      } else {
+         // View-only mode with silent buffer
+         await handleMapOnlyStart(targetMap);
+         return;
+      }
+    } catch (e) {
+      console.error("Failed to parse session map:", e);
+    }
+  }
+
+  // 2. Fallback to existing URL query logic
   const mapId = route.query.map || route.query.mapId;
   if (!mapId) return;
 
@@ -370,7 +463,6 @@ const initFromQuery = async () => {
            let arrayBuffer: ArrayBuffer;
             
            if (targetMap.audioData) {
-             // Load from DB (Base64 Data URL)
              const res = await fetch(targetMap.audioData);
              arrayBuffer = await res.arrayBuffer();
              
@@ -378,15 +470,12 @@ const initFromQuery = async () => {
              audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
              step.value = 'play';
            } else {
-             // If no audioData in DB, we do NOT auto-load.
-             // The UI will show "Map Loaded: [Title]" and ask user to upload the song.
              console.log("Map loaded without audio. Waiting for user file.");
            }
          } catch (e) {
            console.warn("Auto-load failed, waiting for user file", e);
          }
-      } else if (route.query.map || route.query.mapId) {
-         // No audio in DB - start game with silent buffer (view-only mode)
+      } else {
          await handleMapOnlyStart(targetMap);
       }
     }

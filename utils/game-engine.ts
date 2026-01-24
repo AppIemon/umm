@@ -532,9 +532,41 @@ export class GameEngine {
 
       this.patterns.push({
         obstacles: obs,
-        requiredY: 'middle', // 타이밍 맞춰 지나가기
+        requiredY: 'middle',
         width: 300,
         type: 'windmill'
+      });
+    }
+
+    // --- NEW SMALL PATTERNS FOR VARIETY ---
+
+    // 패턴 181-190: 지뢰 군집 (Mine Clusters) - 작고 촘촘하게
+    for (let i = 0; i < 10; i++) {
+      const obs: Pattern['obstacles'] = [];
+      const count = 3 + (i % 3);
+      for (let j = 0; j < count; j++) {
+        obs.push({
+          dx: j * 40, dy: 100 + (j * 80) % (playH - 200),
+          w: 25, h: 25, type: 'mine'
+        });
+      }
+      this.patterns.push({
+        obstacles: obs, requiredY: 'middle', width: count * 40, type: 'mine_cluster'
+      });
+    }
+
+    // 패턴 191-200: 흩어진 오브 (Scattered Orbs)
+    for (let i = 0; i < 10; i++) {
+      const obs: Pattern['obstacles'] = [];
+      const count = 4;
+      for (let j = 0; j < count; j++) {
+        obs.push({
+          dx: j * 50, dy: 50 + (j * 150) % (playH - 100),
+          w: 30, h: 30, type: 'orb'
+        });
+      }
+      this.patterns.push({
+        obstacles: obs, requiredY: 'middle', width: count * 50, type: 'orb_field'
       });
     }
   }
@@ -870,10 +902,55 @@ export class GameEngine {
         const validPatterns = this.getValidPatterns(lastRequiredY, rng, lastPatternType);
         if (validPatterns.length === 0) continue;
 
-        const pattern = validPatterns[Math.floor(rng() * validPatterns.length)]!;
+        // --- WEIGHTED PATTERN SELECTION ---
+        let selectedPattern: Pattern;
+        const roll = rng();
+
+        // 20% Chance: Scattered small hazards instead of a pattern
+        if (roll < 0.20) {
+          const count = 2 + Math.floor(rng() * 3);
+          const playH = this.maxY - this.minY;
+          const types: ObstacleType[] = ['orb', 'mine', 'saw', 'mini_spike', 'spike_ball'];
+
+          for (let j = 0; j < count; j++) {
+            const type = types[Math.floor(rng() * types.length)]!;
+            const dy = 50 + rng() * (playH - 100);
+            const dw = 30 + rng() * 20;
+            this.obstacles.push({
+              x: currentX + j * 50, y: this.minY + dy,
+              width: dw, height: dw, type, initialY: this.minY + dy,
+              movement: { type: 'none' as any, range: 0, speed: 0, phase: 0 }
+            });
+          }
+          lastPatternEndTime = beatTime + (count * 50) / (this.baseSpeed * speedM);
+          continue;
+        }
+
+        // Weighted pick from valid patterns
+        const patternsWithWeight = validPatterns.map(p => {
+          let weight = 1.0;
+          const type = p.type || '';
+          if (type.includes('mine') || type.includes('orb') || type.includes('cluster') || type.includes('field')) weight = 4.0;
+          if (type.includes('mini_spike')) weight = 2.5;
+          if (type === 'square_block' || type === 'corridor') weight = 0.25; // Drastically reduce large blocks
+          return { p, weight };
+        });
+
+        const totalWeight = patternsWithWeight.reduce((sum, item) => sum + item.weight, 0);
+        let rWeight = rng() * totalWeight;
+        selectedPattern = patternsWithWeight[0]!.p;
+        for (const item of patternsWithWeight) {
+          rWeight -= item.weight;
+          if (rWeight <= 0) {
+            selectedPattern = item.p;
+            break;
+          }
+        }
+
+        // --- END WEIGHTED SELECTION ---
 
         // 큰 정사각형 블록(square_block)은 포탈과 최소 900px 이상 떨어뜨림
-        if (pattern.type === 'square_block') {
+        if (selectedPattern.type === 'square_block') {
           const squareBuffer = 900 * speedM;
           if (Math.abs(xPos - lastPortalX) < squareBuffer) continue;
         } else {
@@ -881,17 +958,17 @@ export class GameEngine {
           if (Math.abs(xPos - lastPortalX) < portalMargin) continue;
         }
 
-        this.placePatternWithScale(pattern, xPos, speedM, currentMini, gapScale);
+        this.placePatternWithScale(selectedPattern, xPos, speedM, currentMini, gapScale);
 
-        lastPatternEndTime = beatTime + (pattern.width * gapScale) / (this.baseSpeed * speedM);
-        lastRequiredY = pattern.requiredY;
-        lastPatternType = pattern.type;
+        lastPatternEndTime = beatTime + (selectedPattern.width * gapScale) / (this.baseSpeed * speedM);
+        lastRequiredY = selectedPattern.requiredY;
+        lastPatternType = selectedPattern.type;
 
         // 정사각형 블록 뒤에는 포탈이 즉시 나오지 않도록 거리 확보
-        const portalAfterMargin = pattern.type === 'square_block' ? 600 : 50;
+        const portalAfterMargin = selectedPattern.type === 'square_block' ? 600 : 50;
         if (currentX - lastPortalX > 800 * speedM && rng() < portalFrequency * 2.8) {
           const gravityType: PortalType = rng() > 0.5 ? 'gravity_yellow' : 'gravity_blue';
-          const pWidth = (pattern.width * gapScale);
+          const pWidth = (selectedPattern.width * gapScale);
           this.generatePortalWithType(currentX + pWidth + portalAfterMargin, gravityType, rng);
           lastPortalX = currentX + pWidth + portalAfterMargin;
         }
@@ -918,8 +995,6 @@ export class GameEngine {
   }
 
   private getValidPatterns(lastPos: 'top' | 'middle' | 'bottom', rng: () => number, lastType?: string): Pattern[] {
-    // 이전 위치에서 도달 가능한 패턴만 필터링
-    // 웨이브는 45도로 이동하므로, 급격한 위치 변화는 제한
     const transitions: Record<string, string[]> = {
       'top': ['top', 'middle'],
       'middle': ['top', 'middle', 'bottom'],
@@ -929,7 +1004,6 @@ export class GameEngine {
     const validPositions = transitions[lastPos] || ['middle'];
     let filtered = this.patterns.filter(p => validPositions.includes(p.requiredY));
 
-    // 이전 패턴이 'corridor'였으면 이번에는 제외 (User request)
     if (lastType === 'corridor') {
       filtered = filtered.filter(p => p.type !== 'corridor');
     }
@@ -1251,46 +1325,75 @@ export class GameEngine {
         else preferHold = true;
       }
 
-      // If both options are safe, prefer the midpoint of the local safe zone
+      // If both options are safe, prefer the midpoint of the local gap
       if (isHoldSafe && isReleaseSafe) {
-        // 현재 X 좌표 근처의 안전 영역 계산
-        // 1. 기본 경계: 천장(minY)과 바닥(maxY)
-        let safeTop = this.minY + sz + 10;
-        let safeBottom = this.maxY - sz - 10;
+        // 현재 X 위치에서 모든 장애물의 Y 범위를 수집하여 '장애물 층'을 만듦
+        const barriers: { top: number, bottom: number }[] = [
+          { top: -Infinity, bottom: this.minY }, // 천장 위
+          { top: this.maxY, bottom: Infinity }   // 바닥 아래
+        ];
 
-        // 2. 근처 장애물로 인한 경계 조정
         for (let oi = 0; oi < sortedObs.length; oi++) {
           const o = sortedObs[oi]!;
-          if (o.x + o.width < nX - 30) continue;
-          if (o.x > nX + 200) break;
+          if (o.x + o.width < nX) continue;
+          if (o.x > nX) break;
 
-          // 장애물이 현재 Y 근처에 있는지 확인
-          let currentObsY = o.y;
-          if (o.movement) {
-            const state = this.getObstacleStateAt(o, nT);
-            currentObsY = state.y;
+          const range = this.getObstacleYRangeAt(o, nX, nT);
+          if (range) {
+            barriers.push(range);
           }
+        }
 
-          const obsTop = currentObsY;
-          const obsBottom = currentObsY + o.height;
-          const obsCenterY = (obsTop + obsBottom) / 2;
+        // Y축 기준으로 정렬
+        barriers.sort((a, b) => a.top - b.top);
 
-          // 장애물이 위쪽에 있으면 safeTop을 낮춤
-          if (obsCenterY < curr.y && obsBottom > safeTop) {
-            safeTop = Math.max(safeTop, obsBottom + sz + 5);
+        // 겹치는 barrier 병합하여 실제 '닫힌 구간'들 계산
+        const merged: { top: number, bottom: number }[] = [];
+        if (barriers.length > 0) {
+          let current = { ...barriers[0]! };
+          for (let i = 1; i < barriers.length; i++) {
+            const next = barriers[i]!;
+            if (next.top <= current.bottom) {
+              current.bottom = Math.max(current.bottom, next.bottom);
+            } else {
+              merged.push(current);
+              current = { ...next };
+            }
           }
-          // 장애물이 아래쪽에 있으면 safeBottom을 높임
-          if (obsCenterY > curr.y && obsTop < safeBottom) {
-            safeBottom = Math.min(safeBottom, obsTop - sz - 5);
+          merged.push(current);
+        }
+
+        // '열린 구간(Gap)'들 찾기
+        const gaps: { top: number, bottom: number }[] = [];
+        for (let i = 0; i < merged.length - 1; i++) {
+          gaps.push({
+            top: merged[i]!.bottom,
+            bottom: merged[i + 1]!.top
+          });
+        }
+
+        // 현재 플레이어 Y가 포함된 gap 찾기 (없으면 가장 가까운 gap)
+        let targetGap = gaps[0]!;
+        let minDist = Infinity;
+        for (const gap of gaps) {
+          const mid = (gap.top + gap.bottom) / 2;
+          const dist = Math.abs(curr.y - mid);
+          if (curr.y >= gap.top && curr.y <= gap.bottom) {
+            targetGap = gap;
+            break;
+          }
+          if (dist < minDist) {
+            minDist = dist;
+            targetGap = gap;
           }
         }
 
         // 안전 구간의 중점
-        const targetY = (safeTop + safeBottom) / 2;
+        const targetY = (targetGap.top + targetGap.bottom) / 2;
         const distH = Math.abs(nYH - targetY);
         const distR = Math.abs(nYR - targetY);
 
-        // 안전 구간 중점 선호
+        // 중점 방향으로 이동 선호
         if (distH < distR) {
           preferHold = true;
         } else if (distR < distH) {
@@ -1581,15 +1684,24 @@ export class GameEngine {
   /**
    * 특정 X 좌표에서 장애물의 Y 범위(최상단, 최하단)를 계산
    */
-  private getObstacleYRangeAt(obs: Obstacle, x: number): { top: number, bottom: number } | null {
+  private getObstacleYRangeAt(obs: Obstacle, x: number, time?: number): { top: number, bottom: number } | null {
     if (x < obs.x || x > obs.x + obs.width) return null;
 
+    let obsY = obs.y;
+    let obsAngle = obs.angle || 0;
+
+    if (time !== undefined && obs.movement) {
+      const state = this.getObstacleStateAt(obs, time);
+      obsY = state.y;
+      obsAngle = state.angle;
+    }
+
     if (obs.type === 'block') {
-      if (obs.angle) {
+      if (obsAngle) {
         // 기울어진 블록: 4개의 모서리를 회전시켜 X가 지나는 선분과의 교점 탐색
-        const angleRad = (obs.angle * Math.PI) / 180;
+        const angleRad = (obsAngle * Math.PI) / 180;
         const cx = obs.x + obs.width / 2;
-        const cy = obs.y + obs.height / 2;
+        const cy = obsY + obs.height / 2;
         const cos = Math.cos(angleRad);
         const sin = Math.sin(angleRad);
 
@@ -1623,28 +1735,28 @@ export class GameEngine {
         }
         return intersects ? { top: minY, bottom: maxY } : null;
       }
-      return { top: obs.y, bottom: obs.y + obs.height };
+      return { top: obsY, bottom: obsY + obs.height };
     }
 
     if (obs.type === 'spike' || obs.type === 'mini_spike') {
-      const isBottomSpike = obs.y > 330;
+      const isBottomSpike = obsY > 330;
       const centerX = obs.x + obs.width / 2;
       let tipY;
       if (x <= centerX) {
         const t = (x - obs.x) / (centerX - obs.x);
-        tipY = isBottomSpike ? (obs.y + obs.height) - t * obs.height : obs.y + t * obs.height;
+        tipY = isBottomSpike ? (obsY + obs.height) - t * obs.height : obsY + t * obs.height;
       } else {
         const t = (x - centerX) / (obs.x + obs.width - centerX);
-        tipY = isBottomSpike ? obs.y + (1 - t) * 0 + t * obs.height : (obs.y + obs.height) - (1 - t) * 0 - t * obs.height;
+        tipY = isBottomSpike ? obsY + (1 - t) * 0 + t * obs.height : (obsY + obs.height) - (1 - t) * 0 - t * obs.height;
         // 위 식 정리:
-        tipY = isBottomSpike ? obs.y + t * obs.height : (obs.y + obs.height) - t * obs.height;
+        tipY = isBottomSpike ? obsY + t * obs.height : (obsY + obs.height) - t * obs.height;
       }
 
-      if (isBottomSpike) return { top: tipY, bottom: obs.y + obs.height };
-      return { top: obs.y, bottom: tipY };
+      if (isBottomSpike) return { top: tipY, bottom: obsY + obs.height };
+      return { top: obsY, bottom: tipY };
     }
 
-    return { top: obs.y, bottom: obs.y + obs.height };
+    return { top: obsY, bottom: obsY + obs.height };
   }
 
   private checkCollisions(time: number) {

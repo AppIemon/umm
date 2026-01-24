@@ -19,15 +19,13 @@
         <span class="icon">📁</span>
         <span class="label">MAPS</span>
       </NuxtLink>
-      <NuxtLink to="/multiplayer" class="nav-item" :class="{ disabled: isGuest }">
+      <NuxtLink to="/editor" class="nav-item">
+        <span class="icon">🛠️</span>
+        <span class="label">EDITOR</span>
+      </NuxtLink>
+      <NuxtLink to="/multiplayer" class="nav-item">
         <span class="icon">⚔️</span>
         <span class="label">MULTI</span>
-        <span v-if="isGuest" class="lock-icon">🔒</span>
-      </NuxtLink>
-      <NuxtLink to="/mypage" class="nav-item" :class="{ disabled: isGuest }">
-        <span class="icon">💾</span>
-        <span class="label">STORAGE</span>
-        <span v-if="isGuest" class="lock-icon">🔒</span>
       </NuxtLink>
       <NuxtLink to="/rankings" class="nav-item">
         <span class="icon">🏆</span>

@@ -35,13 +35,17 @@
             <span class="duration">{{ Math.floor(map.duration) }}s</span>
           </div>
           
-          <div class="actions">
-            <NuxtLink :to="`/play?mapId=${map._id}`" class="action-btn play">PLAY</NuxtLink>
-            <button v-if="currentTab === 'my'" @click="startRename(map)" class="action-btn edit">RENAME</button>
-            <button v-if="currentTab === 'my'" @click="toggleShare(map)" class="action-btn share">
-              {{ map.isShared ? 'PRIVATE' : 'SHARE' }}
-            </button>
-          </div>
+            <div class="actions">
+              <button @click="playMap(map)" class="action-btn play">PLAY</button>
+              <template v-if="currentTab === 'my'">
+                <button @click="startEdit(map)" class="action-btn edit">EDIT</button>
+                <button @click="startRename(map)" class="action-btn rename">RENAME</button>
+                <button @click="toggleShare(map)" class="action-btn share">
+                  {{ map.isShared ? 'PRIVATE' : 'SHARE' }}
+                </button>
+                <button @click="deleteMap(map)" class="action-btn delete">DEL</button>
+              </template>
+            </div>
         </div>
 
         <div v-if="renamingMap" class="rename-modal">
@@ -68,10 +72,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useAuth } from '@/composables/useAuth';
+import { useRouter } from 'vue-router';
 
 const { user } = useAuth();
+const router = useRouter();
+
 const currentTab = ref<'my' | 'shared'>('my');
 const maps = ref<any[]>([]);
 const loading = ref(true);
@@ -88,7 +95,7 @@ const fetchMaps = async () => {
       query: { creator, shared }
     });
   } catch (e) {
-    console.error(e);
+    console.error("Fetch maps error:", e);
   } finally {
     loading.value = false;
   }
@@ -96,15 +103,23 @@ const fetchMaps = async () => {
 
 const filteredMaps = computed(() => maps.value);
 
-const toggleShare = async (map: any) => {
+const playMap = (map: any) => {
+  sessionStorage.setItem('umm_load_map', JSON.stringify(map));
+  router.push('/play');
+};
+
+const startEdit = (map: any) => {
+  sessionStorage.setItem('umm_edit_map', JSON.stringify(map));
+  router.push('/editor');
+};
+
+const deleteMap = async (map: any) => {
+  if (!confirm(`Are you sure you want to delete "${map.title}"?`)) return;
   try {
-    const updated = await $fetch(`/api/maps/${map._id}`, {
-      method: 'PATCH',
-      body: { isShared: !map.isShared }
-    });
-    map.isShared = updated.isShared;
+    await $fetch(`/api/maps/${map._id}`, { method: 'DELETE' });
+    maps.value = maps.value.filter(m => m._id !== map._id);
   } catch (e) {
-    alert("공유 설정 변경 실패");
+    alert("Map deletion failed.");
   }
 };
 
@@ -116,14 +131,26 @@ const startRename = (map: any) => {
 const renameMap = async () => {
   if (!renamingMap.value || !newTitle.value.trim()) return;
   try {
-    const updated = await $fetch(`/api/maps/${renamingMap.value._id}`, {
+    const updated: any = await $fetch(`/api/maps/${renamingMap.value._id}`, {
       method: 'PATCH',
       body: { title: newTitle.value.trim() }
     });
     renamingMap.value.title = updated.title;
     renamingMap.value = null;
   } catch (e) {
-    alert("이름 변경 실패");
+    alert("Rename failed.");
+  }
+};
+
+const toggleShare = async (map: any) => {
+  try {
+    const updated: any = await $fetch(`/api/maps/${map._id}`, {
+      method: 'PATCH',
+      body: { isShared: !map.isShared }
+    });
+    map.isShared = updated.isShared;
+  } catch (e) {
+    alert("Toggle share failed.");
   }
 };
 
@@ -134,7 +161,6 @@ const getDiffColor = (d: number) => {
 };
 
 watch(currentTab, fetchMaps);
-
 onMounted(fetchMaps);
 </script>
 

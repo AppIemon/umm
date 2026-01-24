@@ -11,6 +11,7 @@ export interface MatchRecord {
 }
 
 export interface User {
+  _id?: string;
   username: string;
   displayName?: string;
   isGuest: boolean;

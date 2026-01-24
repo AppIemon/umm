@@ -3,34 +3,47 @@ import { User } from '~/server/models/User'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { title, difficulty, seed, beatTimes, sections, engineObstacles, enginePortals, autoplayLog, duration, creatorName, audioUrl, audioData, isShared } = body
+  const {
+    _id, title, difficulty, seed, beatTimes, sections,
+    engineObstacles, enginePortals, autoplayLog,
+    duration, creatorName, audioUrl, audioData,
+    isShared, bpm, measureLength
+  } = body
 
   // Attempt to find user
-  let user = await User.findOne({ username: creatorName.toLowerCase() })
+  let user = await User.findOne({ username: creatorName?.toLowerCase() || 'guest' })
   if (!user) {
     user = await User.create({
-      username: creatorName.toLowerCase(),
+      username: creatorName?.toLowerCase() || 'guest',
       password: 'mock_password',
-      displayName: creatorName
+      displayName: creatorName || 'Guest'
     })
   }
 
-  const newMap = await GameMap.create({
+  const mapData = {
     title,
     creator: user._id,
     creatorName: user.displayName,
     audioUrl,
     audioData,
     difficulty,
-    seed,
-    beatTimes,
-    sections,
-    engineObstacles,
-    enginePortals,
-    autoplayLog,
-    duration,
-    isShared: isShared !== undefined ? isShared : false
-  })
+    seed: seed || 0,
+    beatTimes: beatTimes || [],
+    sections: sections || [],
+    engineObstacles: engineObstacles || [],
+    enginePortals: enginePortals || [],
+    autoplayLog: autoplayLog || [],
+    duration: duration || 60,
+    isShared: isShared !== undefined ? isShared : false,
+    bpm: bpm || 120,
+    measureLength: measureLength || 2.0
+  }
 
-  return newMap
+  if (_id) {
+    const updated = await GameMap.findByIdAndUpdate(_id, mapData, { new: true })
+    return updated
+  } else {
+    const newMap = await GameMap.create(mapData)
+    return newMap
+  }
 })

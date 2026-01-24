@@ -23,6 +23,8 @@ export interface IMap extends Document {
   bestPlayer: string | null
   audioUrl: string | null // 노래 파일 URL
   audioData: string | null // 노래 파일 데이터 (Base64)
+  bpm: number
+  measureLength: number
 }
 
 const mapSchema = new mongoose.Schema<IMap>({
@@ -110,6 +112,14 @@ const mapSchema = new mongoose.Schema<IMap>({
   bestPlayer: {
     type: String,
     default: null
+  },
+  bpm: {
+    type: Number,
+    default: 120
+  },
+  measureLength: {
+    type: Number,
+    default: 2.0
   }
 })
 
