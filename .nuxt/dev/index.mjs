@@ -1496,7 +1496,22 @@ _nPZwZ22ZLsPO8rmLBuDdLCNskayrzrXWkHOP4D9kn6s,
 _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 ];
 
-const assets = {};
+const assets = {
+  "/index.mjs": {
+    "type": "text/javascript; charset=utf-8",
+    "etag": "\"1c6e4-r4U5Tmmc0zdN3cA4P1Ll3nHuUfM\"",
+    "mtime": "2026-01-24T08:11:42.670Z",
+    "size": 116452,
+    "path": "index.mjs"
+  },
+  "/index.mjs.map": {
+    "type": "application/json",
+    "etag": "\"69117-YYULVMapj2TA9ydVrrlGrEILyQE\"",
+    "mtime": "2026-01-24T08:11:42.676Z",
+    "size": 430359,
+    "path": "index.mjs.map"
+  }
+};
 
 function readAsset (id) {
   const serverDir = dirname$1(fileURLToPath(globalThis._importMeta_.url));
@@ -2905,6 +2920,7 @@ const matchSchema = new mongoose.Schema({
     userId: { type: String, ref: "User" },
     username: String,
     progress: { type: Number, default: 0 },
+    bestProgress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
     lastSeen: { type: Date, default: Date.now },
     isReady: { type: Boolean, default: false }
@@ -3063,6 +3079,9 @@ const status_post = defineEventHandler(async (event) => {
           "players.$.progress": progress || 0,
           "players.$.y": y || 360,
           "players.$.lastSeen": /* @__PURE__ */ new Date()
+        },
+        $max: {
+          "players.$.bestProgress": progress || 0
         }
       },
       { new: true }
@@ -3084,6 +3103,7 @@ const status_post = defineEventHandler(async (event) => {
     opponent: opponent ? {
       username: opponent.username,
       progress: opponent.progress,
+      bestProgress: opponent.bestProgress,
       y: opponent.y,
       lastSeen: opponent.lastSeen
     } : null,

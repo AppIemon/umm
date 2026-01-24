@@ -100,8 +100,8 @@
           {{ formatTime(timeRemaining) }}
         </div>
         <div class="concurrent-progress">
-          <div class="p-bar"><div class="fill" :style="{ width: playerProgress + '%' }"></div></div>
-          <div class="p-bar"><div class="fill enemy" :style="{ width: opponentProgress + '%' }"></div></div>
+          <div class="p-bar"><div class="fill" :style="{ width: bestPlayerProgress + '%' }"></div><div class="current-marker" :style="{ left: playerProgress + '%' }"></div></div>
+          <div class="p-bar"><div class="fill enemy" :style="{ width: bestOpponentProgress + '%' }"></div><div class="current-marker enemy" :style="{ left: opponentProgress + '%' }"></div></div>
         </div>
       </div>
       <GameCanvas
@@ -142,6 +142,8 @@ const playerProgress = ref(0);
 const opponentProgress = ref(0);
 const playerY = ref(360);
 const opponentY = ref(360);
+const bestPlayerProgress = ref(0);
+const bestOpponentProgress = ref(0);
 const results = ref({ p1: 0, p2: 0 });
 const winner = ref<'player' | 'opponent' | 'draw'>('draw');
 
@@ -278,6 +280,8 @@ async function startGame() {
   step.value = 'PLAY';
   playerProgress.value = 0;
   opponentProgress.value = 0;
+  bestPlayerProgress.value = 0;
+  bestOpponentProgress.value = 0;
 
   // Start Global Match Timer
   clearInterval(matchTimer);
@@ -303,7 +307,13 @@ async function startGame() {
       });
       if (res.opponent) {
         opponentProgress.value = res.opponent.progress;
+        bestOpponentProgress.value = res.opponent.bestProgress || res.opponent.progress;
         opponentY.value = res.opponent.y;
+
+        // Instant clear detection for opponent
+        if (bestOpponentProgress.value >= 100) {
+           finalizeMatch('opponent');
+        }
       }
     } catch(e) {}
   }, 200); // Poll faster during play
@@ -311,12 +321,15 @@ async function startGame() {
 
 function updateProgress(data: { progress: number, ghostProgress: number, y: number }) {
   playerProgress.value = data.progress;
+  if (data.progress > bestPlayerProgress.value) {
+    bestPlayerProgress.value = data.progress;
+  }
   playerY.value = data.y;
   
   // Instant clear detection
-  if (playerProgress.value >= 100) {
+  if (bestPlayerProgress.value >= 100) {
     finalizeMatch('player');
-  } else if (opponentProgress.value >= 100) {
+  } else if (bestOpponentProgress.value >= 100) {
     finalizeMatch('opponent');
   }
 }
@@ -324,18 +337,22 @@ function updateProgress(data: { progress: number, ghostProgress: number, y: numb
 function handleRoundFinish(data: any) {
   // If player crashed
   if (data?.outcome === 'fail') {
-    finalizeMatch('opponent');
-  } else if (playerProgress.value >= 100) {
+    // If player crashed, we don't end the match immediately anymore,
+    // just wait for the timeout or a 100% finish.
+    // However,GD-style MP often shows the result immediately if both are dead.
+    // Let's stick to the user's "best record" request - crashing doesn't lose the match,
+    // it just stops that attempt.
+  } else if (bestPlayerProgress.value >= 100) {
     finalizeMatch('player');
   }
 }
 
 function handleTimeout() {
   clearInterval(matchTimer);
-  // Compare progress
+  // Compare best progress
   let win: 'player' | 'opponent' | 'draw' = 'draw';
-  if (playerProgress.value > opponentProgress.value) win = 'player';
-  else if (playerProgress.value < opponentProgress.value) win = 'opponent';
+  if (bestPlayerProgress.value > bestOpponentProgress.value) win = 'player';
+  else if (bestPlayerProgress.value < bestOpponentProgress.value) win = 'opponent';
   
   finalizeMatch(win as any);
 }
@@ -343,8 +360,8 @@ function handleTimeout() {
 function finalizeMatch(win: 'player' | 'opponent' | 'draw') {
   clearInterval(matchTimer);
   winner.value = win;
-  results.value.p1 = playerProgress.value;
-  results.value.p2 = opponentProgress.value;
+  results.value.p1 = bestPlayerProgress.value;
+  results.value.p2 = bestOpponentProgress.value;
   
   // Update Rating
   if (user.value && !user.value.isGuest && (win === 'player' || win === 'opponent')) {
@@ -526,7 +543,8 @@ function exitGame() {
   height: 6px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .p-bar .fill {
@@ -537,6 +555,23 @@ function exitGame() {
 
 .p-bar .fill.enemy {
   background: #ff00ff;
+}
+
+.current-marker {
+  position: absolute;
+  top: -2px;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #fff;
+  transform: translateX(-50%);
+  transition: left 0.1s linear;
+}
+
+.current-marker.enemy {
+  background: #ff00ff;
+  box-shadow: 0 0 10px #ff00ff;
 }
 
 .vs-header {

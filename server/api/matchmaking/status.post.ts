@@ -19,6 +19,9 @@ export default defineEventHandler(async (event) => {
           'players.$.progress': progress || 0,
           'players.$.y': y || 360,
           'players.$.lastSeen': new Date()
+        },
+        $max: {
+          'players.$.bestProgress': progress || 0
         }
       },
       { new: true }
@@ -48,6 +51,7 @@ export default defineEventHandler(async (event) => {
     opponent: opponent ? {
       username: opponent.username,
       progress: opponent.progress,
+      bestProgress: opponent.bestProgress,
       y: opponent.y,
       lastSeen: opponent.lastSeen
     } : null,
