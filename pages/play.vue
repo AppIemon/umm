@@ -70,22 +70,54 @@
       :sections="sections"
       :loadMap="loadedMapData"
       :difficulty="difficulty"
+      :practiceMode="isPractice"
+      :tutorialMode="isTutorial"
       @retry="startGame"
       @exit="handleExit"
       @map-ready="handleMapReady"
       @record-update="handleRecordUpdate"
     />
-    <GameGuide v-model="showGuide" @close="handleGuideClose" />
+    
+    <!-- Mode Selection Modal -->
+    <div v-if="showModeSelect" class="mode-modal-overlay">
+      <div class="mode-modal glass-panel">
+        <h2>SELECT GAME MODE</h2>
+        <div class="mode-options">
+          <button @click="selectMode('practice')" class="mode-btn practice">
+            <div class="mode-icon">🛠️</div>
+            <h3>PRACTICE MODE</h3>
+            <p>체크포인트 사용 가능<br>기록 미저장</p>
+          </button>
+          
+          <button @click="selectMode('normal')" class="mode-btn normal">
+            <div class="mode-icon">🎵</div>
+            <h3>NORMAL MODE</h3>
+            <p>표준 플레이<br>랭킹 기록 저장</p>
+          </button>
+          
+          <button @click="selectMode('tutorial')" class="mode-btn tutorial" :class="{ recommended: isFirstTime }">
+            <div class="mode-icon">🎓</div>
+            <div v-if="isFirstTime" class="rec-badge">RECOMMENDED</div>
+            <h3>TUTORIAL MODE</h3>
+            <p>게임 가이드<br>기초 배우기</p>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useAudioAnalyzer, type SongSection } from '@/composables/useAudioAnalyzer';
 import { useAuth } from '@/composables/useAuth';
 import { useRoute } from 'vue-router';
 import { GameEngine } from '@/utils/game-engine';
+import { trimAndEncodeAudio, splitBase64ToChunks, CHUNK_SIZE, MAX_SINGLE_UPLOAD_SIZE } from '@/utils/audioUtils';
 import GameGuide from '@/components/GameGuide.vue'; // Guide Component
+import { useRouter } from 'vue-router'; // Added useRouter import implicitly used before
+
+const router = useRouter();
 
 // 플레이 중에는 navbar 숨기기
 definePageMeta({
@@ -94,7 +126,6 @@ definePageMeta({
 
 const step = ref<'upload' | 'play'>('upload');
 const selectedSong = ref<File | null>(null);
-const showGuide = ref(false); // Guide visibility
 const { analyzeAudio } = useAudioAnalyzer();
 
 // Game Data
@@ -110,7 +141,12 @@ const validationFailure = ref<any>(null);
 const failCanvas = ref<HTMLCanvasElement | null>(null);
 const { user } = useAuth();
 const route = useRoute();
-const router = useRouter();
+
+// Modes
+const showModeSelect = ref(false);
+const isPractice = ref(false);
+const isTutorial = ref(false);
+const isFirstTime = ref(false);
 
 // Difficulty
 const difficulty = ref(10);
@@ -139,6 +175,91 @@ const getMaxDuration = (d: number): number => {
 };
 
 
+// --- Tutorial Map Generator ---
+const generateTutorialMap = () => {
+  const tutorialDuration = 45; // seconds
+  const tutorialBeats = Array.from({ length: 40 }, (_, i) => 2 + i * 1.5); // Slow beats
+  
+  // Custom simple obstacles
+  const tutorialObstacles: any[] = [];
+  const tutorialPortals: any[] = [];
+  
+  // Section 1: Basic Input (0-10s)
+  tutorialObstacles.push({ x: 800, y: 500, width: 60, height: 60, type: 'spike', initialY: 500 }); // Jump over
+  tutorialObstacles.push({ x: 1200, y: 450, width: 40, height: 40, type: 'mini_spike', initialY: 450 });
+  
+  // Section 2: Gravity Inversion (15s)
+  // 기둥 형태의 포탈로 변경
+  tutorialPortals.push({ x: 1800, y: 150, width: 64, height: 600, type: 'gravity_yellow', activated: false });
+  tutorialObstacles.push({ x: 2300, y: 150, width: 60, height: 60, type: 'block', initialY: 150 }); 
+  tutorialPortals.push({ x: 2800, y: 150, width: 64, height: 600, type: 'gravity_blue', activated: false });
+  
+  // Section 3: Speed Change (30s)
+  tutorialPortals.push({ x: 3800, y: 150, width: 64, height: 600, type: 'speed_2', activated: false });
+  tutorialObstacles.push({ x: 4400, y: 360, width: 50, height: 50, type: 'spike_ball', initialY: 360 });
+  tutorialPortals.push({ x: 5000, y: 150, width: 64, height: 600, type: 'speed_1', activated: false });
+
+  return {
+    title: 'TUTORIAL_MODE',
+    difficulty: 1,
+    seed: 9999, // Fixed seed
+    engineObstacles: tutorialObstacles,
+    enginePortals: tutorialPortals,
+    autoplayLog: [], 
+    duration: tutorialDuration,
+    beatTimes: tutorialBeats,
+    sections: [],
+    bpm: 80,
+    measureLength: 3,
+    audioData: null,
+    isTutorial: true
+  };
+};
+
+const selectMode = async (mode: 'practice' | 'normal' | 'tutorial') => {
+  showModeSelect.value = false;
+  isPractice.value = mode === 'practice';
+  isTutorial.value = mode === 'tutorial';
+
+  if (mode === 'tutorial') {
+    localStorage.setItem('umm_guide_seen', 'true');
+    isFirstTime.value = false;
+    
+    // 튜토리얼 모드: 기존 맵과 오디오 유지, AI 가이드만 활성화
+    // loadedMapData에 autoplayLog가 없으면 생성
+    if (loadedMapData.value && (!loadedMapData.value.autoplayLog || loadedMapData.value.autoplayLog.length === 0)) {
+      console.log('[Tutorial] Generating AI path for existing map...');
+      const tutorialEngine = new GameEngine({ 
+        difficulty: loadedMapData.value.difficulty || 5, 
+        density: 1.0, 
+        portalFrequency: 0.15 
+      });
+      
+      // 기존 맵 데이터 로드
+      if (loadedMapData.value.engineObstacles) {
+        tutorialEngine.obstacles = loadedMapData.value.engineObstacles.map((o: any) => ({ ...o }));
+      }
+      if (loadedMapData.value.enginePortals) {
+        tutorialEngine.portals = loadedMapData.value.enginePortals.map((p: any) => ({ ...p }));
+      }
+      tutorialEngine.totalLength = (loadedMapData.value.duration || 120) * tutorialEngine.baseSpeed + 1000;
+      
+      // AI 경로 계산
+      const success = tutorialEngine.computeAutoplayLog(200, 360);
+      if (success && tutorialEngine.autoplayLog.length > 0) {
+        loadedMapData.value.autoplayLog = tutorialEngine.autoplayLog;
+        console.log('[Tutorial] AI Path Generated with', tutorialEngine.autoplayLog.length, 'points');
+      }
+    }
+    
+    // 오디오 버퍼는 기존 것 유지 (이미 로드됨)
+    step.value = 'play';
+  } else {
+    step.value = 'play';
+  }
+};
+
+
 const handleSongSelect = async (input: File | { type: string, data: any }) => {
   if ('type' in input && input.type === 'storage') {
      const item = input.data;
@@ -151,8 +272,8 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
         const res = await fetch(item.mapData.audioData);
         const arrayBuffer = await res.arrayBuffer();
-        audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-        step.value = 'play';
+         audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+         showModeSelect.value = true; // Show modal instead of direct play
      } else if (item.mapData._id) {
         // Try loading from IndexedDB using server ID
         console.log("Loading recent map audio from IndexedDB...", item.mapData._id);
@@ -162,7 +283,7 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
              const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
              const ab = await localFile.arrayBuffer();
              audioBuffer.value = await audioCtx.decodeAudioData(ab);
-             step.value = 'play';
+             showModeSelect.value = true;
           } else {
              alert("오디오 파일을 찾을 수 없습니다. (IDB Miss)");
           }
@@ -239,7 +360,7 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         nextTick(() => drawFailurePreview());
       }
 
-      if (i > 100) break; 
+      if (i > 5000) break; 
     }
 
     if (success) {
@@ -272,7 +393,7 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
     
     setTimeout(() => {
       isAnalyzing.value = false;
-      step.value = 'play';
+      showModeSelect.value = true;
     }, 500); 
   } catch (e: any) {
     console.error(e);
@@ -300,6 +421,9 @@ const saveToRecentStorage = async (map: any) => {
 };
 
 const startGame = () => {
+  // If explicitly retrying (e.g. from pause menu or win screen), maybe skip mode select?
+  // But if it's 'retry' from GameCanvas (e.g. game over), we usually just restart.
+  // We keep the current mode.
   step.value = 'play';
 };
 
@@ -310,6 +434,9 @@ const handleExit = () => {
     router.push('/editor');
   } else {
     step.value = 'upload';
+    showModeSelect.value = false;
+    isPractice.value = false;
+    isTutorial.value = false;
   }
 };
 
@@ -377,6 +504,8 @@ const drawFailurePreview = () => {
 
 const handleMapReady = async (mapData: any) => {
   if (hasSavedCurrentMap.value) return;
+  if (!user.value) return; // Guest check: Do not save map
+  if (isPractice.value || isTutorial.value) return; // Do not save practice/tutorial maps
   if (!selectedSong.value && !loadedMapData.value?.audioUrl) return;
   
   try {
@@ -394,33 +523,41 @@ const handleMapReady = async (mapData: any) => {
       isShared: false // Default to false so it's "My Map", can be shared later
     };
 
-    if (selectedSong.value) {
+    let audioBase64: string | null = null;
+    let needsChunkedUpload = false;
+
+    if (selectedSong.value && audioBuffer.value) {
       body.audioUrl = `/audio/${selectedSong.value.name}`;
       
-      // Convert file to Base64 (Server limit: ~4.5MB for Vercel/Serverless)
-      if (selectedSong.value.size < 4.5 * 1024 * 1024) {
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(selectedSong.value!);
-        });
-        body.audioData = await base64Promise;
+      // 1. Trim audio to map duration (saves space for long songs)
+      console.log(`[Audio] Trimming audio from ${audioBuffer.value.duration}s to ${mapData.duration}s`);
+      audioBase64 = await trimAndEncodeAudio(audioBuffer.value, mapData.duration);
+      
+      // 2. Check if chunked upload is needed
+      if (audioBase64.length > MAX_SINGLE_UPLOAD_SIZE) {
+        console.log(`[Audio] Trimmed audio (${(audioBase64.length / 1024 / 1024).toFixed(2)}MB) exceeds limit, will use chunked upload`);
+        needsChunkedUpload = true;
       } else {
-        console.log("Audio file too large for server (>4.5MB). Will attempt local IndexedDB backup.");
-        // We do NOT send audioData. The user will have to upload it locally to play.
+        body.audioData = audioBase64;
       }
     } else if (loadedMapData.value?.audioUrl) {
       body.audioUrl = loadedMapData.value.audioUrl;
-      // If we loaded it from DB, we can try to save it back, check length first (100MB limit)
+      // If we loaded it from DB, retain the audioData if reasonable size
       if (loadedMapData.value.audioData && loadedMapData.value.audioData.length < 100 * 1024 * 1024) {
          body.audioData = loadedMapData.value.audioData;
       }
     }
 
+    // Save map first (without audio if chunked)
+    if (needsChunkedUpload) {
+      body.audioData = null;
+      body.audioChunks = [];
+    }
+
     const saved = await $fetch('/api/maps', {
       method: 'POST',
       body
-    });
+    }) as any;
     
     hasSavedCurrentMap.value = true;
     console.log(`[Database] Map successfully saved. ID: ${saved._id}`);
@@ -430,15 +567,29 @@ const handleMapReady = async (mapData: any) => {
       loadedMapData.value._id = saved._id;
     }
     
-    // If audio was not saved (File too large), save to Local IndexedDB
-    if (!body.audioData && selectedSong.value) {
-       console.log("Large file detected. Saving audio to local IndexedDB for auto-load...");
+    // 3. Upload audio chunks if needed
+    if (needsChunkedUpload && audioBase64) {
+      console.log(`[Audio] Starting chunked upload...`);
+      const chunks = splitBase64ToChunks(audioBase64, CHUNK_SIZE);
+      
+      for (let i = 0; i < chunks.length; i++) {
+        console.log(`[Audio] Uploading chunk ${i + 1}/${chunks.length}...`);
+        await $fetch(`/api/maps/${saved._id}/audio-chunk`, {
+          method: 'POST',
+          body: { chunkIndex: i, chunkData: chunks[i], totalChunks: chunks.length }
+        });
+      }
+      console.log(`[Audio] All ${chunks.length} chunks uploaded successfully!`);
+    }
+    
+    // 4. Fallback: Save to IndexedDB for offline access (large original files)
+    if (!body.audioData && !needsChunkedUpload && selectedSong.value) {
+       console.log("Saving original audio to local IndexedDB for fast auto-load...");
        try {
          await saveAudioToDB(saved._id, selectedSong.value);
          console.log("Audio successfully saved to local IndexedDB!");
        } catch (dbErr) {
          console.error("Failed to save to IndexedDB", dbErr);
-         alert("오디오 파일이 너무 커서 서버 및 로컬 백업에 실패했습니다.");
        }
     }
   } catch (e: any) {
@@ -449,16 +600,27 @@ const handleMapReady = async (mapData: any) => {
 const handleRecordUpdate = async (data: { score: number, progress: number }) => {
   if (!loadedMapData.value?._id) return;
   
-  // Update local bestScore for immediate UI feedback
-  if (data.score > (loadedMapData.value.bestScore || 0)) {
+  // Update local bestScore for immediate UI feedback (Only for Normal Mode)
+  if (!isPractice.value && !isTutorial.value && data.score > (loadedMapData.value.bestScore || 0)) {
      loadedMapData.value.bestScore = data.score;
   }
 
+  // Save Progress per mode?
+  // User asked: "Save each progress on login"
+  // For Normal Mode, we allow saving record.
+  // For Tutorial, we will use a special dummy ID to track completion.
+  if (isPractice.value) return; 
+  if (!user.value) return; 
+
+  const targetId = isTutorial.value ? 'tutorial_mode' : loadedMapData.value?._id;
+  if (!targetId) return;
+
   try {
-    const res: any = await $fetch(`/api/maps/${loadedMapData.value._id}/record`, {
+    const res: any = await $fetch(`/api/maps/${targetId}/record`, {
       method: 'POST',
       body: {
         score: data.score,
+        progress: data.progress,
         username: user.value?.username || 'Guest'
       }
     });
@@ -473,23 +635,25 @@ const handleRecordUpdate = async (data: { score: number, progress: number }) => 
 
 const handleMapOnlyStart = async (targetMap: any) => {
   loadedMapData.value = targetMap;
-  obstacles.value = targetMap.beatTimes;
-  sections.value = targetMap.sections;
-  difficulty.value = targetMap.difficulty;
+  obstacles.value = targetMap.beatTimes || [];
+  sections.value = targetMap.sections || [];
+  difficulty.value = targetMap.difficulty || 10;
   
   // Create silent buffer
   const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
   const buffer = audioCtx.createBuffer(1, Math.max(1, audioCtx.sampleRate * (targetMap.duration || 10)), audioCtx.sampleRate);
   audioBuffer.value = buffer;
   
-  step.value = 'play';
+  // 모드 선택 화면 표시
+  showModeSelect.value = true;
 };
 
 const initFromQuery = async () => {
   // Check if guide should be shown (first time user)
   const hasSeenGuide = localStorage.getItem('umm_guide_seen');
   if (!hasSeenGuide) {
-    showGuide.value = true;
+    isFirstTime.value = true;
+    showModeSelect.value = true; // Show mode select immediately to recommend tutorial
   }
 
   // 1. Check for map data passed from Maps tab (sessionStorage)
@@ -509,13 +673,28 @@ const initFromQuery = async () => {
         const res = await fetch(targetMap.audioData);
         const arrayBuffer = await res.arrayBuffer();
         audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-        step.value = 'play';
+        showModeSelect.value = true;
         return;
       } else if (targetMap.audioUrl) {
-         // We still need the song file if audioData is missing
-         console.log("Map session data found but missing audioData. Waiting for user file.");
+         // audioUrl만 있는 경우 - 오디오 로드 시도
+         console.log("Map session data found with audioUrl. Trying to load...");
+         try {
+           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+           const res = await fetch(targetMap.audioUrl);
+           if (res.ok) {
+             const arrayBuffer = await res.arrayBuffer();
+             audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+             showModeSelect.value = true;
+             return;
+           }
+         } catch (e) {
+           console.warn("Failed to load audioUrl, falling back to silent", e);
+         }
+         // 실패 시 무음 버퍼로 폴백
+         await handleMapOnlyStart(targetMap);
+         return;
       } else {
-         // View-only mode with silent buffer
+         // audioData도 audioUrl도 없는 경우 - 무음 버퍼로 시작
          await handleMapOnlyStart(targetMap);
          return;
       }
@@ -578,9 +757,9 @@ const initFromQuery = async () => {
          }
 
          if (loadedAudio) {
-            const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            audioBuffer.value = await audioCtx.decodeAudioData(loadedAudio);
-            step.value = 'play';
+             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+             audioBuffer.value = await audioCtx.decodeAudioData(loadedAudio);
+             showModeSelect.value = true;
          } else {
             console.log("Could not find audio source. Prompting user.");
             alert("오디오 파일을 자동으로 불러오지 못했습니다. (서버/로컬 저장소 없음)\n원본 음악 파일을 다시 선택해주세요.");
@@ -799,6 +978,114 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 1px;
+}
+
+.mode-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  backdrop-filter: blur(10px);
+}
+
+.mode-modal {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 20px;
+  padding: 3rem;
+  text-align: center;
+  max-width: 900px;
+  width: 90%;
+  box-shadow: 0 0 50px rgba(0,0,0,0.5);
+}
+
+.mode-modal h2 {
+  font-size: 2rem;
+  margin-bottom: 2rem;
+  background: linear-gradient(135deg, #fff 0%, #888 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.mode-options {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  flex: 1;
+  min-width: 200px;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mode-btn:hover {
+  transform: translateY(-10px);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.mode-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+.mode-btn h3 {
+  font-size: 1.2rem;
+  font-weight: 900;
+  margin: 0;
+  color: #fff;
+}
+
+.mode-btn p {
+  color: #888;
+  font-size: 0.9rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.mode-btn.practice:hover { border-color: #ffff00; }
+.mode-btn.practice:hover .mode-icon { animation: bounce 0.5s; }
+.mode-btn.normal:hover { border-color: #00ffff; }
+.mode-btn.normal:hover .mode-icon { animation: pulse 0.5s; }
+.mode-btn.tutorial:hover { border-color: #ff00ff; }
+.mode-btn.tutorial:hover .mode-icon { animation: wiggle 0.5s; }
+
+.mode-btn.tutorial.recommended {
+  border-color: #ff00ff;
+  background: rgba(255, 0, 255, 0.05);
+  animation: pulse-border 2s infinite;
+}
+
+.rec-badge {
+  position: absolute;
+  top: -12px;
+  background: #ff00ff;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 20px;
+  box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(255, 0, 255, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(255, 0, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 0, 255, 0); }
 }
 
 /* Loader */

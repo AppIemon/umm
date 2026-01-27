@@ -1,5 +1,6 @@
 import { connectDB } from '~/server/utils/db'
 import { GameMap } from '~/server/models/Map'
+import { Score } from '~/server/models/Score'
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
@@ -22,12 +23,38 @@ export default defineEventHandler(async (event) => {
     filter.creatorName = { $regex: new RegExp(`^${creator}$`, 'i') }
   }
 
+  const userCookie = getCookie(event, 'auth_user')
+  const authUser = userCookie ? JSON.parse(userCookie) : null
+  const userId = authUser?._id || authUser?.id;
+
   try {
     const maps = await GameMap.find(filter)
       .select('-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes')
       .sort({ createdAt: -1 })
       .limit(50)
-    return maps
+
+    // Merge personal bests if logged in
+    if (userId) {
+      const mapIds = maps.map(m => m._id);
+      const userScores = await Score.find({
+        player: userId,
+        map: { $in: mapIds }
+      });
+
+      const scoreMap = new Map(userScores.map(s => [s.map.toString(), s]));
+
+      return maps.map(m => {
+        const mObj = m.toObject();
+        const pScore = scoreMap.get(m._id.toString());
+        if (pScore) {
+          mObj.myBestScore = pScore.score;
+          mObj.myBestProgress = pScore.progress;
+        }
+        return mObj;
+      });
+    }
+
+    return maps;
   } catch (e: any) {
     console.error("Map Fetch Error:", e);
     throw createError({

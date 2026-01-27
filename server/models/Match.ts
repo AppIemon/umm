@@ -5,11 +5,13 @@ export interface IMatch extends Document {
   _id: Types.ObjectId
   category: string
   map: Types.ObjectId
+  mapQueue: Types.ObjectId[]
   players: {
     userId: string
     username: string
     progress: number
     bestProgress: number
+    clearCount: number
     y: number // Real-time Y position
     lastSeen: Date
     isReady: boolean
@@ -29,11 +31,16 @@ const matchSchema = new mongoose.Schema<IMatch>({
     ref: 'GameMap',
     required: true
   },
+  mapQueue: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GameMap'
+  }],
   players: [{
     userId: { type: String, ref: 'User' },
     username: String,
     progress: { type: Number, default: 0 },
     bestProgress: { type: Number, default: 0 },
+    clearCount: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
     lastSeen: { type: Date, default: Date.now },
     isReady: { type: Boolean, default: false }

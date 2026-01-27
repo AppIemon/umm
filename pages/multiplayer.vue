@@ -76,13 +76,11 @@
         <div class="duel-res">
           <div class="res-item">
             <span>{{ user?.username || 'YOU' }}</span>
-            <div class="prog-bar"><div class="fill" :style="{ width: results.p1 + '%' }"></div></div>
-            <span>{{ results.p1.toFixed(1) }}%</span>
+            <div class="clear-count">{{ playerClearCount }} CLEARS</div>
           </div>
           <div class="res-item">
             <span>{{ opponentName }}</span>
-            <div class="prog-bar"><div class="fill enemy" :style="{ width: results.p2 + '%' }"></div></div>
-            <span>{{ results.p2.toFixed(1) }}%</span>
+            <div class="clear-count enemy">{{ opponentClearCount }} CLEARS</div>
           </div>
         </div>
         <div class="match-meta" v-if="timeRemaining <= 0">
@@ -99,10 +97,18 @@
         <div class="timer-display" :class="{ critical: timeRemaining < 30 }">
           {{ formatTime(timeRemaining) }}
         </div>
-        <div class="concurrent-progress">
-          <div class="p-bar"><div class="fill" :style="{ width: bestPlayerProgress + '%' }"></div><div class="current-marker" :style="{ left: playerProgress + '%' }"></div></div>
-          <div class="p-bar"><div class="fill enemy" :style="{ width: bestOpponentProgress + '%' }"></div><div class="current-marker enemy" :style="{ left: opponentProgress + '%' }"></div></div>
+        <div class="clear-counts-hud">
+          <span class="my-clears">YOU: {{ playerClearCount }}</span>
+          <span class="vs-text">VS</span>
+          <span class="enemy-clears">{{ opponentName }}: {{ opponentClearCount }}</span>
         </div>
+        
+        <!-- Opponent Clear Alert -->
+        <transition name="fade">
+          <div v-if="showOpponentClearAlert" class="opponent-clear-alert">
+            🎉 {{ opponentName }}이(가) 레벨을 클리어했습니다!
+          </div>
+        </transition>
       </div>
       <GameCanvas
         v-if="audioBuffer"
@@ -146,6 +152,13 @@ const bestPlayerProgress = ref(0);
 const bestOpponentProgress = ref(0);
 const results = ref({ p1: 0, p2: 0 });
 const winner = ref<'player' | 'opponent' | 'draw'>('draw');
+
+// Clear count system (맵 클리어 수로 승패 결정)
+const playerClearCount = ref(0);
+const opponentClearCount = ref(0);
+const showOpponentClearAlert = ref(false);
+const currentMapIndex = ref(0);
+const mapQueue = ref<any[]>([]);
 
 const audioBuffer = ref<AudioBuffer | null>(null);
 const obstacles = ref<number[]>([]);
@@ -307,16 +320,25 @@ async function startGame() {
       });
       if (res.opponent) {
         opponentProgress.value = res.opponent.progress;
-        bestOpponentProgress.value = res.opponent.bestProgress || res.opponent.progress;
         opponentY.value = res.opponent.y;
-
-        // Instant clear detection for opponent
-        if (bestOpponentProgress.value >= 100) {
-           finalizeMatch('opponent');
+        
+        // 상대방 클리어 감지
+        const newOpponentClears = res.opponent.clearCount || 0;
+        if (newOpponentClears > opponentClearCount.value) {
+          opponentClearCount.value = newOpponentClears;
+          showOpponentClearNotification();
         }
       }
     } catch(e) {}
   }, 200); // Poll faster during play
+}
+
+// 상대방 클리어 알림 표시
+function showOpponentClearNotification() {
+  showOpponentClearAlert.value = true;
+  setTimeout(() => {
+    showOpponentClearAlert.value = false;
+  }, 3000);
 }
 
 function updateProgress(data: { progress: number, ghostProgress: number, y: number }) {
@@ -325,43 +347,79 @@ function updateProgress(data: { progress: number, ghostProgress: number, y: numb
     bestPlayerProgress.value = data.progress;
   }
   playerY.value = data.y;
+}
+
+// 플레이어가 맵 클리어 시 호출
+async function handlePlayerClear() {
+  playerClearCount.value++;
   
-  // Instant clear detection
-  if (bestPlayerProgress.value >= 100) {
-    finalizeMatch('player');
-  } else if (bestOpponentProgress.value >= 100) {
-    finalizeMatch('opponent');
+  // 서버에 클리어 알림
+  try {
+    await $fetch('/api/matchmaking/clear', {
+      method: 'POST',
+      body: {
+        matchId: matchId.value,
+        userId: playerId.value
+      }
+    });
+  } catch (e) {}
+  
+  // 다음 맵 로드
+  await loadNextMap();
+}
+
+// 다음 맵 로드
+async function loadNextMap() {
+  currentMapIndex.value++;
+  
+  try {
+    const res: any = await $fetch('/api/matchmaking/next-map', {
+      method: 'POST',
+      body: {
+        matchId: matchId.value,
+        userId: playerId.value,
+        mapIndex: currentMapIndex.value
+      }
+    });
+    
+    if (res.map) {
+      selectedMap.value = res.map;
+      obstacles.value = res.map.beatTimes || [];
+      sections.value = res.map.sections || [];
+      bestPlayerProgress.value = 0;
+      playerProgress.value = 0;
+    }
+  } catch (e) {
+    console.error('Failed to load next map', e);
   }
 }
 
 function handleRoundFinish(data: any) {
-  // If player crashed
-  // If player crashed (or disconnected/gave up)
-  if (data?.outcome === 'fail') {
-    // User Request: "온라인 플레이 도중 연결이 끊기면 그 즉시 패배."
-    // Treat 'fail' (death) as instant defeat.
-    finalizeMatch('opponent');
-  } else if (bestPlayerProgress.value >= 100) {
-  } else if (bestPlayerProgress.value >= 100) {
-    finalizeMatch('player');
+  // 플레이어가 클리어했을 때
+  if (data?.outcome === 'complete' || bestPlayerProgress.value >= 100) {
+    handlePlayerClear();
   }
+  // 크래시 시에는 그냥 재시도 (죽어도 패배 아님, 맵 클리어 수로 결정)
 }
 
 function handleTimeout() {
   clearInterval(matchTimer);
-  // Compare best progress
-  let win: 'player' | 'opponent' | 'draw' = 'draw';
-  if (bestPlayerProgress.value > bestOpponentProgress.value) win = 'player';
-  else if (bestPlayerProgress.value < bestOpponentProgress.value) win = 'opponent';
+  clearInterval(statusInterval);
   
-  finalizeMatch(win as any);
+  // 클리어 카운트로 승패 결정
+  let win: 'player' | 'opponent' | 'draw' = 'draw';
+  if (playerClearCount.value > opponentClearCount.value) win = 'player';
+  else if (playerClearCount.value < opponentClearCount.value) win = 'opponent';
+  
+  finalizeMatch(win);
 }
 
 function finalizeMatch(win: 'player' | 'opponent' | 'draw') {
   clearInterval(matchTimer);
+  clearInterval(statusInterval);
   winner.value = win;
-  results.value.p1 = bestPlayerProgress.value;
-  results.value.p2 = bestOpponentProgress.value;
+  results.value.p1 = playerClearCount.value;
+  results.value.p2 = opponentClearCount.value;
   
   // Update Rating
   if (user.value && !user.value.isGuest && (win === 'player' || win === 'opponent')) {
@@ -640,5 +698,75 @@ function exitGame() {
 .timeout-badge {
   color: #ffaa00; font-weight: bold; padding: 0.5rem 1rem;
   border: 1px solid #ffaa00; border-radius: 4px; border-style: dashed; margin-bottom: 1rem; display: inline-block;
+}
+
+/* Clear Count HUD */
+.clear-counts-hud {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.5rem 1.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.my-clears {
+  color: #00ffff;
+  font-weight: 900;
+  font-size: 1.2rem;
+}
+
+.enemy-clears {
+  color: #ff00ff;
+  font-weight: 900;
+  font-size: 1.2rem;
+}
+
+.vs-text {
+  color: #fff;
+  font-weight: 900;
+}
+
+/* Opponent Clear Alert */
+.opponent-clear-alert {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(255, 0, 255, 0.3), rgba(255, 100, 255, 0.3));
+  border: 2px solid #ff00ff;
+  color: #fff;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  font-weight: 900;
+  font-size: 1.2rem;
+  animation: slideDown 0.3s ease-out, pulse 0.5s ease-in-out infinite alternate;
+  z-index: 2000;
+}
+
+@keyframes slideDown {
+  from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+/* Clear Count in Results */
+.clear-count {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #00ffff;
+  text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+}
+
+.clear-count.enemy {
+  color: #ff00ff;
+  text-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
 }
 </style>

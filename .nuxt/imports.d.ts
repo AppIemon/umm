@@ -34,6 +34,8 @@ export { useAudioAnalyzer, SongSection, AnalysisProgress } from '../composables/
 export { useAuth, MatchRecord, User } from '../composables/useAuth';
 export { useGameSettings } from '../composables/useGameSettings';
 export { useGameStore, GameStoreState } from '../composables/useGameStore';
+export { useRecentSongs, RecentSong } from '../composables/useRecentSongs';
 export { useSongStorage, StoredSong } from '../composables/useSongStorage';
-export { GameEngine, GameEngine, ObstacleType, PortalType, ObstacleMovement, Obstacle, Portal, Pattern, GameState, MapConfig } from '../utils/game-engine';
+export { trimAudioBuffer, audioBufferToWavBlob, blobToBase64, splitBase64ToChunks, trimAndEncodeAudio, CHUNK_SIZE, MAX_SINGLE_UPLOAD_SIZE } from '../utils/audioUtils';
+export { GameEngine, GameEngine, ObstacleType, PortalType, ObstacleMovement, Obstacle, Portal, Pattern, GameState, MapConfig, StateEvent } from '../utils/game-engine';
 export { useNuxtDevTools } from '../node_modules/@nuxt/devtools/dist/runtime/use-nuxt-devtools';

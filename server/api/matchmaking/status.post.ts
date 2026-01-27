@@ -52,6 +52,7 @@ export default defineEventHandler(async (event) => {
       username: opponent.username,
       progress: opponent.progress,
       bestProgress: opponent.bestProgress,
+      clearCount: opponent.clearCount || 0,
       y: opponent.y,
       lastSeen: opponent.lastSeen
     } : null,

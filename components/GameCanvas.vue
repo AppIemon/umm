@@ -8,15 +8,6 @@
         <div class="hud-top-left">
           <div class="game-actions">
             <button 
-              v-if="!multiplayerMode" 
-              @click="startAutoplay" 
-              class="hud-action-btn tutorial"
-              :disabled="!isMapValidated"
-              :class="{ disabled: !isMapValidated }"
-            >
-              {{ isMapValidated ? 'TUTORIAL' : 'VALIDATING...' }}
-            </button>
-            <button 
               v-if="!multiplayerMode && !loadMap && isMapValidated && !hasSaved" 
               @click="manualSave" 
               class="hud-action-btn save"
@@ -24,10 +15,12 @@
               SAVE MAP
             </button>
             <button @click="emit('exit', { progress: progressPct, score: score, outcome: gameOver ? 'fail' : 'win' })" class="hud-action-btn exit">나가기</button>
+            <button v-if="practiceMode && !gameOver" @click="manualCheckpoint" class="hud-action-btn checkpoint">SET CP (C)</button>
           </div>
           <div class="title-container">
             <div class="wave-icon" :class="{ inverted: isGravityInverted }">▶</div>
-            <h1 class="game-title">ULTRA MUSIC MANIA</h1>
+            <h1 class="game-title" v-if="!tutorialMode">ULTRA MUSIC MANIA</h1>
+            <h1 class="game-title tutorial" v-else>TUTORIAL</h1>
           </div>
           <div class="progress-bar-container">
             <div class="progress-bar" :style="{ width: progress + '%' }"></div>
@@ -52,7 +45,10 @@
         <div class="speed-indicator">
           <span :style="{ color: speedColor }">{{ speedLabel }}</span>
           <span v-if="isMini" class="mini-badge">MINI</span>
-          <span v-if="isAutoplayUI" class="autoplay-badge">TUTORIAL MODE</span>
+          <span v-if="isMini" class="mini-badge">MINI</span>
+          <span v-if="isAutoplayUI && !tutorialMode" class="autoplay-badge">AUTO MODE</span>
+          <span v-if="tutorialMode" class="autoplay-badge tutorial">TUTORIAL</span>
+          <span v-if="practiceMode" class="autoplay-badge practice">PRACTICE</span>
         </div>
 
         
@@ -77,6 +73,21 @@
               <span>SCORE {{ Math.floor(score) }}</span>
             </div>
 
+            <!-- Video Save Button -->
+            <div class="video-save-section">
+              <button 
+                v-if="!isRecordingSaved" 
+                @click="saveRecording" 
+                class="save-video-btn"
+                :disabled="isSavingVideo"
+              >
+                <span v-if="isSavingVideo">💾 저장 중...</span>
+                <span v-else>🎬 영상 저장</span>
+              </button>
+              <p v-if="isRecordingSaved" class="save-success">✅ 영상이 저장되었습니다!</p>
+              <p class="save-hint">클리어 장면을 동영상으로 저장합니다</p>
+            </div>
+
             <!-- Map Rating Vote -->
             <div v-if="loadMap && loadMap._id && !hasVoted" class="rating-vote pointer-events-auto">
                <p class="rating-label">RATE THIS MAP (1-30)</p>
@@ -92,6 +103,7 @@
           </div>
         </div>
 
+
         <div v-if="countdown" class="overlay countdown-overlay">
           <div class="countdown-text">{{ countdown }}</div>
         </div>
@@ -103,8 +115,13 @@
            </div>
         </div>
         
+        <div v-if="practiceMode && checkpoints.length > 0" class="checkpoint-indicator">
+           CPs: {{ checkpoints.length }} (Last: {{ Math.floor(checkpoints[checkpoints.length - 1].progress) }}%)
+        </div>
+
         <div class="controls-hint" v-if="!countdown && !gameOver && !victory && !isComputingPath">
           <span>클릭/스페이스 유지 = 위로 | 해제 = 아래로</span>
+          <span v-if="practiceMode"> | [C] 체크포인트 | [X] 최근 삭제</span>
         </div>
       </div>
     </div>
@@ -125,7 +142,11 @@ const props = defineProps<{
   multiplayerMode?: boolean; // 멀티플레이어 레이싱 모드
   difficulty?: number; // 외부에서 전달받은 난이도
   opponentY?: number;
+  difficulty?: number; // 외부에서 전달받은 난이도
+  opponentY?: number;
   opponentProgress?: number;
+  practiceMode?: boolean;
+  tutorialMode?: boolean;
 }>();
 
 const emit = defineEmits(['retry', 'exit', 'complete', 'map-ready', 'progress-update', 'record-update']);
@@ -151,6 +172,13 @@ const isNewBest = ref(false);
 const userRating = ref(15);
 const hasVoted = ref(false);
 
+// Video Recording
+const isRecordingSaved = ref(false);
+const isSavingVideo = ref(false);
+let mediaRecorder: MediaRecorder | null = null;
+let recordedChunks: Blob[] = [];
+
+
 const submitRating = async () => {
   if (!props.loadMap?._id || hasVoted.value) return;
   try {
@@ -163,6 +191,97 @@ const submitRating = async () => {
     alert("Failed to submit rating.");
   }
 };
+
+// 녹화 시작 함수
+const startRecording = () => {
+  if (!canvas.value) return;
+  
+  try {
+    recordedChunks = [];
+    isRecordingSaved.value = false;
+    
+    // Canvas를 스트림으로 캡처
+    const stream = canvas.value.captureStream(30); // 30fps
+    
+    // 오디오도 캡처 시도
+    if (audioCtx && audioSource) {
+      try {
+        const audioDestination = audioCtx.createMediaStreamDestination();
+        audioSource.connect(audioDestination);
+        const audioTracks = audioDestination.stream.getAudioTracks();
+        audioTracks.forEach(track => stream.addTrack(track));
+      } catch (e) {
+        console.log('[Recording] Audio capture not available, video only');
+      }
+    }
+    
+    // MediaRecorder 설정
+    const options = { mimeType: 'video/webm;codecs=vp9' };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      // Fallback
+      options.mimeType = 'video/webm';
+    }
+    
+    mediaRecorder = new MediaRecorder(stream, options);
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+    
+    mediaRecorder.start(100); // 100ms chunks
+    console.log('[Recording] Started');
+  } catch (e) {
+    console.error('[Recording] Failed to start:', e);
+  }
+};
+
+// 녹화 중지 함수
+const stopRecording = () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    console.log('[Recording] Stopped');
+  }
+};
+
+// 녹화 저장 함수
+const saveRecording = async () => {
+  if (recordedChunks.length === 0) {
+    alert('녹화된 영상이 없습니다. 다시 플레이해주세요.');
+    return;
+  }
+  
+  isSavingVideo.value = true;
+  
+  try {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    
+    // 파일명 생성
+    const mapName = props.loadMap?.title || 'gameplay';
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+    const filename = `UMM_${mapName}_${timestamp}.webm`;
+    
+    // 다운로드 링크 생성
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    isRecordingSaved.value = true;
+    console.log('[Recording] Saved:', filename);
+  } catch (e) {
+    console.error('[Recording] Save failed:', e);
+    alert('영상 저장에 실패했습니다.');
+  } finally {
+    isSavingVideo.value = false;
+  }
+};
+
 
 const currentTrackTime = ref(0);
 const isComputingPath = ref(false);
@@ -178,6 +297,10 @@ const interpolationFactor = 0.1; // Smoothing speed
 // Audio
 let audioCtx: AudioContext | null = null;
 let audioSource: AudioBufferSourceNode | null = null;
+const checkpoints = ref<any[]>([]); // Snapshot stacks
+let clickDownBuffer: AudioBuffer | null = null;
+let clickUpBuffer: AudioBuffer | null = null;
+let lastAiHolding = false;
 
 let animationId: number;
 let lastFrameTime = 0;
@@ -212,6 +335,37 @@ const difficultyName = computed(() => {
   return 'IMPOSSIBLE';
 });
 
+const loadSfx = async () => {
+  if (!audioCtx) return;
+  
+  const fetchAudio = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      return await audioCtx!.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      console.error(`Failed to load sfx: ${url}`, e);
+      return null;
+    }
+  };
+
+  if (!clickDownBuffer) clickDownBuffer = await fetchAudio('/audio/click_down.mp3');
+  if (!clickUpBuffer) clickUpBuffer = await fetchAudio('/audio/click_up.mp3');
+};
+
+const playSfx = (buffer: AudioBuffer | null, volume: number = 0.5) => {
+  if (!audioCtx || !buffer) return;
+  try {
+    const source = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    source.buffer = buffer;
+    gain.gain.value = volume;
+    source.connect(gain);
+    gain.connect(audioCtx.destination);
+    source.start();
+  } catch(e) {}
+};
+
 
 
 const startGame = () => {
@@ -226,6 +380,8 @@ const startGame = () => {
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
+
+  loadSfx(); // 배경 부하 없이 비동기로 로드
   const wasAutoplay = props.multiplayerMode ? false : engine.value.isAutoplay;
   engine.value.setMapConfig({
     density: 1.0,
@@ -242,6 +398,13 @@ const startGame = () => {
     difficulty.value = props.loadMap.difficulty;
     isMapValidated.value = true;
     
+    // 튜토리얼 모드: 저장된 동선(autoplayLog) 사용
+    if (props.tutorialMode && props.loadMap.autoplayLog && props.loadMap.autoplayLog.length > 0) {
+      engine.value.isAutoplay = true;
+      isAutoplayUI.value = true;
+      console.log('[Tutorial] Using saved autoplayLog, length:', props.loadMap.autoplayLog.length);
+    }
+    
     // 최고 기록 초기화 (점수 / 10 = 퍼센트)
     if (props.loadMap.bestScore) {
       bestProgress.value = Math.min(100, props.loadMap.bestScore / 10);
@@ -250,6 +413,13 @@ const startGame = () => {
     }
   } else {
     engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false);
+    
+    // 튜토리얼 모드: 생성된 동선 사용
+    if (props.tutorialMode) {
+      engine.value.isAutoplay = true;
+      isAutoplayUI.value = true;
+    }
+    
     validateMapInBackground();
   }
   
@@ -260,12 +430,24 @@ const startGame = () => {
   progress.value = 0;
   score.value = 0;
   isGravityInverted.value = false;
+  lastAiHolding = false;
   
   // UI 즉시 리셋 (재시작 시 잔상 제거)
   emit('progress-update', { progress: 0, ghostProgress: 0 });
   
-  draw();
-  startCountdown();
+  emit('progress-update', { progress: 0, ghostProgress: 0 });
+  
+  if (checkpoints.value.length === 0) {
+    draw();
+    startCountdown();
+  } else {
+    // If we have checkpoints, we might want to stay there, but startGame usually resets.
+    // However, for consistency with the existing code's logic (which was a bit ambiguous here):
+    checkpoints.value = [];
+    draw();
+    startCountdown();
+  }
+  
   attempts.value++;
 };
 
@@ -283,6 +465,101 @@ const emitMapData = () => {
 
 const manualSave = () => {
   emitMapData();
+};
+
+const manualCheckpoint = () => {
+  if (!props.practiceMode || gameOver.value) return;
+  
+  // Snapshot all relevant engine state
+  const cp = {
+    // Player
+    x: engine.value.playerX,
+    y: engine.value.playerY,
+    velocity: engine.value.velocity,
+    isHolding: engine.value.isHolding,
+    
+    // World
+    cameraX: engine.value.cameraX,
+    isGravityInverted: engine.value.isGravityInverted,
+    speedMultiplier: engine.value.speedMultiplier,
+    isMini: engine.value.isMini,
+    waveAngle: engine.value.waveAngle,
+    
+    // Progress
+    score: engine.value.score,
+    progress: engine.value.progress,
+    startTimeOffset: (audioCtx?.currentTime || 0) - engine.value.startTime, // Track time
+    
+    // Collections (Copies)
+    obstacles: JSON.parse(JSON.stringify(engine.value.obstacles)), // Deep copy might be heavy but safe
+    portals: JSON.parse(JSON.stringify(engine.value.portals)),
+    
+    timestamp: Date.now()
+  };
+  checkpoints.value.push(cp);
+  
+  // Visual feedback
+  const ctx = canvas.value?.getContext('2d');
+  if (ctx) {
+    ctx.save();
+    ctx.fillStyle = '#00ff00';
+    ctx.font = 'bold 30px Arial';
+    ctx.fillText("CHECKPOINT SET!", canvas.value!.width/2, 100);
+    ctx.restore();
+  }
+  console.log("Checkpoint set at", checkpoint.progress + "%");
+};
+
+const restoreCheckpoint = () => {
+  if (checkpoints.value.length === 0 || !props.practiceMode) return;
+  
+  const cp = checkpoints.value[checkpoints.value.length - 1];
+  
+  // Restore Engine
+  engine.value.playerX = cp.x;
+  engine.value.playerY = cp.y;
+  engine.value.velocity = cp.velocity;
+  engine.value.isHolding = cp.isHolding;
+  
+  engine.value.cameraX = cp.cameraX;
+  engine.value.isGravityInverted = cp.isGravityInverted;
+  engine.value.speedMultiplier = cp.speedMultiplier;
+  engine.value.isMini = cp.isMini;
+  engine.value.waveAngle = cp.waveAngle;
+  engine.value.score = cp.score;
+  engine.value.progress = cp.progress;
+  
+  // Restore Objects
+  engine.value.obstacles = JSON.parse(JSON.stringify(cp.obstacles));
+  engine.value.portals = JSON.parse(JSON.stringify(cp.portals));
+  
+  // Reset Game State
+  gameOver.value = false;
+  victory.value = false;
+  failReason.value = '';
+  isRunning.value = true;
+  engine.value.isDead = false;
+  engine.value.isPlaying = true;
+  
+  // Restore Audio
+  if (audioSource) {
+     try { audioSource.stop(); } catch(e){}
+  }
+  
+  // New source from offset
+  if (audioCtx && props.audioBuffer) {
+    audioSource = audioCtx.createBufferSource();
+    audioSource.buffer = props.audioBuffer;
+    audioSource.connect(audioCtx.destination);
+    
+    const offset = cp.startTimeOffset;
+    engine.value.startTime = audioCtx.currentTime - offset;
+    
+    audioSource.start(0, offset);
+    lastFrameTime = audioCtx.currentTime;
+  }
+  
+  loop();
 };
 
 const validateMapInBackground = async () => {
@@ -380,6 +657,10 @@ const runGame = () => {
   
   isRunning.value = true;
   lastFrameTime = audioCtx.currentTime;
+  
+  // 녹화 시작
+  startRecording();
+  
   loop();
 };
 
@@ -401,16 +682,47 @@ const stopGame = () => {
 
 // Input handlers - 순수 웨이브 (누르면 위로, 떼면 아래로)
 const handleInputDown = (e?: Event) => {
-  if (e) e.preventDefault();
+  if (e) {
+    const target = e.target as HTMLElement;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.closest('.no-prevent-default'))) {
+      return;
+    }
+    e.preventDefault();
+  }
   if (!isRunning.value || engine.value.isAutoplay) return;
   engine.value.setHolding(true);
 };
 
 const handleInputUp = (e?: Event) => {
-  if (e) e.preventDefault();
+  if (e) {
+    const target = e.target as HTMLElement;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.closest('.no-prevent-default'))) {
+      return;
+    }
+    e.preventDefault();
+  }
   if (engine.value.isAutoplay) return;
   engine.value.setHolding(false);
 };
+
+// Keyboard listener for Checkpoint
+const handleKeyDown = (e: KeyboardEvent) => {
+  if (e.code === 'KeyC' && props.practiceMode) {
+    manualCheckpoint();
+  } else if (e.code === 'KeyX' && props.practiceMode) {
+    if (checkpoints.value.length > 0) {
+      checkpoints.value.pop();
+    }
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+  stopGame();
+});
 
 const handleGameOver = () => {
   gameOver.value = true;
@@ -430,6 +742,9 @@ const handleGameOver = () => {
     try { audioSource.stop(); } catch(e){}
   }
   
+  // 녹화 중지 (게임 오버)
+  stopRecording();
+  
   emit('record-update', { score: score.value, progress: progress.value });
   
   // 히트박스 모드로 3초간 보여준 후 재시작
@@ -444,9 +759,13 @@ const handleGameOver = () => {
   
   autoRetryTimer = setTimeout(() => {
     if (gameOver.value) {
-      startGame();
+      if (props.practiceMode && checkpoints.value.length > 0) {
+        restoreCheckpoint();
+      } else {
+        startGame();
+      }
     }
-  }, 3000);
+  }, props.practiceMode ? 1000 : 3000); // Faster restart for practice
 
 };
 
@@ -459,6 +778,9 @@ const handleVictory = () => {
   if (audioSource) {
     try { audioSource.stop(); } catch(e){}
   }
+  
+  // 녹화 중지 (클리어)
+  stopRecording();
   
   emit('record-update', { score: score.value, progress: 100 });
   emit('complete', { score: score.value });
@@ -491,6 +813,16 @@ const update = () => {
 
   engine.value.update(dt, trackTime);
   currentTrackTime.value = trackTime;
+
+  // AI 클릭 소리 재생
+  if (engine.value.isAutoplay) {
+    if (engine.value.isHolding && !lastAiHolding) {
+      playSfx(clickDownBuffer, 1.2);
+    } else if (!engine.value.isHolding && lastAiHolding) {
+      playSfx(clickUpBuffer, 0.6);
+    }
+    lastAiHolding = engine.value.isHolding;
+  }
   
   score.value = engine.value.score;
   progress.value = engine.value.progress;
@@ -604,22 +936,30 @@ const draw = () => {
     if (portal.x > engine.value.cameraX + w + 50) return;
     
     ctx.save();
+    
+    // 전역 회전 지원
+    if (portal.angle) {
+      ctx.translate(portal.x + portal.width / 2, portal.y + portal.height / 2);
+      ctx.rotate(portal.angle * Math.PI / 180);
+      ctx.translate(-(portal.x + portal.width / 2), -(portal.y + portal.height / 2));
+    }
+
     const color = engine.value.getPortalColor(portal.type);
     const symbol = engine.value.getPortalSymbol(portal.type);
     const isMiniPortal = portal.type === 'mini_pink' || portal.type === 'mini_green';
     
     ctx.globalAlpha = portal.activated ? 0.3 : 1.0;
     ctx.fillStyle = color;
-    ctx.shadowBlur = 25;
+    ctx.shadowBlur = 20;
     ctx.shadowColor = color;
     
     if (isMiniPortal) {
-      // 뾰족뾰족한 다이아몬드 모양으로 그리기
+      // 미니 포탈: 뾰족한 다이아몬드
       const cx = portal.x + portal.width / 2;
       const cy = portal.y + portal.height / 2;
       const rx = portal.width / 2;
       const ry = portal.height / 2;
-      const spikes = 8;  // 뾰족한 점 개수
+      const spikes = 8;
       
       ctx.beginPath();
       for (let i = 0; i <= spikes * 2; i++) {
@@ -633,36 +973,23 @@ const draw = () => {
       }
       ctx.closePath();
       ctx.fill();
-      
-      // 내부 하이라이트
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.beginPath();
-      for (let i = 0; i <= spikes * 2; i++) {
-        const angle = (Math.PI * 2 * i) / (spikes * 2) - Math.PI / 2;
-        const isOuter = i % 2 === 0;
-        const radius = isOuter ? 0.6 : 0.35;
-        const px = cx + Math.cos(angle) * rx * radius;
-        const py = cy + Math.sin(angle) * ry * radius;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
     } else {
-      // 일반 포탈 - 둥근 사각형
+      // 일반 포탈: 둥근 사각형
       ctx.beginPath();
       ctx.roundRect(portal.x, portal.y, portal.width, portal.height, 12);
       ctx.fill();
       
+      // 내부 하이라이트
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
       ctx.beginPath();
       ctx.roundRect(portal.x + 6, portal.y + 6, portal.width - 12, portal.height - 12, 8);
       ctx.fill();
     }
     
+    // 심볼 표시 (중앙에 하나)
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 18px Arial';
+    ctx.font = 'bold 18px Outfit';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(symbol, portal.x + portal.width / 2, portal.y + portal.height / 2);
@@ -677,6 +1004,14 @@ const draw = () => {
     
     ctx.save();
     
+    // 전역 회전 지원 (모든 오브젝트)
+    const hasAngle = obs.angle !== undefined && obs.angle !== 0;
+    if (hasAngle) {
+      ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
+      ctx.rotate(obs.angle! * Math.PI / 180);
+      ctx.translate(-(obs.x + obs.width / 2), -(obs.y + obs.height / 2));
+    }
+
     if (obs.type === 'spike' || obs.type === 'mini_spike') {
       const isMini = obs.type === 'mini_spike';
       ctx.fillStyle = isMini ? '#ff6666' : '#ff4444';
@@ -697,16 +1032,7 @@ const draw = () => {
       }
       ctx.closePath();
       ctx.fill();
-      
     } else if (obs.type === 'block') {
-      ctx.save();
-      const hasAngle = obs.angle !== undefined && obs.angle !== 0;
-      if (hasAngle) {
-        ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
-        ctx.rotate(obs.angle! * Math.PI / 180);
-        ctx.translate(-(obs.x + obs.width / 2), -(obs.y + obs.height / 2));
-      }
-
       ctx.fillStyle = '#444';
       ctx.shadowBlur = 5;
       ctx.shadowColor = '#666';
@@ -714,7 +1040,6 @@ const draw = () => {
       
       ctx.fillStyle = '#555';
       ctx.fillRect(obs.x + 2, obs.y + 2, obs.width - 4, obs.height - 4);
-      ctx.restore();
       
     } else if (obs.type === 'saw') {
       const cx = obs.x + obs.width / 2;
@@ -833,6 +1158,37 @@ const draw = () => {
       ctx.fillStyle = '#777';
       ctx.fillRect(obs.x, obs.y, obs.width, 8);
       ctx.fillRect(obs.x, obs.y + obs.height - 8, obs.width, 8);
+
+    } else if (obs.type === 'slope') {
+      // Slope rendering (Triangle)
+      // angle > 0: Upper slope (points down), angle < 0: Lower slope (points up)
+      ctx.fillStyle = '#444';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#666';
+      
+      const isUpper = obs.angle! > 0;
+      
+      ctx.beginPath();
+      if (isUpper) {
+        // Upper triangle: Right-angled at (x, y) or (x+w, y)
+        // 위쪽에서 아래로 내려다보는 모양
+        ctx.moveTo(obs.x, obs.y);
+        ctx.lineTo(obs.x + obs.width, obs.y);
+        ctx.lineTo(obs.x + (obs.angle! > 0 ? 0 : obs.width), obs.y + obs.height);
+      } else {
+        // Lower triangle: Right-angled at (x, y+h) or (x+w, y+h)
+        // 아래쪽에서 위로 올라다보는 모양
+        ctx.moveTo(obs.x, obs.y + obs.height);
+        ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
+        ctx.lineTo(obs.x + (obs.angle! < 0 ? obs.width : 0), obs.y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      
+      // Detail lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
 
     } else if (obs.type === 'mine') {
       const cx = obs.x + obs.width / 2;
@@ -976,6 +1332,42 @@ const draw = () => {
     ctx.fill();
   });
   ctx.globalAlpha = 1;
+  
+  // Draw checkpoints
+  if (props.practiceMode) {
+    checkpoints.value.forEach((cp, idx) => {
+      ctx.save();
+      const cpSize = 15;
+      const isLast = idx === checkpoints.value.length - 1;
+      
+      ctx.translate(cp.x, cp.y);
+      
+      // Diamond shape
+      ctx.beginPath();
+      ctx.moveTo(0, -cpSize);
+      ctx.lineTo(cpSize, 0);
+      ctx.lineTo(0, cpSize);
+      ctx.lineTo(-cpSize, 0);
+      ctx.closePath();
+      
+      if (isLast) {
+        ctx.fillStyle = '#00ff00';
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#00ff00';
+      } else {
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.4)';
+      }
+      
+      ctx.fill();
+      
+      // Outline
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      ctx.restore();
+    });
+  }
   
   // Draw player - 작은 웨이브
   const px = engine.value.playerX;
@@ -1832,4 +2224,87 @@ button.secondary:hover {
   from { transform: translateX(-20px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+
+.hud-action-btn.checkpoint {
+  background: rgba(255, 255, 0, 0.2);
+  color: #ffff00;
+  border: 1px solid rgba(255, 255, 0, 0.5);
+}
+
+.autoplay-badge.practice {
+  background: rgba(255, 255, 0, 0.2);
+  color: #ffff00;
+  border: 1px solid #ffff00;
+}
+
+.autoplay-badge.tutorial {
+  background: rgba(255, 0, 255, 0.2);
+  color: #ff00ff;
+  border: 1px solid #ff00ff;
+}
+
+.game-title.tutorial {
+  background: linear-gradient(135deg, #ff00ff 0%, #00ffff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.checkpoint-indicator {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #00ff00;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-weight: bold;
+  border: 1px solid #00ff00;
+  animation: pulse 2s infinite;
+}
+
+/* Video Save Section */
+.video-save-section {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.save-video-btn {
+  padding: 12px 30px;
+  background: linear-gradient(135deg, #ff6b00, #ff0066);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s;
+  pointer-events: auto;
+}
+
+.save-video-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(255, 100, 0, 0.5);
+}
+
+.save-video-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.save-success {
+  color: #00ff88;
+  font-size: 1rem;
+  font-weight: bold;
+  margin: 0;
+}
+
+.save-hint {
+  color: #888;
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+}
 </style>
+

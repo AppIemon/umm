@@ -36,8 +36,14 @@ declare module "nitropack/types" {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/index.get').default>>>>
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/index.post').default>>>>
     }
+    '/api/matchmaking/clear': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/clear.post').default>>>>
+    }
     '/api/matchmaking/find': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/find.post').default>>>>
+    }
+    '/api/matchmaking/next-map': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/next-map.post').default>>>>
     }
     '/api/matchmaking/status': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/status.post').default>>>>

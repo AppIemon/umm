@@ -1,160 +1,283 @@
-import ytdl from '@distube/ytdl-core';
-import fs from 'fs';
-import path from 'path';
+import { Readable } from 'stream';
+
+// List of Invidious instances to try (fallback chain)
+// Updated with currently working instances
+const INVIDIOUS_INSTANCES = [
+  'https://api.invidious.io',      // Official API instance
+  'https://invidious.snopyta.org',
+  'https://invidious.kavin.rocks',
+  'https://inv.riverside.rocks',
+  'https://yt.artemislena.eu',
+  'https://invidious.flokinet.to',
+  'https://invidious.esmailelbob.xyz',
+  'https://inv.bp.projectsegfau.lt',
+];
+
+function extractVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /^([a-zA-Z0-9_-]{11})$/
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getAudioFromInvidious(videoId: string): Promise<{ audioUrl: string; title: string } | null> {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[YouTube] Trying Invidious instance: ${instance}`);
+      const apiUrl = `${instance}/api/v1/videos/${videoId}`;
+      const response = await fetchWithTimeout(apiUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      }, 15000);
+
+      if (!response.ok) {
+        console.log(`[YouTube] Invidious ${instance} returned ${response.status}`);
+        continue;
+      }
+
+      const data = await response.json() as any;
+      const title = data.title || 'audio';
+
+      // Find audio-only format (prefer higher quality)
+      const adaptiveFormats = data.adaptiveFormats || [];
+      let audioFormat = adaptiveFormats
+        .filter((f: any) => f.type?.startsWith('audio/'))
+        .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+
+      if (audioFormat?.url) {
+        console.log(`[YouTube] Found audio from ${instance}: ${audioFormat.type}, bitrate: ${audioFormat.bitrate}`);
+        return { audioUrl: audioFormat.url, title };
+      }
+
+      // Fallback: Try formatStreams (contains both audio and video)
+      const formatStreams = data.formatStreams || [];
+      if (formatStreams.length > 0) {
+        console.log(`[YouTube] Using formatStream from ${instance}`);
+        return { audioUrl: formatStreams[0].url, title };
+      }
+
+    } catch (error: any) {
+      console.log(`[YouTube] Invidious ${instance} error: ${error.message}`);
+      continue;
+    }
+  }
+  return null;
+}
+
+// Cobalt API v10 format
+async function getAudioFromCobalt(videoId: string): Promise<{ audioUrl: string; title: string } | null> {
+  // Main cobalt instance
+  const cobaltUrl = 'https://api.cobalt.tools';
+
+  try {
+    console.log(`[YouTube] Trying Cobalt API...`);
+    const response = await fetchWithTimeout(cobaltUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        downloadMode: 'audio',
+        audioFormat: 'mp3'
+      })
+    }, 30000);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[YouTube] Cobalt returned ${response.status}: ${errorText}`);
+      return null;
+    }
+
+    const data = await response.json() as any;
+
+    // Handle different response formats
+    if (data.status === 'tunnel' || data.status === 'redirect') {
+      const audioUrl = data.url || data.audio;
+      if (audioUrl) {
+        console.log(`[YouTube] Got audio URL from Cobalt`);
+        return { audioUrl, title: data.filename || 'audio' };
+      }
+    } else if (data.url) {
+      console.log(`[YouTube] Got direct URL from Cobalt`);
+      return { audioUrl: data.url, title: 'audio' };
+    }
+
+    console.log(`[YouTube] Cobalt response format not recognized:`, data);
+  } catch (error: any) {
+    console.log(`[YouTube] Cobalt error: ${error.message}`);
+  }
+
+  return null;
+}
+
+// Piped API as additional fallback
+async function getAudioFromPiped(videoId: string): Promise<{ audioUrl: string; title: string } | null> {
+  const pipedInstances = [
+    'https://pipedapi.kavin.rocks',
+    'https://api.piped.yt',
+    'https://pipedapi.adminforge.de',
+  ];
+
+  for (const instance of pipedInstances) {
+    try {
+      console.log(`[YouTube] Trying Piped instance: ${instance}`);
+      const response = await fetchWithTimeout(`${instance}/streams/${videoId}`, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      }, 15000);
+
+      if (!response.ok) {
+        console.log(`[YouTube] Piped ${instance} returned ${response.status}`);
+        continue;
+      }
+
+      const data = await response.json() as any;
+      const title = data.title || 'audio';
+
+      // Get audio streams
+      const audioStreams = data.audioStreams || [];
+      if (audioStreams.length > 0) {
+        // Sort by bitrate and get highest quality
+        const bestAudio = audioStreams.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+        if (bestAudio?.url) {
+          console.log(`[YouTube] Found audio from Piped ${instance}: bitrate ${bestAudio.bitrate}`);
+          return { audioUrl: bestAudio.url, title };
+        }
+      }
+
+    } catch (error: any) {
+      console.log(`[YouTube] Piped ${instance} error: ${error.message}`);
+      continue;
+    }
+  }
+  return null;
+}
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { url } = body;
 
-  if (!url || !ytdl.validateURL(url)) {
+  if (!url) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'URL is required'
+    });
+  }
+
+  const videoId = extractVideoId(url);
+  if (!videoId) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Invalid YouTube URL'
     });
   }
 
+  console.log(`[YouTube] Processing video ID: ${videoId}`);
+
   try {
-    // Attempt to load cookies
-    let agent;
-    const projectRoot = process.cwd();
-    const envCookies = process.env.YOUTUBE_COOKIES;
+    // Try Invidious first (most reliable)
+    let result = await getAudioFromInvidious(videoId);
 
-    const parseNetscapeCookies = (content: string) => {
-      const cookies: any[] = [];
-      content.split(/\r?\n/).forEach(line => {
-        line = line.trim();
-        if (!line || line.startsWith('#')) return;
-        const parts = line.split(/\t/);
-        if (parts.length >= 7) {
-          cookies.push({
-            domain: parts[0],
-            path: parts[2],
-            secure: parts[3] === 'TRUE',
-            expires: parseInt(parts[4]),
-            name: parts[5],
-            value: parts[6]
-          });
-        }
-      });
-      return cookies;
-    };
-
-    // 1. Check environment variable (Priority for Vercel)
-    if (envCookies) {
-      try {
-        const cookies = parseNetscapeCookies(envCookies);
-        if (cookies.length > 0) {
-          agent = ytdl.createAgent(cookies);
-          console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from Environment Variable`);
-        }
-      } catch (e) {
-        console.error('[YouTube] Failed to parse cookies from Environment Variable:', e);
-      }
+    // If Invidious fails, try Piped
+    if (!result) {
+      console.log('[YouTube] All Invidious instances failed, trying Piped...');
+      result = await getAudioFromPiped(videoId);
     }
 
-    // 2. Fallback to files if environment variable is not set
-    if (!agent) {
-      const cookiesJsonPath = path.resolve(projectRoot, 'youtube-cookies.json');
-      const cookiesTxtPath = path.resolve(projectRoot, 'youtube-cookies.txt');
-
-      if (fs.existsSync(cookiesJsonPath)) {
-        try {
-          const cookies = JSON.parse(fs.readFileSync(cookiesJsonPath, 'utf8'));
-          agent = ytdl.createAgent(cookies);
-          console.log('[YouTube] Successfully loaded cookies from JSON file');
-        } catch (e) {
-          console.error('[YouTube] Failed to parse cookies JSON:', e);
-        }
-      } else if (fs.existsSync(cookiesTxtPath)) {
-        try {
-          const content = fs.readFileSync(cookiesTxtPath, 'utf8');
-          const cookies = parseNetscapeCookies(content);
-          if (cookies.length > 0) {
-            agent = ytdl.createAgent(cookies);
-            console.log(`[YouTube] Successfully loaded ${cookies.length} cookies from txt file`);
-          }
-        } catch (e) {
-          console.error('[YouTube] Failed to parse cookies txt:', e);
-        }
-      }
+    // If Piped fails, try Cobalt
+    if (!result) {
+      console.log('[YouTube] All Piped instances failed, trying Cobalt...');
+      result = await getAudioFromCobalt(videoId);
     }
 
-    if (!agent) {
-      console.log('[YouTube] No cookies found (ENV or File). Proceeding without authentication.');
-      agent = ytdl.createAgent();
+    if (!result) {
+      throw new Error('All audio extraction methods failed. Please try again later.');
     }
 
-    const requestOptions = {
+    const { audioUrl, title } = result;
+    const sanitizedTitle = title.replace(/[\/\\:*?"<>|]/g, '_');
+
+    console.log(`[YouTube] Streaming audio for: ${sanitizedTitle}`);
+
+    // Fetch the audio and stream it to client
+    const audioResponse = await fetchWithTimeout(audioUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': '*/*',
         'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
         'Referer': 'https://www.youtube.com/',
-        'Origin': 'https://www.youtube.com',
-        'Sec-Ch-Ua': '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-      },
-      lang: 'ko',
-      location: 'KR'
-    };
-
-    console.log(`[YouTube] Fetching info for: ${url}`);
-    const info = await ytdl.getInfo(url, { agent, requestOptions });
-    const title = info.videoDetails.title.replace(/[\/\\:*?"<>|]/g, '_'); // Sanitize filename for standard FS
-    // Try to find audio only first, fallback to lowest video quality with audio
-    let format;
-    try {
-      format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
-    } catch (e) {
-      // Fallback: try finding any format with audio
-      const audioFormats = ytdl.filterFormats(info.formats, 'audioandvideo');
-      if (audioFormats.length > 0) {
-        format = audioFormats[0];
-      } else {
-        throw new Error('No playable formats found (audioonly or audioandvideo)');
       }
+    }, 60000);
+
+    if (!audioResponse.ok) {
+      throw new Error(`Failed to fetch audio stream: ${audioResponse.status}`);
     }
 
-    console.log(`[YouTube] Successfully fetched info for: ${title}`);
+    // Set response headers
+    const contentType = audioResponse.headers.get('content-type') || 'audio/mpeg';
+    setResponseHeader(event, 'Content-Type', contentType);
 
-    // Set headers
-    setResponseHeader(event, 'Content-Type', 'audio/mpeg'); // or audio/webm depending on format
-    const encodedTitle = encodeURIComponent(title + '.mp3');
+    const encodedTitle = encodeURIComponent(sanitizedTitle + '.mp3');
     setResponseHeader(event, 'Content-Disposition', `attachment; filename*=UTF-8''${encodedTitle}`);
 
-    // Stream directly using the already fetched info
-    // 403 Forbidden 해결 시도: dlChunkSize 설정 및 highWaterMark 증가
-    const stream = ytdl.downloadFromInfo(info, {
-      format,
-      agent,
-      requestOptions, // 헤더 전달
-      highWaterMark: 1 << 25, // 32MB
-      dlChunkSize: 0, // 0으로 설정하여 전체 파일을 한 번에 요청 시도 (또는 매우 큰 값) -> youtube throttling 우회 시도
-      ipv6Block: false
-    });
-
-    return sendStream(event, stream);
-
-  } catch (error: any) {
-    console.error("YouTube Download Error Info:", {
-      message: error.message,
-      statusCode: error.statusCode,
-      status: error.status,
-      url: url
-    });
-
-    let message = error.message;
-    if (message.includes('confirm you are not a bot') || message.includes('로그인하여 봇이 아님을 확인하세요')) {
-      message = `YouTube is blocking the request (Bot Detection). Please ensure 'youtube-cookies.txt' is in the project root (${process.cwd()}) and contains valid cookies.`;
+    const contentLength = audioResponse.headers.get('content-length');
+    if (contentLength) {
+      setResponseHeader(event, 'Content-Length', parseInt(contentLength, 10));
     }
 
+    // Convert Web ReadableStream to Node.js Readable stream
+    if (audioResponse.body) {
+      const reader = audioResponse.body.getReader();
+      const stream = new Readable({
+        async read() {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              this.push(null);
+            } else {
+              this.push(Buffer.from(value));
+            }
+          } catch (err) {
+            this.destroy(err as Error);
+          }
+        }
+      });
+      return sendStream(event, stream);
+    }
+
+    throw new Error('No response body available');
+
+  } catch (error: any) {
+    console.error("[YouTube] Download Error:", {
+      message: error.message,
+      videoId: videoId
+    });
+
     throw createError({
-      statusCode: (error.statusCode && error.statusCode >= 400 && error.statusCode < 600) ? error.statusCode : 500,
-      statusMessage: `Failed to process YouTube video: ${message}`
+      statusCode: 500,
+      statusMessage: `Failed to process YouTube video: ${error.message}`
     });
   }
 });

@@ -99,7 +99,7 @@
             </div>
           </div>
           
-          <div class="prop-group" v-if="'angle' in selectedObjects[0]">
+          <div class="prop-group" v-if="'type' in selectedObjects[0]">
             <label>ROTATION (DEG)</label>
             <div class="rotation-controls">
               <button @click="rotateSelected(-45)" class="rot-btn">↺ -45°</button>
@@ -175,6 +175,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
 import { GameEngine, type Obstacle, type Portal, type ObstacleType, type PortalType } from '@/utils/game-engine';
+import { CHUNK_SIZE, splitBase64ToChunks } from '@/utils/audioUtils';
 
 const router = useRouter();
 const { user } = useAuth();
@@ -203,7 +204,7 @@ const workspaceRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const audioInputRef = ref<HTMLInputElement | null>(null);
 
-const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb'];
+const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb', 'slope'];
 const portalTypes: PortalType[] = ['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'];
 
 const getSymbol = (type: string) => engine.getPortalSymbol(type as any) || '■';
@@ -475,6 +476,7 @@ const addObject = (x: number, y: number) => {
     const newPortal: Portal = {
       x, y: y - 30, width: 60, height: 80,
       type: type as PortalType,
+      angle: 0,
       activated: false
     };
     mapData.value.enginePortals.push(newPortal);
@@ -546,16 +548,12 @@ const saveMap = async () => {
       mapData.value.creatorName = user.value?.username || 'Guest';
     }
 
-    // 4.5MB 청크 크기 (Vercel 제한 고려)
-    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB (안전 여유)
+    // 4.5MB 청크 크기 (Vercel 제한 고려) - CHUNK_SIZE from audioUtils
     const audioData = mapData.value.audioData;
     
     // 오디오 데이터가 크면 청크로 분할
     if (audioData && audioData.length > CHUNK_SIZE) {
-      const chunks: string[] = [];
-      for (let i = 0; i < audioData.length; i += CHUNK_SIZE) {
-        chunks.push(audioData.substring(i, i + CHUNK_SIZE));
-      }
+      const chunks = splitBase64ToChunks(audioData, CHUNK_SIZE);
       
       // 먼저 맵 데이터를 오디오 없이 저장
       const mapWithoutAudio = { ...mapData.value, audioData: null, audioChunks: [] };
@@ -634,6 +632,14 @@ const draw = () => {
   mapData.value.enginePortals.forEach((p: Portal) => {
     const color = engine.getPortalColor(p.type);
     ctx.save();
+    
+    // 전역 회전 지원
+    if (p.angle) {
+      ctx.translate(p.x + p.width / 2, p.y + p.height / 2);
+      ctx.rotate(p.angle * Math.PI / 180);
+      ctx.translate(-(p.x + p.width / 2), -(p.y + p.height / 2));
+    }
+    
     ctx.fillStyle = color;
     ctx.shadowBlur = 15;
     ctx.shadowColor = color;
@@ -665,6 +671,14 @@ const draw = () => {
   // Draw Obstacles (Same as In-game)
   mapData.value.engineObstacles.forEach((obs: Obstacle) => {
     ctx.save();
+    
+    // 전역 회전 지원 (모든 오브젝트)
+    const hasAngle = obs.angle !== undefined && obs.angle !== 0;
+    if (hasAngle) {
+      ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
+      ctx.rotate(obs.angle! * Math.PI / 180);
+      ctx.translate(-(obs.x + obs.width / 2), -(obs.y + obs.height / 2));
+    }
     
     // Draw Movement Path (Ghost/Reference)
     if (obs.movement && obs.movement.type === 'updown') {
@@ -698,18 +712,31 @@ const draw = () => {
       ctx.closePath();
       ctx.fill();
     } else if (obs.type === 'block') {
-      ctx.save();
-      ctx.translate(drawX + obs.width / 2, drawY + obs.height / 2);
-      ctx.rotate(drawAngle * Math.PI / 180);
-      ctx.translate(-(drawX + obs.width / 2), -(drawY + obs.height / 2));
-      
       ctx.fillStyle = '#444';
       ctx.shadowBlur = 5;
       ctx.shadowColor = '#666';
       ctx.fillRect(drawX, drawY, obs.width, obs.height);
       ctx.fillStyle = '#555';
       ctx.fillRect(drawX + 2, drawY + 2, obs.width - 4, obs.height - 4);
-      ctx.restore();
+    } else if (obs.type === 'slope') {
+      const isUpper = obs.angle! > 0;
+      ctx.fillStyle = '#444';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      if (isUpper) {
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(drawX + obs.width, drawY);
+        ctx.lineTo(drawX + (obs.angle! > 0 ? 0 : obs.width), drawY + obs.height);
+      } else {
+        ctx.moveTo(drawX, drawY + obs.height);
+        ctx.lineTo(drawX + obs.width, drawY + obs.height);
+        ctx.lineTo(drawX + (obs.angle! < 0 ? obs.width : 0), drawY);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     } else if (obs.type === 'saw') {
       const cx = drawX + obs.width / 2;
       const cy = drawY + obs.height / 2;

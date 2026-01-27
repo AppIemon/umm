@@ -40,6 +40,7 @@
           <div class="map-info">
             <span class="creator">BY: {{ map.creatorName }}</span>
             <span class="duration">{{ Math.floor(map.duration) }}s</span>
+            <span v-if="map.myBestProgress !== undefined" class="my-progress">MY: {{ Math.floor(map.myBestProgress) }}%</span>
           </div>
           
             <div class="actions">
@@ -231,7 +232,15 @@ const submitRating = async () => {
 };
 
 watch(currentTab, fetchMaps);
-onMounted(fetchMaps);
+
+onMounted(() => {
+  if (!user.value) {
+    alert("Guest cannot access MAP Database. Please Login.");
+    router.push('/');
+    return;
+  }
+  fetchMaps();
+});
 </script>
 
 <style scoped>
@@ -351,6 +360,12 @@ onMounted(fetchMaps);
   color: #888;
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
+}
+
+.my-progress {
+  color: #00ffff;
+  font-weight: 900;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 
 .actions {
