@@ -147,6 +147,7 @@ const props = defineProps<{
   opponentProgress?: number;
   practiceMode?: boolean;
   tutorialMode?: boolean;
+  invincible?: boolean;
 }>();
 
 const emit = defineEmits(['retry', 'exit', 'complete', 'map-ready', 'progress-update', 'record-update']);
@@ -559,6 +560,9 @@ const restoreCheckpoint = () => {
     lastFrameTime = audioCtx.currentTime;
   }
   
+  // Clear trail to prevent visual artifacts connecting death point to checkpoint
+  engine.value.trail = [];
+  
   loop();
 };
 
@@ -690,6 +694,10 @@ const handleInputDown = (e?: Event) => {
     e.preventDefault();
   }
   if (!isRunning.value || engine.value.isAutoplay) return;
+  
+  if (!engine.value.isHolding) {
+    playSfx(clickDownBuffer, 1.5);
+  }
   engine.value.setHolding(true);
 };
 
@@ -702,6 +710,10 @@ const handleInputUp = (e?: Event) => {
     e.preventDefault();
   }
   if (engine.value.isAutoplay) return;
+  
+  if (engine.value.isHolding) {
+    playSfx(clickUpBuffer, 1.0);
+  }
   engine.value.setHolding(false);
 };
 
@@ -742,10 +754,11 @@ const handleGameOver = () => {
     try { audioSource.stop(); } catch(e){}
   }
   
-  // 녹화 중지 (게임 오버)
-  stopRecording();
-  
-  emit('record-update', { score: score.value, progress: progress.value });
+  // 녹화 중지 지연 (결과 화면 포함)
+  setTimeout(() => {
+    stopRecording();
+    emit('record-update', { score: score.value, progress: progress.value });
+  }, 3000);
   
   // 히트박스 모드로 3초간 보여준 후 재시작
   // 게임 오버 상태에서도 계속 그리기
@@ -779,11 +792,22 @@ const handleVictory = () => {
     try { audioSource.stop(); } catch(e){}
   }
   
-  // 녹화 중지 (클리어)
-  stopRecording();
+  // 녹화 중지 지연 (클리어 화면 포함)
+  setTimeout(() => {
+    stopRecording();
+    emit('record-update', { score: score.value, progress: 100 });
+  }, 3000);
   
-  emit('record-update', { score: score.value, progress: 100 });
   emit('complete', { score: score.value });
+
+  // 클리어 화면 루프 (녹화에 포함되도록)
+  const victoryLoop = () => {
+    if (victory.value) {
+      draw();
+      requestAnimationFrame(victoryLoop);
+    }
+  };
+  victoryLoop();
 };
 
 const loop = () => {
@@ -817,9 +841,9 @@ const update = () => {
   // AI 클릭 소리 재생
   if (engine.value.isAutoplay) {
     if (engine.value.isHolding && !lastAiHolding) {
-      playSfx(clickDownBuffer, 1.2);
+      playSfx(clickDownBuffer, 1.5);
     } else if (!engine.value.isHolding && lastAiHolding) {
-      playSfx(clickUpBuffer, 0.6);
+      playSfx(clickUpBuffer, 1.0);
     }
     lastAiHolding = engine.value.isHolding;
   }
@@ -829,15 +853,22 @@ const update = () => {
   isGravityInverted.value = engine.value.isGravityInverted;
   isMini.value = engine.value.isMini;
   
-  if (engine.value.isDead && !gameOver.value) {
-    handleGameOver();
+  if (engine.value.isDead) {
+    if (props.invincible) {
+      engine.value.isDead = false; // Revive
+      engine.value.isPlaying = true; // Ensure keeps playing
+      // Optional: Add visual feedback for hit even if invincible
+    } else if (!gameOver.value) {
+      handleGameOver();
+    }
   } else if (!engine.value.isPlaying && isRunning.value && !gameOver.value && !victory.value) {
+
     // Game engine finished (reached end) and not dead -> Victory
     handleVictory();
   }
 
-  // progress emission for multiplayer
-  if (props.multiplayerMode && engine.value.totalLength > 0) {
+  // progress emission for multiplayer or tutorial
+  if ((props.multiplayerMode || props.tutorialMode) && engine.value.totalLength > 0) {
     // Player progress
     const currentProgress = (engine.value.playerX / engine.value.totalLength) * 100;
     
@@ -1041,6 +1072,33 @@ const draw = () => {
       ctx.fillStyle = '#555';
       ctx.fillRect(obs.x + 2, obs.y + 2, obs.width - 4, obs.height - 4);
       
+    } else if (obs.type === 'triangle' || obs.type === 'steep_triangle') {
+      const isSteep = obs.type === 'steep_triangle';
+      
+      // 삼각형 (기본적으로 우상향 / 형태 ◢)
+      // 회전은 상단 공통 로직에서 이미 적용됨
+      
+      ctx.fillStyle = isSteep ? '#222' : '#333'; // 가파른 건 더 어두운 색
+      ctx.shadowBlur = 5;
+      ctx.shadowColor = '#555';
+      
+      ctx.beginPath();
+      // Draw ◢ shape (Right angle at Bottom-Right)
+      ctx.moveTo(obs.x, obs.y + obs.height);           // Bottom-Left
+      ctx.lineTo(obs.x + obs.width, obs.y + obs.height); // Bottom-Right
+      ctx.lineTo(obs.x + obs.width, obs.y);            // Top-Right
+      ctx.closePath();
+      ctx.fill();
+      
+      // Inner detail (Bevel effect)
+      ctx.fillStyle = isSteep ? '#444' : '#555';
+      const pad = 4;
+      ctx.beginPath();
+      ctx.moveTo(obs.x + pad * 2, obs.y + obs.height - pad); 
+      ctx.lineTo(obs.x + obs.width - pad, obs.y + obs.height - pad);
+      ctx.lineTo(obs.x + obs.width - pad, obs.y + pad * 2);
+      ctx.fill();
+
     } else if (obs.type === 'saw') {
       const cx = obs.x + obs.width / 2;
       const cy = obs.y + obs.height / 2;
@@ -1160,34 +1218,35 @@ const draw = () => {
       ctx.fillRect(obs.x, obs.y + obs.height - 8, obs.width, 8);
 
     } else if (obs.type === 'slope') {
-      // Slope rendering (Triangle)
-      // angle > 0: Upper slope (points down), angle < 0: Lower slope (points up)
-      ctx.fillStyle = '#444';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#666';
+      // Slope rendering (Triangle) - 웨이브 코리도 형성
+      // angle > 0: 왼쪽 하단에 직각 (올라가는 웨이브용 위쪽 슬로프)
+      // angle < 0: 오른쪽 하단에 직각 (올라가는 웨이브용 아래쪽 슬로프)
       
-      const isUpper = obs.angle! > 0;
+      ctx.fillStyle = '#222';
+      // Optimization: Removed heavy shadow blur
+      // ctx.shadowBlur = 15;
+      // ctx.shadowColor = '#000';
       
       ctx.beginPath();
-      if (isUpper) {
-        // Upper triangle: Right-angled at (x, y) or (x+w, y)
-        // 위쪽에서 아래로 내려다보는 모양
-        ctx.moveTo(obs.x, obs.y);
-        ctx.lineTo(obs.x + obs.width, obs.y);
-        ctx.lineTo(obs.x + (obs.angle! > 0 ? 0 : obs.width), obs.y + obs.height);
-      } else {
-        // Lower triangle: Right-angled at (x, y+h) or (x+w, y+h)
-        // 아래쪽에서 위로 올라다보는 모양
+      if (obs.angle! > 0) {
+        // 왼쪽 하단 직각 삼각형 (위쪽 슬로프 - 오른쪽으로 경사)
+        // (x, y+h) -> (x+w, y) -> (x, y)
         ctx.moveTo(obs.x, obs.y + obs.height);
-        ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
-        ctx.lineTo(obs.x + (obs.angle! < 0 ? obs.width : 0), obs.y);
+        ctx.lineTo(obs.x + obs.width, obs.y);
+        ctx.lineTo(obs.x, obs.y);
+      } else {
+        // 오른쪽 하단 직각 삼각형 (아래쪽 슬로프 - 왼쪽으로 경사)
+        // (x+w, y+h) -> (x, y) -> (x+w, y)
+        ctx.moveTo(obs.x + obs.width, obs.y + obs.height);
+        ctx.lineTo(obs.x, obs.y);
+        ctx.lineTo(obs.x + obs.width, obs.y);
       }
       ctx.closePath();
       ctx.fill();
       
-      // Detail lines
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 2;
+      // 테두리 하이라이트
+      ctx.strokeStyle = 'rgba(100,200,255,0.3)';
+      ctx.lineWidth = 3;
       ctx.stroke();
 
     } else if (obs.type === 'mine') {
@@ -1286,8 +1345,9 @@ const draw = () => {
     ctx.lineWidth = 14;  // 훨씬 두껍게
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = engine.value.isGravityInverted ? '#ffff00' : '#00ffff';
+    // Optimization: Removed heavy shadow blur for trail
+    // ctx.shadowBlur = 20;
+    // ctx.shadowColor = engine.value.isGravityInverted ? '#ffff00' : '#00ffff';
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
@@ -1445,6 +1505,19 @@ const draw = () => {
   }
   
   ctx.restore(); // Camera transform restore
+
+  // 결과 화면 Canvas에 직접 그리기 (녹화용) -> HTML Overlay와 중복되므로 텍스트 제거하고 배경만 어둡게 처리
+  if (victory.value) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else if (gameOver.value) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
 };
 
 const handleVisibilityChange = () => {

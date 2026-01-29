@@ -1,0 +1,1 @@
+import{_ as o}from"./DlAUqK2U.js";import{c as t,o as s,G as r}from"./WAmU0kQL.js";const a={},c={class:"game-layout"};function n(e,_){return s(),t("div",c,[r(e.$slots,"default")])}const m=o(a,[["render",n]]);export{m as default};

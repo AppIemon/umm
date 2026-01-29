@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
       .select('-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes')
       .sort({ createdAt: -1 })
       .limit(50)
+      .allowDiskUse(true)
 
     // Merge personal bests if logged in
     if (userId) {

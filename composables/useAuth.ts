@@ -58,7 +58,7 @@ export const useAuth = () => {
         }
       });
       user.value = userData;
-      router.push('/');
+      router.push('/guide');
     } catch (error: any) {
       alert(error.statusMessage || 'Registration failed');
     }

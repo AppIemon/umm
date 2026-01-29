@@ -385,7 +385,7 @@ const _routes = [
     name: "play",
     path: "/play",
     meta: __nuxt_page_meta || {},
-    component: () => import('./play-C9785igj.mjs')
+    component: () => import('./play-CGejbZz0.mjs')
   },
   {
     name: "guide",
@@ -405,7 +405,7 @@ const _routes = [
   {
     name: "editor",
     path: "/editor",
-    component: () => import('./editor-CauvmTBm.mjs')
+    component: () => import('./editor-Bmq84gE8.mjs')
   },
   {
     name: "mypage",
@@ -425,7 +425,7 @@ const _routes = [
   {
     name: "multiplayer",
     path: "/multiplayer",
-    component: () => import('./multiplayer-DqNcMHP3.mjs')
+    component: () => import('./multiplayer-CHEas566.mjs')
   }
 ];
 const _wrapInTransition = (props, children) => {

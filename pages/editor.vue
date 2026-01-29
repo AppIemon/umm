@@ -719,23 +719,26 @@ const draw = () => {
       ctx.fillStyle = '#555';
       ctx.fillRect(drawX + 2, drawY + 2, obs.width - 4, obs.height - 4);
     } else if (obs.type === 'slope') {
-      const isUpper = obs.angle! > 0;
-      ctx.fillStyle = '#444';
-      ctx.shadowBlur = 10;
+      // 코리도 형성 삼각형
+      ctx.fillStyle = '#222';
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#000';
       ctx.beginPath();
-      if (isUpper) {
-        ctx.moveTo(drawX, drawY);
-        ctx.lineTo(drawX + obs.width, drawY);
-        ctx.lineTo(drawX + (obs.angle! > 0 ? 0 : obs.width), drawY + obs.height);
-      } else {
+      if (obs.angle! > 0) {
+        // 왼쪽 하단 직각
         ctx.moveTo(drawX, drawY + obs.height);
-        ctx.lineTo(drawX + obs.width, drawY + obs.height);
-        ctx.lineTo(drawX + (obs.angle! < 0 ? obs.width : 0), drawY);
+        ctx.lineTo(drawX + obs.width, drawY);
+        ctx.lineTo(drawX, drawY);
+      } else {
+        // 오른쪽 하단 직각
+        ctx.moveTo(drawX + obs.width, drawY + obs.height);
+        ctx.lineTo(drawX, drawY);
+        ctx.lineTo(drawX + obs.width, drawY);
       }
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(100,200,255,0.3)';
+      ctx.lineWidth = 3;
       ctx.stroke();
     } else if (obs.type === 'saw') {
       const cx = drawX + obs.width / 2;

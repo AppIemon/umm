@@ -854,10 +854,19 @@ class GameEngine {
     }
   }
   /**
-   * 기울어진 블록 배치 (45도 또는 60도) - 삼각형 형태 (Slope)
+   * 기울어진 블록 배치 - 웨이브 방향에 맞춘 코리도(통로) 형성
+   * 이미지 참조: 위로 올라갈 때와 아래로 내려갈 때 다른 방향의 슬로프
    */
   placeTiltedBlock(x, pathY, safeMargin, angle, rng) {
-    const blockSize = 80 + Math.floor(rng() * 40);
+    const blockSize = 100 + Math.floor(rng() * 50);
+    const prevPoint = this.autoplayLog.find((p) => Math.abs(p.x - (x - 100)) < 60);
+    const nextPoint = this.autoplayLog.find((p) => Math.abs(p.x - (x + 100)) < 60);
+    let goingUp = true;
+    if (prevPoint && nextPoint) {
+      goingUp = nextPoint.y < prevPoint.y;
+    } else if (prevPoint) {
+      goingUp = pathY < prevPoint.y;
+    }
     const topY = pathY - safeMargin - blockSize;
     if (topY > this.minY && this.isObstacleSafe(x, topY, blockSize, blockSize, 3)) {
       this.obstacles.push({
@@ -867,8 +876,8 @@ class GameEngine {
         height: blockSize,
         type: "slope",
         initialY: topY,
-        angle
-        // 양수 각도: 위에서 내려오는 경사
+        angle: goingUp ? angle : -angle
+        // 올라갈 때: 양수(왼쪽 하단), 내려갈 때: 음수(오른쪽 하단)
       });
     }
     const bottomY = pathY + safeMargin;
@@ -880,9 +889,24 @@ class GameEngine {
         height: blockSize,
         type: "slope",
         initialY: bottomY,
-        angle: -angle
-        // 음수 각도: 아래서 올라오는 경사
+        angle: goingUp ? -angle : angle
+        // 올라갈 때: 음수(오른쪽 상단), 내려갈 때: 양수(왼쪽 상단)
       });
+    }
+    if (rng() < 0.3) {
+      const sawSize = 40 + Math.floor(rng() * 30);
+      const sawX = x + blockSize + 30;
+      const sawY = pathY - sawSize / 2;
+      if (this.isObstacleSafe(sawX, sawY, sawSize, sawSize, 3)) {
+        this.obstacles.push({
+          x: sawX,
+          y: sawY,
+          width: sawSize,
+          height: sawSize,
+          type: "spike_ball",
+          initialY: sawY
+        });
+      }
     }
   }
   /**
@@ -1752,6 +1776,16 @@ class GameEngine {
       if (isBottomSpike) return { top: tipY, bottom: obsY + obs.height };
       return { top: obsY, bottom: tipY };
     }
+    if (obs.type === "slope") {
+      const t = (x - obs.x) / obs.width;
+      if (obsAngle > 0) {
+        const hypotenuseY = obsY + obs.height * (1 - t);
+        return { top: obsY, bottom: hypotenuseY };
+      } else {
+        const hypotenuseY = obsY + obs.height * t;
+        return { top: hypotenuseY, bottom: obsY + obs.height };
+      }
+    }
     return { top: obsY, bottom: obsY + obs.height };
   }
   checkCollisions(time) {
@@ -1809,18 +1843,17 @@ class GameEngine {
       return isInsideAABB;
     }
     if (obs.type === "slope") {
-      const isUpper = obs.angle > 0;
       let tri;
-      if (isUpper) {
+      if (obs.angle > 0) {
         tri = [
-          { x: effectiveX, y: effectiveY },
+          { x: effectiveX, y: effectiveY + effectiveHeight },
           { x: effectiveX + effectiveWidth, y: effectiveY },
-          { x: effectiveX, y: effectiveY + effectiveHeight }
+          { x: effectiveX, y: effectiveY }
         ];
       } else {
         tri = [
-          { x: effectiveX, y: effectiveY + effectiveHeight },
           { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight },
+          { x: effectiveX, y: effectiveY },
           { x: effectiveX + effectiveWidth, y: effectiveY }
         ];
       }

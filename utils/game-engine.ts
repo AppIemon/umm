@@ -3,7 +3,9 @@
  * 패턴 기반 맵 생성 시스템
  */
 
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope';
+import { MapGenerator, type MapObject } from './MapGenerator';
+
+export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle';
 export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green';
 
 export interface ObstacleMovement {
@@ -143,7 +145,7 @@ export class GameEngine {
       this.mapConfig = { ...this.mapConfig, ...config };
     }
     this.reset();
-    this.initPatterns();
+    this.reset();
   }
 
   /**
@@ -651,31 +653,60 @@ export class GameEngine {
    * 3. 동선을 따라가다가 동선에서 벗어나면 충돌하도록 장애물 배치
    * 4. AI 경로 검증 불필요 - 동선이 이미 안전하게 설계됨
    */
-  generateMap(beatTimes: number[], sections: any[], duration: number, fixedSeed?: number, verify: boolean = true, offsetAttempt: number = 0, bpm: number = 120, measureLength: number = 2.0) {
+  generateMap(beatTimes: number[], sections: any[], duration: number, fixedSeed?: number, verify: boolean = true, offsetAttempt: number = 0, bpm: number = 120, measureLength: number = 2.0, volumeProfile?: number[]) {
     this.bpm = bpm;
     this.measureLength = measureLength;
     const seed = fixedSeed || (beatTimes.length * 777 + Math.floor(duration * 100));
 
-    this.initPatterns();
+    // Use MapGenerator for procedural generation
     this.obstacles = [];
     this.portals = [];
     this.trackDuration = duration;
-    this.totalLength = duration * this.baseSpeed + 500;
+    this.totalLength = duration * this.baseSpeed + 2000;
     this.autoplayLog = [];
+
+    const generator = new MapGenerator();
+    const difficulty = this.mapConfig.difficulty;
+
+    console.log(`[MapGen] Procedural Generation with seed: ${seed}, Difficulty: ${difficulty}`);
 
     const rng = this.seededRandom(seed + offsetAttempt);
 
-    // 새로운 동선 기반 맵 생성
-    this.generatePathBasedMap(beatTimes, sections, rng);
+    // 1. Generate path (autoplayLog) based on beats (Simulation)
+    // generatePathBasedMap creates autoplayLog internally
+    this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile);
 
-    // 정렬
+    // 2. Generate Terrain & Obstacles along the path
+    const mapObjects = generator.generateFromPath(this.autoplayLog, difficulty, beatTimes);
+
+    // 3. Convert MapObjects to Obstacles
+    for (const obj of mapObjects) {
+      // MapObject now uses absolute coordinates (generated from path)
+      if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'].includes(obj.type)) {
+        this.portals.push({
+          x: obj.x,
+          y: obj.y,
+          width: obj.width || 50,
+          height: obj.height || 160,
+          type: obj.type as PortalType,
+          activated: false
+        });
+      } else {
+        this.obstacles.push({
+          x: obj.x,
+          y: obj.y,
+          width: obj.width || 50,
+          height: obj.height || 50,
+          type: obj.type as ObstacleType,
+          angle: obj.rotation || 0
+        });
+      }
+    }
+
     this.obstacles.sort((a, b) => a.x - b.x);
     this.portals.sort((a, b) => a.x - b.x);
 
-    // 중복 및 포함된 장애물 제거
-    this.removeRedundantObstacles();
-
-    console.log(`[MapGen] Path-based map generated with seed: ${seed}, beats: ${beatTimes.length}, obstacles: ${this.obstacles.length}, portals: ${this.portals.length}`);
+    console.log(`[MapGen] Generated ${this.obstacles.length} obstacles, ${this.portals.length} portals from path`);
   }
 
   /**
@@ -683,7 +714,7 @@ export class GameEngine {
    * 핵심: 비트에 맞춰 클릭/릴리즈를 번갈아가며 동선을 먼저 계산하고,
    * 그 동선에 맞춰 포탈과 장애물을 배치
    */
-  private generatePathBasedMap(beatTimes: number[], sections: any[], rng: () => number) {
+  private generatePathBasedMap(beatTimes: number[], sections: any[], rng: () => number, volumeProfile?: number[]) {
     const diff = this.mapConfig.difficulty;
     const playH = this.maxY - this.minY;
     const dt = 1 / 60; // 60fps 시뮬레이션
@@ -705,8 +736,27 @@ export class GameEngine {
     let currentInverted = false;
     let currentMini = false;
 
+    // 0. 초기 상태 포탈 배치 (시작점에)
+    const initialEvents: StateEvent[] = [{
+      time: 0.5, // 첫 비트 근처
+      speedType: 'speed_1', // 기본값
+      isInverted: false,
+      isMini: false
+    }];
+
+    // 강제로 초기 속도 다양화 (난이도에 따라)
+    if (diff >= 5) {
+      const r = rng();
+      if (r < 0.3) initialEvents[0].speedType = 'speed_0.5';
+      else if (r < 0.6) initialEvents[0].speedType = 'speed_2';
+    }
+
+    stateEvents.push(...initialEvents);
+    currentSpeedType = initialEvents[0].speedType;
+
+
     for (const measureTime of measureTimes) {
-      if (measureTime < 0.5) continue;
+      if (measureTime < 1.0) continue; // 초기값은 이미 처리함
 
       // 섹션에서 intensity 찾기
       const section = sections?.find(s => measureTime >= s.startTime && measureTime < s.endTime);
@@ -727,11 +777,13 @@ export class GameEngine {
         else newSpeedType = 'speed_3';
       } else {
         const r = rng();
-        if (intensity > 0.85) newSpeedType = 'speed_4';
-        else if (r < 0.20) newSpeedType = 'speed_0.5';
-        else if (r < 0.35) newSpeedType = 'speed_0.25';
-        else if (r < 0.6) newSpeedType = 'speed_3';
-        else newSpeedType = 'speed_4';
+        // 확률 대폭 조정: 다양한 속도가 나오도록
+        if (intensity > 0.8 || r < 0.15) newSpeedType = 'speed_3';
+        else if (intensity > 0.9 || r < 0.25) newSpeedType = 'speed_4';
+        else if (r < 0.45) newSpeedType = 'speed_0.5';
+        else if (r < 0.55) newSpeedType = 'speed_2';
+        else if (r < 0.70) newSpeedType = 'speed_1'; // 정상 속도 복귀 확률
+        else newSpeedType = currentSpeedType; // 유지
       }
 
       // 중력 반전 결정
@@ -764,8 +816,9 @@ export class GameEngine {
       }
     }
 
-    // 2단계: 비트에 맞춰 클릭/릴리즈 동선 생성 (박자 정확도 개선)
-    // 핵심: 각 비트에서 정확히 클릭하고, 비트 지속 시간의 60%까지 유지 후 릴리즈
+    // 2단계: 비트에 맞춰 클릭/릴리즈 동선 생성 (User Requested "Piano Mapping" Logic)
+    // - Fast Beats (< 0.25s): Toggle State (Click -> Release -> Click...) -> ZigZag
+    // - Normal Beats (>= 0.25s): Pulse (Click at beat, Release at mid-point) -> Hill
     interface BeatAction {
       time: number;
       action: 'click' | 'release';
@@ -774,38 +827,130 @@ export class GameEngine {
     const beatActions: BeatAction[] = [];
     const sortedBeats = [...beatTimes].filter(t => t >= 0.3).sort((a, b) => a - b);
 
-    // 최소 비트 간격 계산
-    let minBeatInterval = 0.5;
-    for (let i = 1; i < sortedBeats.length; i++) {
-      const interval = sortedBeats[i]! - sortedBeats[i - 1]!;
-      if (interval > 0.05 && interval < minBeatInterval) {
-        minBeatInterval = interval;
-      }
+    // State tracker for generation
+    let isHolding = false;
+    const fastThreshold = 0.25;
+
+    // Macro Trend Variables (지형의 전반적인 흐름 제어)
+    let currentHeight = 360; // Estimated height tracker
+    // Initial Trend based on volume if available
+    let trend: 'up' | 'down' | 'flat' = 'up';
+    if (!volumeProfile) {
+      trend = Math.random() < 0.5 ? 'up' : 'down';
     }
 
-    // 비트 지속 비율 (60%는 클릭 유지, 40%는 릴리즈)
-    const holdRatio = 0.6;
+    let trendTimer = 0;
+
 
     for (let i = 0; i < sortedBeats.length; i++) {
       const beatTime = sortedBeats[i]!;
-      const nextBeat = i + 1 < sortedBeats.length ? sortedBeats[i + 1]! : beatTime + minBeatInterval;
-      const beatDuration = Math.min(nextBeat - beatTime, minBeatInterval * 2);
+      const nextBeatTime = (i + 1 < sortedBeats.length) ? sortedBeats[i + 1]! : (beatTime + 1.0);
+      const interval = nextBeatTime - beatTime;
+      const isFast = interval < fastThreshold;
 
-      // 해당 시간의 미니 상태 확인하여 홀드 비율 조정
-      const currentEvent = [...stateEvents].reverse().find((e: StateEvent) => e.time <= beatTime);
-      const dynamicHoldRatio = currentEvent?.isMini ? 0.32 : 0.6; // 미니 모드에선 훨씬 짧고 빠르게 연타
+      // Update Trend Logic
+      if (volumeProfile) {
+        // [Volume Based Trend]
+        // 0.1s resolution (index = time * 10)
+        const idxCurrent = Math.floor(beatTime * 10);
+        // Look back slightly (0.5s) to get trend slope
+        const idxPrev = Math.max(0, idxCurrent - 5);
 
-      // 비트 시작에 클릭
-      beatActions.push({ time: beatTime, action: 'click' });
+        const volCurrent = volumeProfile[idxCurrent] || 0;
+        const volPrev = volumeProfile[idxPrev] || 0;
+        const slope = volCurrent - volPrev;
 
-      // 비트 지속 시간의 dynamicHoldRatio만큼 후 릴리즈
-      const releaseTime = beatTime + beatDuration * dynamicHoldRatio;
+        // Threshold optimized for normalized volume (0~1)
+        if (slope > 0.05) trend = 'up';         // Volume Rising -> Go Up
+        else if (slope < -0.05) trend = 'down'; // Volume Falling -> Go Down
+        else trend = 'flat';                    // Steady Volume -> Stay Flat (or follow inertia?)
 
-      // 다음 비트 전에 릴리즈하도록 보장
-      if (releaseTime < nextBeat - 0.03) {
+        // If volume is very low, prefer flat/down (chill)
+        if (volCurrent < 0.1) trend = 'flat';
+
+      } else {
+        // [Random Fallback]
+        trendTimer++;
+        if (trendTimer > 4 + rng() * 4) {
+          const r = rng();
+          if (r < 0.3) trend = 'flat';
+          else if (r < 0.65) trend = 'up';
+          else trend = 'down';
+          trendTimer = 0;
+        }
+      }
+
+      // Check Bounds Logic (Estimated) - Force trend change if too high/low
+      // This is a rough estimate since we don't assume precise Y here, but we use 'trend' to guide the ratio.
+      // (Actual Y is simulated later, but we need intention here).
+      // Let's assume a "Virtual Y" based on trend history or just rely on randomness + bounds check in simulation?
+      // Actually, relying on simulation 'later' doesn't help 'input generation' 'now'.
+      // We can only bias the inputs. 
+
+      // Apply Trend Bias to Ratio
+      let holdRatio = 0.5; // Default Flat
+      if (trend === 'up') holdRatio = 0.7; // Hold longer -> Go Up
+      if (trend === 'down') holdRatio = 0.3; // Hold shorter -> Go Down
+
+      // Slightly randomize ratio for organic feel
+      holdRatio += (rng() - 0.5) * 0.1;
+
+      if (isFast) {
+        // [Logic A] Fast Stream: Toggle State
+        // Input acts as a vertex in the path.
+        if (isHolding) {
+          beatActions.push({ time: beatTime, action: 'release' });
+          isHolding = false;
+        } else {
+          beatActions.push({ time: beatTime, action: 'click' });
+          isHolding = true;
+        }
+      } else {
+        // [Logic B] Normal/Slow: "Pulse" / "Hill" with Trend Bias
+        if (isHolding) {
+          beatActions.push({ time: beatTime - 0.05, action: 'release' });
+          isHolding = false;
+        }
+
+        // Execute Pulse
+        beatActions.push({ time: beatTime, action: 'click' });
+
+        // Calculate Release Time based on Trend Ratio
+        // Max limit is still important to ensure gap before next beat.
+        const maxDuration = interval - 0.1; // Leave 0.1s gap at least
+        let duration = interval * holdRatio;
+
+        // Clamp duration
+        if (duration < 0.05) duration = 0.05;
+        if (duration > maxDuration) duration = maxDuration;
+
+        // Ensure minimum pulse for "clicky" feel even in Down trend
+        if (duration < 0.1) duration = 0.1;
+
+        const releaseTime = beatTime + duration;
         beatActions.push({ time: releaseTime, action: 'release' });
+
+        isHolding = false;
       }
     }
+
+    // Cleanup: Remove actions that might overlap
+    beatActions.sort((a, b) => a.time - b.time);
+    const cleanedActions: BeatAction[] = [];
+    for (const act of beatActions) {
+      if (cleanedActions.length > 0) {
+        const last = cleanedActions[cleanedActions.length - 1];
+        if (act.time - last.time < 0.01) {
+          cleanedActions.pop();
+        }
+      }
+      cleanedActions.push(act);
+    }
+    beatActions.length = 0;
+    beatActions.push(...cleanedActions);
+
+    // Swap back
+    // (Existing dedup loop below handles final cleanup)
 
     // 시간순 정렬 및 중복 제거
     beatActions.sort((a, b) => a.time - b.time);
@@ -914,8 +1059,8 @@ export class GameEngine {
       }
     }
 
-    // 5단계: 동선 강제를 위한 장애물 배치
-    this.placeObstaclesForPath(beatActions, stateEvents, rng, diff);
+    // 5단계: 동선 강제를 위한 장애물 배치 (MapGenerator로 대체)
+    // this.placeObstaclesForPath(beatActions, stateEvents, rng, diff);
   }
 
   /**
@@ -923,7 +1068,7 @@ export class GameEngine {
    */
   private generatePathAlignedPortals(xPos: number, pathY: number, types: PortalType[]) {
     const portalWidth = 50;
-    const portalHeight = 80; // 정상 높이로 복원
+    const portalHeight = 160; // 2배 높이로 증가 (기본 80 -> 160)
     const horizontalSpacing = 60;
 
     types.forEach((type, horizontalIndex) => {
@@ -946,7 +1091,7 @@ export class GameEngine {
       const gapSize = portalHeight + 30; // 통과 가능한 간격
 
       // 위쪽 벽
-      const topWallHeight = portalY - this.minY - 15;
+      const topWallHeight = portalY - this.minY - 30; // Margin doubled 15 -> 30
       if (topWallHeight > 20) {
         this.obstacles.push({
           x: currentX - 5,
@@ -959,7 +1104,7 @@ export class GameEngine {
       }
 
       // 아래쪽 벽
-      const bottomWallStart = portalY + portalHeight + 15;
+      const bottomWallStart = portalY + portalHeight + 30; // Margin doubled 15 -> 30
       const bottomWallHeight = this.maxY - bottomWallStart;
       if (bottomWallHeight > 20) {
         this.obstacles.push({
@@ -1102,8 +1247,20 @@ export class GameEngine {
       }
     }
 
-    console.log(`[MapGen] Placed ${this.obstacles.length} obstacles (Mini sections handled with 60° tilted blocks)`);
+    // this.obstacles.length check or log
+    // New MapGenerator logic replaces this method's obstacle placement.
+    // However, portals are generated in step 4 above (inside generatePathBasedMap call stack).
+    // We might need to ensure portals are kept, or MapGenerator handles them.
+    // MapGenerator currently assumes path is provided.
+
+    // IMPORTANT: The original generatePathBasedMap calls 'placeObstaclesForPath' at the end (Step 5).
+    // We should DISABLE step 5 inside generatePathBasedMap because we are using MapGenerator for terrain.
   }
+
+  // Override or Disable internal obstacle placement in generatePathBasedMap
+  // Actually, generatePathBasedMap is called BY generateMap.
+  // We can just comment out the call to placeObstaclesForPath inside generatePathBasedMap.
+  // But wait, generatePathBasedMap definition is below. Let's find where it calls placeObstaclesForPath.
 
   /**
    * 블록 벽 배치 (위/아래)
@@ -1132,29 +1289,62 @@ export class GameEngine {
   }
 
   /**
-   * 기울어진 블록 배치 (45도 또는 60도) - 삼각형 형태 (Slope)
+   * 기울어진 블록 배치 - 웨이브 방향에 맞춘 코리도(통로) 형성
+   * 이미지 참조: 위로 올라갈 때와 아래로 내려갈 때 다른 방향의 슬로프
    */
   private placeTiltedBlock(x: number, pathY: number, safeMargin: number, angle: number, rng: () => number) {
-    const blockSize = 80 + Math.floor(rng() * 40); // 좀 더 크게
+    const blockSize = 100 + Math.floor(rng() * 50);
 
-    // 위쪽 기울어진 블록 (삼각형 Slope)
+    // 현재 위치의 웨이브 방향 추정 (이전/다음 포인트 비교)
+    const prevPoint = this.autoplayLog.find(p => Math.abs(p.x - (x - 100)) < 60);
+    const nextPoint = this.autoplayLog.find(p => Math.abs(p.x - (x + 100)) < 60);
+
+    // 기본값: 위로 올라가는 중
+    let goingUp = true;
+    if (prevPoint && nextPoint) {
+      goingUp = nextPoint.y < prevPoint.y;
+    } else if (prevPoint) {
+      goingUp = pathY < prevPoint.y;
+    }
+
+    // === 웨이브 방향에 맞춘 슬로프 배치 ===
+    // 위로 올라갈 때: 위쪽 슬로프는 왼쪽 하단 모서리, 아래쪽 슬로프는 오른쪽 상단 모서리
+    // 아래로 내려갈 때: 반대
+
+    // 위쪽 슬로프 (플레이어 위)
     const topY = pathY - safeMargin - blockSize;
     if (topY > this.minY && this.isObstacleSafe(x, topY, blockSize, blockSize, 3)) {
       this.obstacles.push({
         x, y: topY, width: blockSize, height: blockSize,
-        type: 'slope', initialY: topY, angle: angle  // 양수 각도: 위에서 내려오는 경사
+        type: 'slope', initialY: topY,
+        angle: goingUp ? angle : -angle  // 올라갈 때: 양수(왼쪽 하단), 내려갈 때: 음수(오른쪽 하단)
       });
     }
 
-    // 아래쪽 기울어진 블록 (삼각형 Slope)
+    // 아래쪽 슬로프 (플레이어 아래)
     const bottomY = pathY + safeMargin;
     if (bottomY + blockSize < this.maxY && this.isObstacleSafe(x, bottomY, blockSize, blockSize, 3)) {
       this.obstacles.push({
         x, y: bottomY, width: blockSize, height: blockSize,
-        type: 'slope', initialY: bottomY, angle: -angle // 음수 각도: 아래서 올라오는 경사
+        type: 'slope', initialY: bottomY,
+        angle: goingUp ? -angle : angle  // 올라갈 때: 음수(오른쪽 상단), 내려갈 때: 양수(왼쪽 상단)
       });
     }
+
+    // 추가: 톱니 장애물 (이미지처럼 중간에 배치)
+    if (rng() < 0.3) {
+      const sawSize = 40 + Math.floor(rng() * 30);
+      const sawX = x + blockSize + 30;
+      const sawY = pathY - sawSize / 2;
+      if (this.isObstacleSafe(sawX, sawY, sawSize, sawSize, 3)) {
+        this.obstacles.push({
+          x: sawX, y: sawY, width: sawSize, height: sawSize,
+          type: 'spike_ball', initialY: sawY
+        });
+      }
+    }
   }
+
 
   /**
    * 레이저 벽 배치
@@ -1501,7 +1691,7 @@ export class GameEngine {
    * 전역 AI 통과 경로 및 오토플레이 로그 생성 (시뮬레이션 기반)
    * 240프레임(약 4초) 앞을 미리 보고 생존과 중앙 유지를 최적화하는 경로를 찾습니다.
    */
-  public *computeAutoplayLogGen(startX: number, startY: number): Generator<number, boolean, unknown> {
+  public * computeAutoplayLogGen(startX: number, startY: number): Generator<number, boolean, unknown> {
     this.autoplayLog = [];
     this.validationFailureInfo = null;
     // 성능 최적화: dt를 1/30으로 설정하여 검증 속도 2배 향상
@@ -1599,8 +1789,8 @@ export class GameEngine {
       const curr = stack.pop()!;
       if (curr.x > maxX) {
         maxX = curr.x;
-        if (loops % 500 === 0) yield maxX / this.totalLength;
       }
+      if (loops % 1000 === 0) yield maxX / this.totalLength;
       if (curr.x >= this.totalLength) { bestState = curr; break; }
 
       const vkey = getVisitedKey(curr);
@@ -2135,13 +2325,18 @@ export class GameEngine {
     }
 
     if (obs.type === 'slope') {
-      const isUpper = obsAngle > 0;
+      // 새로운 코리도 삼각형 형태에 맞춤
+      // angle > 0: (x, y+h) -> (x+w, y) -> (x, y) 왼쪽 하단 직각
+      // angle < 0: (x+w, y+h) -> (x, y) -> (x+w, y) 오른쪽 하단 직각
       const t = (x - obs.x) / obs.width;
-      const hypotenuseY = obsY + obs.height * (1 - t);
 
-      if (isUpper) {
+      if (obsAngle > 0) {
+        // 왼쪽 하단 직각: 빗변은 (x, y+h) -> (x+w, y)
+        const hypotenuseY = obsY + obs.height * (1 - t);
         return { top: obsY, bottom: hypotenuseY };
       } else {
+        // 오른쪽 하단 직각: 빗변은 (x+w, y+h) -> (x, y)
+        const hypotenuseY = obsY + obs.height * t;
         return { top: hypotenuseY, bottom: obsY + obs.height };
       }
     }
@@ -2219,25 +2414,22 @@ export class GameEngine {
       return isInsideAABB;
     }
 
-    // 3. Slope 타입 (삼각형)
+    // 3. Slope 타입 (삼각형) - 코리도 형성용
     if (obs.type === 'slope') {
-      // angle > 0: Upper triangle, angle < 0: Lower triangle
-      // 기본적으로 45도/60도 경사를 시뮬레이션
-      const isUpper = obs.angle! > 0;
+      // angle > 0: 왼쪽 하단 직각 (x, y+h), (x+w, y), (x, y)
+      // angle < 0: 오른쪽 하단 직각 (x+w, y+h), (x, y), (x+w, y)
       let tri: { x: number, y: number }[];
 
-      if (isUpper) {
-        // (x,y), (x+w,y), (x,y+h) 형태
-        tri = [
-          { x: effectiveX, y: effectiveY },
-          { x: effectiveX + effectiveWidth, y: effectiveY },
-          { x: effectiveX, y: effectiveY + effectiveHeight }
-        ];
-      } else {
-        // (x,y+h), (x+w,y+h), (x+w,y) 형태
+      if (obs.angle! > 0) {
         tri = [
           { x: effectiveX, y: effectiveY + effectiveHeight },
+          { x: effectiveX + effectiveWidth, y: effectiveY },
+          { x: effectiveX, y: effectiveY }
+        ];
+      } else {
+        tri = [
           { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight },
+          { x: effectiveX, y: effectiveY },
           { x: effectiveX + effectiveWidth, y: effectiveY }
         ];
       }

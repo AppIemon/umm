@@ -81,7 +81,13 @@
     <!-- Mode Selection Modal -->
     <div v-if="showModeSelect" class="mode-modal-overlay">
       <div class="mode-modal glass-panel">
-        <h2>SELECT GAME MODE</h2>
+        <div class="mode-header-row">
+          <h2>SELECT GAME MODE</h2>
+          <button class="debug-btn" @click="showMapPreview = true" title="View Map Logic">
+            🔍 Map Logic
+          </button>
+        </div>
+        
         <div class="mode-options">
           <button @click="selectMode('practice')" class="mode-btn practice">
             <div class="mode-icon">🛠️</div>
@@ -104,6 +110,13 @@
         </div>
       </div>
     </div>
+    
+    <!-- Map Preview/Debug Modal -->
+    <MapPreviewModal 
+      v-if="showMapPreview" 
+      :mapData="loadedMapData" 
+      @close="showMapPreview = false" 
+    />
   </div>
 </template>
 
@@ -115,6 +128,7 @@ import { useRoute } from 'vue-router';
 import { GameEngine } from '@/utils/game-engine';
 import { trimAndEncodeAudio, splitBase64ToChunks, CHUNK_SIZE, MAX_SINGLE_UPLOAD_SIZE } from '@/utils/audioUtils';
 import GameGuide from '@/components/GameGuide.vue'; // Guide Component
+import MapPreviewModal from '@/components/MapPreviewModal.vue'; // Visual Debugger
 import { useRouter } from 'vue-router'; // Added useRouter import implicitly used before
 
 const router = useRouter();
@@ -144,6 +158,7 @@ const route = useRoute();
 
 // Modes
 const showModeSelect = ref(false);
+const showMapPreview = ref(false); // Debug Modal State
 const isPractice = ref(false);
 const isTutorial = ref(false);
 const isFirstTime = ref(false);
@@ -337,7 +352,7 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
       analysisProgress.value = { step: stepMsg, percent: 0 };
       
       // 맵 생성 (제한된 duration과 필터링된 beatTimes 사용)
-      tempEngine.generateMap(filteredBeatTimes, filteredSections, effectiveDuration, uniqueSeed + i, false, i, result.bpm, result.measureLength);
+      tempEngine.generateMap(filteredBeatTimes, filteredSections, effectiveDuration, uniqueSeed + i, false, i, result.bpm, result.measureLength, result.volumeProfile);
       
       // 비동기 검증 (프로그레스 바 업데이트)
       success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
@@ -1231,5 +1246,33 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-5px); }
   75% { transform: translateX(5px); }
+}
+
+.mode-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.debug-btn {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #888;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.debug-btn:hover {
+  border-color: #00ffff;
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.1);
 }
 </style>

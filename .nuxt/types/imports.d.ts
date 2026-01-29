@@ -4,6 +4,7 @@ declare global {
   const CHUNK_SIZE: typeof import('../../utils/audioUtils').CHUNK_SIZE
   const GameEngine: typeof import('../../utils/game-engine').GameEngine
   const MAX_SINGLE_UPLOAD_SIZE: typeof import('../../utils/audioUtils').MAX_SINGLE_UPLOAD_SIZE
+  const MapGenerator: typeof import('../../utils/MapGenerator').MapGenerator
   const abortNavigation: typeof import('../../node_modules/nuxt/dist/app/composables/router').abortNavigation
   const addRouteMiddleware: typeof import('../../node_modules/nuxt/dist/app/composables/router').addRouteMiddleware
   const audioBufferToWavBlob: typeof import('../../utils/audioUtils').audioBufferToWavBlob
@@ -211,6 +212,9 @@ declare global {
   export type { StoredSong } from '../../composables/useSongStorage'
   import('../../composables/useSongStorage')
   // @ts-ignore
+  export type { MapGenerator, MapObject } from '../../utils/MapGenerator'
+  import('../../utils/MapGenerator')
+  // @ts-ignore
   export type { GameEngine, ObstacleType, PortalType, ObstacleMovement, Obstacle, Portal, Pattern, GameState, MapConfig, StateEvent } from '../../utils/game-engine'
   import('../../utils/game-engine')
 }
@@ -221,6 +225,7 @@ declare module 'vue' {
     readonly CHUNK_SIZE: UnwrapRef<typeof import('../../utils/audioUtils')['CHUNK_SIZE']>
     readonly GameEngine: UnwrapRef<typeof import('../../utils/game-engine')['GameEngine']>
     readonly MAX_SINGLE_UPLOAD_SIZE: UnwrapRef<typeof import('../../utils/audioUtils')['MAX_SINGLE_UPLOAD_SIZE']>
+    readonly MapGenerator: UnwrapRef<typeof import('../../utils/MapGenerator')['MapGenerator']>
     readonly abortNavigation: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/router')['abortNavigation']>
     readonly addRouteMiddleware: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/router')['addRouteMiddleware']>
     readonly audioBufferToWavBlob: UnwrapRef<typeof import('../../utils/audioUtils')['audioBufferToWavBlob']>
