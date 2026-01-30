@@ -33,6 +33,7 @@ export interface Obstacle {
     orbitDistance?: number;  // Orbit distance
     pulseSpeed?: number;     // Pulsation speed (for mines)
     pulseAmount?: number;    // Pulsation size variance
+    nestedOrbit?: boolean;   // Legacy nested orbit flag
   };
   children?: Obstacle[];     // Attached objects (e.g. Planets attached to Star)
   parentId?: string;         // Helper to track attachment in editor
@@ -90,7 +91,13 @@ export interface StateEvent {
   time: number;
   speedType: PortalType;
   isInverted: boolean;
+  isInverted: boolean;
   isMini: boolean;
+}
+
+export interface BeatAction {
+  time: number;
+  action: 'click' | 'release';
 }
 
 export class GameEngine {
@@ -177,6 +184,10 @@ export class GameEngine {
     attackTimer: 0,
     projectiles: []
   };
+
+  // Generation State Persistence
+  lastStateEvents: StateEvent[] = [];
+  lastBeatActions: BeatAction[] = [];
 
   // Measure Highlights
   lastMeasureIndex: number = -1;
@@ -694,15 +705,40 @@ export class GameEngine {
    * 2. 마디마다 포탈을 배치  
    * 3. 동선을 따라가다가 동선에서 벗어나면 충돌하도록 장애물 배치
    * 4. AI 경로 검증 불필요 - 동선이 이미 안전하게 설계됨
+   * @param resumeOptions (Optional) 이전 생성 결과에서 특정 지점까지 유지하고 그 이후부터 재생성
    */
-  generateMap(beatTimes: number[], sections: any[], duration: number, fixedSeed?: number, verify: boolean = true, offsetAttempt: number = 0, bpm: number = 120, measureLength: number = 2.0, volumeProfile?: number[]) {
+  generateMap(beatTimes: number[], sections: any[], duration: number, fixedSeed?: number, verify: boolean = true, offsetAttempt: number = 0, bpm: number = 120, measureLength: number = 2.0, volumeProfile?: number[], resumeOptions?: {
+    time: number;
+    stateEvents: StateEvent[];
+    beatActions: BeatAction[];
+    obstacles: Obstacle[];
+    portals: Portal[];
+  }) {
     this.bpm = bpm;
     this.measureLength = measureLength;
     const seed = fixedSeed || (beatTimes.length * 777 + Math.floor(duration * 100));
 
     // Use MapGenerator for procedural generation
+    // Use MapGenerator for procedural generation
     this.obstacles = [];
     this.portals = [];
+
+    // Resume Logic: Restore previous parts
+    if (resumeOptions) {
+      console.log(`[MapGen] Resuming generation from time ${resumeOptions.time.toFixed(2)}s`);
+      // Restore obstacles and portals before the cut-off time (approximate X check)
+      // Since we don't have direct Time-to-X mapping for obstacles easily without log, we assume X ~ Speed * Time
+      // But simpler: We trust the caller passed the correct cutoff.
+      // Actually, obstacles X position is absolute.
+      // We need to know the X corresponding to resumeOptions.time.
+      // Let's approximate X using baseSpeed. Accurate enough for filtering.
+      // Better: The caller should pass the Cutoff X if possible, but Time is what we have for logic.
+      // We will clear this list and let 'generatePathBasedMap' and 'generateFromPath' handle filling?
+      // No, generateFromPath generates full list.
+      // We must Keep them here, and tell generateFromPath to START from resumeX.
+    }
+
+    this.beatTimes = beatTimes || []; // Store beat times
     this.beatTimes = beatTimes || []; // Store beat times
     this.trackDuration = duration;
     this.totalLength = duration * this.baseSpeed + 2000;
@@ -717,11 +753,42 @@ export class GameEngine {
 
     // 1. Generate path (autoplayLog) based on beats (Simulation)
     // generatePathBasedMap creates autoplayLog internally and returns state events
-    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile);
+    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeOptions);
+    this.lastStateEvents = stateEvents; // Save for next resume
+
+    // Calculate Resume X based on resumeTime if exists
+    let startX = 0;
+    if (resumeOptions) {
+      // Find X at resumeTime from new autoplayLog
+      const point = this.autoplayLog.find(p => p.time >= resumeOptions.time);
+      if (point) startX = point.x;
+
+      // Restore obstacles/portals before startX
+      // Use a margin to avoid cut-off artifacts (e.g. -200px)
+      const keepX = Math.max(0, startX - 100);
+
+      this.obstacles = resumeOptions.obstacles.filter(o => o.x + o.width < keepX);
+      this.portals = resumeOptions.portals.filter(p => p.x + p.width < keepX);
+
+      // Also restore MapGenerator internal state? 
+      // MapGenerator is stateless per call usually.
+      // We just need to tell it to generate AFTER startX.
+    } else {
+      this.obstacles = [];
+      this.portals = [];
+    }
 
     // 2. Generate Terrain & Obstacles along the path
     // Pass stateEvents so MapGenerator knows when mini mode is active
-    const mapObjects = generator.generateFromPath(this.autoplayLog, difficulty, beatTimes, stateEvents);
+    // We filter autoplayLog to only include points >= startX (or passed to generator?)
+    // MapGenerator.generateFromPath starts from path[0].
+
+    let pathForGen = this.autoplayLog;
+    if (resumeOptions && startX > 0) {
+      pathForGen = this.autoplayLog.filter(p => p.x >= startX - 50); // slight overlap for continuity
+    }
+
+    const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
 
     // 3. Convert MapObjects to Obstacles
     for (const obj of mapObjects) {
@@ -742,7 +809,9 @@ export class GameEngine {
           width: obj.width || 50,
           height: obj.height || 50,
           type: obj.type as ObstacleType,
-          angle: obj.rotation || 0
+          angle: obj.rotation || 0,
+          movement: undefined, // Explicitly undefined if not set to avoid type errors
+          initialY: obj.y
         });
       }
     }
@@ -758,7 +827,7 @@ export class GameEngine {
    * 핵심: 비트에 맞춰 클릭/릴리즈를 번갈아가며 동선을 먼저 계산하고,
    * 그 동선에 맞춰 포탈과 장애물을 배치
    */
-  private generatePathBasedMap(beatTimes: number[], sections: any[], rng: () => number, volumeProfile?: number[]): StateEvent[] {
+  private generatePathBasedMap(beatTimes: number[], sections: any[], rng: () => number, volumeProfile?: number[], resumeOptions?: { time: number, stateEvents: StateEvent[], beatActions: BeatAction[] }): StateEvent[] {
     const diff = this.mapConfig.difficulty;
     const playH = this.maxY - this.minY;
     const dt = 1 / 60; // 60fps 시뮬레이션
@@ -771,6 +840,8 @@ export class GameEngine {
     for (let t = firstBeat; t < this.trackDuration; t += measureDuration) {
       measureTimes.push(t);
     }
+
+    const resumeTime = resumeOptions?.time || 0;
 
     console.log(`[MapGen] BPM: ${this.bpm}, Measure Duration: ${measureDuration.toFixed(3)}s, Total Measures: ${measureTimes.length}`);
 
@@ -799,9 +870,27 @@ export class GameEngine {
     stateEvents.push(...initialEvents);
     currentSpeedType = initialEvents[0].speedType;
 
+    // Resume: Restore previous events
+    if (resumeOptions) {
+      // Clear initial if we are replacing fully? No, merging.
+      // Keep events before resumeTime
+      const keptEvents = resumeOptions.stateEvents.filter(e => e.time < resumeTime);
+      stateEvents.length = 0;
+      stateEvents.push(...keptEvents);
+
+      // Update current state from last kept event
+      if (stateEvents.length > 0) {
+        const last = stateEvents[stateEvents.length - 1];
+        currentSpeedType = last.speedType;
+        currentInverted = last.isInverted;
+        currentMini = last.isMini;
+      }
+    }
+
 
     for (const measureTime of measureTimes) {
-      if (measureTime < 1.0) continue; // 초기값은 이미 처리함
+      if (measureTime < 1.0) continue;
+      if (measureTime < resumeTime) continue; // Skip past measures if resuming
 
       // 섹션에서 intensity 찾기
       const section = sections?.find(s => measureTime >= s.startTime && measureTime < s.endTime);
@@ -879,16 +968,39 @@ export class GameEngine {
     // 2단계: 비트에 맞춰 클릭/릴리즈 동선 생성 (User Requested "Piano Mapping" Logic)
     // - Fast Beats (< 0.25s): Toggle State (Click -> Release -> Click...) -> ZigZag
     // - Normal Beats (>= 0.25s): Pulse (Click at beat, Release at mid-point) -> Hill
-    interface BeatAction {
-      time: number;
-      action: 'click' | 'release';
-    }
+
+    // (moved internally)
+    // BeatAction export is actually needed for resumeOptions.
+    // I will export it at top level or assume it's passed as any/internal.
+    // Better to export it. 
+    // Since I cannot move the interface definition easily without breaking references if I'm not careful,
+    // I will redefine it or find where it is.
+    // It was locally defined. I will keep it locally but cast if needed, or better, move it up.
+    // But for this tool I can't move lines far away easily.
+    // I will simply duplicate definition or use 'any' for now in the method signature, 
+    // OR change the method signature in a separate chunk to use a type alias defined at top.
+
 
     const beatActions: BeatAction[] = [];
-    const sortedBeats = [...beatTimes].filter(t => t >= 0.3).sort((a, b) => a - b);
+
+    // Resume: Restore beat actions
+    if (resumeOptions) {
+      beatActions.push(...resumeOptions.beatActions.filter(b => b.time < resumeTime));
+    }
+
+    const sortedBeats = [...beatTimes].filter(t => t >= 0.3 && t >= resumeTime).sort((a, b) => a - b);
 
     // State tracker for generation
     let isHolding = false;
+
+    // Resume: Restore isHolding state
+    if (resumeOptions && resumeOptions.beatActions.length > 0) {
+      // Find the very last action strictly before resumeTime
+      const lastAction = resumeOptions.beatActions[resumeOptions.beatActions.length - 1];
+      if (lastAction.action === 'click') {
+        isHolding = true;
+      }
+    }
     const fastThreshold = 0.25;
 
     // Macro Trend Variables (지형의 전반적인 흐름 제어)
@@ -927,15 +1039,26 @@ export class GameEngine {
 
           // Simple pulse: 
           // If not holding: Click at beat.
-          // Then Release at beat + interval * 0.5
+          // Then Release at beat + interval * factor
+          // We vary the factor slightly with RNG to create different jump arcs (0.4 ~ 0.7)
+          // This allows finding paths through tight spots during retries
+          const baseFactor = 0.5;
+          const variance = (rng() - 0.5) * 0.3; // -0.15 ~ +0.15
+          const holdFactor = Math.max(0.3, Math.min(0.8, baseFactor + variance)); // Clamp 0.3 ~ 0.8
+
           beatActions.push({ time: beatTime, action: 'click' });
-          beatActions.push({ time: beatTime + interval * 0.5, action: 'release' });
+          beatActions.push({ time: beatTime + interval * holdFactor, action: 'release' });
           isHolding = false; // We released.
         } else {
           // Not holding. Click at beat.
+          // Vary hold factor
+          const baseFactor = 0.5;
+          const variance = (rng() - 0.5) * 0.3;
+          const holdFactor = Math.max(0.3, Math.min(0.8, baseFactor + variance));
+
           beatActions.push({ time: beatTime, action: 'click' });
           // Release later
-          beatActions.push({ time: beatTime + interval * 0.5, action: 'release' });
+          beatActions.push({ time: beatTime + interval * holdFactor, action: 'release' });
           isHolding = false;
         }
       }
@@ -1033,6 +1156,8 @@ export class GameEngine {
 
       simTime += dt;
     }
+
+    this.lastBeatActions = beatActions; // Save for next resume
 
     this.totalLength = simX + 500;
 
@@ -2580,12 +2705,13 @@ export class GameEngine {
       const cx = obs.x + obs.width / 2;
       const cy = obsY + obs.height / 2;
 
-      // 1. Check Main Body (Circle Collision)
-      // Check standard circle collision against player points
-      // Simplify: Distance(playerCenter, bodyCenter) < (bodyRadius + playerRadius)
-      const bodyRadius = effectiveWidth / 2; // Assuming circular
-      const distSq = (px - cx) ** 2 + (py - cy) ** 2;
-      if (distSq < (bodyRadius + pSize - 5) ** 2) return true; // -5 for leniency
+      // 1. Check Main Body (Ellipse Collision)
+      const rx = effectiveWidth / 2;
+      const ry = effectiveHeight / 2;
+      const dx = px - cx;
+      const dy = py - cy;
+      // Ellipse formula with a bit of leniency (-2px)
+      if ((dx * dx) / ((rx - 2) * (rx - 2)) + (dy * dy) / ((ry - 2) * (ry - 2)) < 1) return true;
 
       // 2. Check Orbiting Moons/Planets
       const hasChildren = obs.children && obs.children.length > 0;
@@ -2755,15 +2881,17 @@ export class GameEngine {
       return false;
     }
 
-    // 5. 원형 장애물
+    // 5. 원형/타원형 장애물
     if (obs.type === 'saw' || obs.type === 'spike_ball' || obs.type === 'mine' || obs.type === 'orb') {
       const cx = effectiveX + effectiveWidth / 2;
       const cy = effectiveY + effectiveHeight / 2;
-      const radius = (effectiveWidth / 2) * 0.9;
+      const rx = (effectiveWidth / 2) * 0.9;
+      const ry = (effectiveHeight / 2) * 0.9;
       for (const p of points) {
         const dx = p.x - cx;
         const dy = p.y - cy;
-        if (dx * dx + dy * dy < radius * radius) return true;
+        // Ellipse formula: (x/rx)^2 + (y/ry)^2 < 1
+        if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) < 1) return true;
       }
       return false;
     }
@@ -2803,12 +2931,15 @@ export class GameEngine {
       return false;
     }
     if (['rotor', 'cannon', 'spark_mine', 'crusher_jaw', 'swing_blade'].includes(obs.type)) {
-      // Generally circle or rect based hazards
+      // Generally ellipse or rect based hazards
       const cx = effectiveX + effectiveWidth / 2;
       const cy = effectiveY + effectiveHeight / 2;
-      const radius = (effectiveWidth / 2) * 0.8;
+      const rx = (effectiveWidth / 2) * 0.8;
+      const ry = (effectiveHeight / 2) * 0.8;
       for (const p of points) {
-        if ((p.x - cx) ** 2 + (p.y - cy) ** 2 < radius ** 2) return true;
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) < 1) return true;
       }
       return false;
     }

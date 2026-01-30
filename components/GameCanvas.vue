@@ -15,6 +15,7 @@
               SAVE MAP
             </button>
             <button @click="emit('exit', { progress: progressPct, score: score, outcome: gameOver ? 'fail' : 'win' })" class="hud-action-btn exit">나가기</button>
+            <button @click="emit('change-mode')" class="hud-action-btn mode-change">MODE</button>
             <button v-if="practiceMode && !gameOver" @click="manualCheckpoint" class="hud-action-btn checkpoint">SET CP (C)</button>
           </div>
           <div class="title-container">
@@ -1116,14 +1117,15 @@ const draw = () => {
     } else if (obs.type === 'saw') {
       const cx = obs.x + obs.width / 2;
       const cy = obs.y + obs.height / 2;
-      const radius = obs.width / 2;
+      const rx = obs.width / 2;
+      const ry = obs.height / 2;
       
       ctx.fillStyle = '#ffaa00';
       ctx.shadowBlur = 20;
       ctx.shadowColor = '#ffaa00';
       
       ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
       ctx.fill();
       
       // Teeth
@@ -1132,21 +1134,22 @@ const draw = () => {
       const time = currentTrackTime.value * 8;
       for (let i = 0; i < teeth; i++) {
         const angle = (Math.PI * 2 * i / teeth) + time;
-        const tx = cx + Math.cos(angle) * radius * 0.75;
-        const ty = cy + Math.sin(angle) * radius * 0.75;
+        const tx = cx + Math.cos(angle) * rx * 0.75;
+        const ty = cy + Math.sin(angle) * ry * 0.75;
         ctx.beginPath();
-        ctx.arc(tx, ty, radius * 0.15, 0, Math.PI * 2);
+        ctx.ellipse(tx, ty, rx * 0.15, ry * 0.15, 0, 0, Math.PI * 2);
         ctx.fill();
       }
       
       ctx.fillStyle = '#cc8800';
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.25, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, rx * 0.25, ry * 0.25, 0, 0, Math.PI * 2);
       ctx.fill();
     } else if (obs.type === 'spike_ball') {
       const cx = obs.x + obs.width / 2;
       const cy = obs.y + obs.height / 2;
-      const radius = obs.width / 2;
+      const rx = obs.width / 2;
+      const ry = obs.height / 2;
       
       ctx.fillStyle = '#666';
       ctx.shadowBlur = 15;
@@ -1159,21 +1162,21 @@ const draw = () => {
       for (let i = 0; i < spikes; i++) {
         const angle = (Math.PI * 2 * i / spikes) + rotation;
         ctx.beginPath();
-        const tx = cx + Math.cos(angle) * radius * 1.2;
-        const ty = cy + Math.sin(angle) * radius * 1.2;
-        ctx.moveTo(cx + Math.cos(angle - 0.2) * radius * 0.8, cy + Math.sin(angle - 0.2) * radius * 0.8);
+        const tx = cx + Math.cos(angle) * rx * 1.2;
+        const ty = cy + Math.sin(angle) * ry * 1.2;
+        ctx.moveTo(cx + Math.cos(angle - 0.2) * rx * 0.8, cy + Math.sin(angle - 0.2) * ry * 0.8);
         ctx.lineTo(tx, ty);
-        ctx.lineTo(cx + Math.cos(angle + 0.2) * radius * 0.8, cy + Math.sin(angle + 0.2) * radius * 0.8);
+        ctx.lineTo(cx + Math.cos(angle + 0.2) * rx * 0.8, cy + Math.sin(angle + 0.2) * ry * 0.8);
         ctx.fill();
       }
       
       // Main ball
-      const grad = ctx.createRadialGradient(cx - radius * 0.3, cy - radius * 0.3, radius * 0.1, cx, cy, radius);
+      const grad = ctx.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, rx * 0.1, cx, cy, rx);
       grad.addColorStop(0, '#888');
       grad.addColorStop(1, '#222');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.8, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, rx * 0.8, ry * 0.8, 0, 0, Math.PI * 2);
       ctx.fill();
       
     } else if (obs.type === 'laser') {
@@ -1295,11 +1298,12 @@ const draw = () => {
     } else if (obs.type === 'orb') {
       const cx = obs.x + obs.width / 2;
       const cy = obs.y + obs.height / 2;
-      const radius = obs.width / 2;
+      const rx = obs.width / 2;
+      const ry = obs.height / 2;
       
       const pulse = Math.sin(currentTrackTime.value * 5) * 0.1 + 1.0;
 
-      const grad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * pulse);
+      const grad = ctx.createRadialGradient(cx, cy, rx * 0.1, cx, cy, rx * pulse);
       grad.addColorStop(0, '#ffffff');
       grad.addColorStop(0.4, '#aa44ff'); // Purple
       grad.addColorStop(0.8, '#4400cc');
@@ -1308,7 +1312,7 @@ const draw = () => {
       ctx.fillStyle = grad;
       ctx.globalCompositeOperation = 'lighter'; // Additive blending for glow
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * pulse, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, rx * pulse, ry * pulse, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalCompositeOperation = 'source-over'; // Reset
     }
@@ -1429,7 +1433,7 @@ const draw = () => {
        // Blade disc
        ctx.fillStyle = '#ccc';
        ctx.beginPath();
-       ctx.arc(cx, cy + obs.height, obs.width/2, 0, Math.PI*2);
+       ctx.ellipse(cx, cy + obs.height, obs.width/2, obs.height/2, 0, 0, Math.PI*2);
        ctx.fill();
     }
     else if (obs.type === 'mine') {
@@ -1459,10 +1463,12 @@ const draw = () => {
        ctx.beginPath();
        for(let k=0; k<spikeCount; k++) {
          const angle = (Math.PI * 2 * k) / spikeCount;
-         const rIn = radius;
-         const rOut = radius + 6;
-         ctx.moveTo(cx + Math.cos(angle)*rIn, cy + Math.sin(angle)*rIn);
-         ctx.lineTo(cx + Math.cos(angle)*rOut, cy + Math.sin(angle)*rOut);
+         const rxIn = rx;
+         const ryIn = ry;
+         const rxOut = rx + 6;
+         const ryOut = ry + 6;
+         ctx.moveTo(cx + Math.cos(angle)*rxIn, cy + Math.sin(angle)*ryIn);
+         ctx.lineTo(cx + Math.cos(angle)*rxOut, cy + Math.sin(angle)*ryOut);
        }
        ctx.stroke();
     }
@@ -2389,6 +2395,18 @@ button.secondary:hover {
   background: rgba(255, 0, 0, 0.2);
   color: #ff4444;
   border-color: #ff4444;
+}
+
+.hud-action-btn.mode-change {
+  background: rgba(255, 255, 255, 0.1); 
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.hud-action-btn.mode-change:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
 .hud-action-btn.ghost-toggle {

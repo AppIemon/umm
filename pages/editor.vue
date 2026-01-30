@@ -13,20 +13,30 @@
       </div>
       <div class="center">
         <div class="transport-controls">
+          <!-- Mobile Toggles -->
+          <button v-if="isMobile" @click="showPalette = !showPalette" class="control-btn mobile-toggle" :class="{ active: showPalette }">
+             🎨
+          </button>
+          
           <button @click="testMap" class="control-btn test" :disabled="isTesting">
-            <span class="icon">▶</span> {{ isTesting ? 'TESTING...' : 'TEST' }}
+            <span class="icon">▶</span> <span v-if="!isMobile">{{ isTesting ? 'TESTING...' : 'TEST' }}</span>
           </button>
           <button @click="togglePreview" class="control-btn tutorial" :class="{ active: isPreviewing }">
-            <span class="icon">🎓</span> {{ isPreviewing ? 'STOP' : 'TUTORIAL' }}
+            <span class="icon">🎓</span> <span v-if="!isMobile">{{ isPreviewing ? 'STOP' : 'TUTORIAL' }}</span>
           </button>
           <button @click="saveMap" class="control-btn save" :disabled="isSaving">
-            <span class="icon">💾</span> {{ isSaving ? 'SAVING...' : 'SAVE' }}
+            <span class="icon">💾</span> <span v-if="!isMobile">{{ isSaving ? 'SAVING...' : 'SAVE' }}</span>
           </button>
 
           <button @click="showHitboxes = !showHitboxes" class="control-btn" :class="{ active: showHitboxes }">
-            <span class="icon">⛶</span> HITBOX
+            <span class="icon">⛶</span> <span v-if="!isMobile">HITBOX</span>
           </button>
-          <button @click="router.push('/maps')" class="control-btn exit">EXIT</button>
+          
+          <button v-if="isMobile" @click="showProperties = !showProperties" class="control-btn mobile-toggle" :class="{ active: showProperties }">
+             ⚙️
+          </button>
+
+          <button @click="router.push('/maps')" class="control-btn exit"><span v-if="!isMobile">EXIT</span><span v-else>✕</span></button>
         </div>
       </div>
       <div class="right">
@@ -37,10 +47,14 @@
       </div>
     </header>
 
-    <div class="main-layout">
+    <div class="main-layout" :class="{ 'is-mobile': isMobile }">
       <!-- Left Sidebar: Object Types -->
-      <aside class="sidebar left-sidebar glass-panel">
-        <h3>PALETTE</h3>
+      <aside class="sidebar left-sidebar glass-panel" :class="{ 'mobile-drawer': isMobile, 'open': showPalette }">
+        <div class="drawer-header" v-if="isMobile">
+           <h3>PALETTE</h3>
+           <button @click="showPalette = false" class="close-drawer">✕</button>
+        </div>
+        <h3 v-else>PALETTE</h3>
         <div class="object-list">
           <div v-for="type in obstacleTypes" :key="type" 
                class="palette-item" :class="{ selected: selectedPaletteType === type }"
@@ -81,8 +95,12 @@
       </main>
 
       <!-- Right Sidebar: Properties -->
-      <aside class="sidebar right-sidebar glass-panel">
-        <h3>PROPERTIES</h3>
+      <aside class="sidebar right-sidebar glass-panel" :class="{ 'mobile-drawer': isMobile, 'open': showProperties }">
+        <div class="drawer-header" v-if="isMobile">
+           <h3>PROPERTIES</h3>
+           <button @click="showProperties = false" class="close-drawer">✕</button>
+        </div>
+        <h3 v-else>PROPERTIES</h3>
         
         <div v-if="selectedObjects.length === 1" class="properties-list">
           <div class="prop-group">
@@ -120,14 +138,6 @@
             </div>
           </div>
 
-          <div class="prop-group" v-if="'movement' in selectedObjects[0]">
-             <label>MOVEMENT</label>
-             <select v-model="selectedObjects[0].movement.type" v-if="selectedObjects[0].movement">
-               <option value="none">NONE</option>
-               <option value="updown">UP-DOWN BOUNCE</option>
-               <option value="rotate">CONTINUOUS ROTATE</option>
-             </select>
-             <div v-if="selectedObjects[0].movement && selectedObjects[0].movement.type !== 'none'" class="movement-details">
                 <label>SPEED</label>
                 <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.speed" />
                 <label>RANGE</label>
@@ -138,8 +148,10 @@
           </div>
 
           <template v-if="['planet', 'star'].includes(selectedObjects[0].type)">
-              <label>ORBIT COUNT ({{ensureCustomData(selectedObjects[0]).orbitCount || (selectedObjects[0].type==='star'?0:2)}})</label>
-              <input type="number" v-model.number="ensureCustomData(selectedObjects[0]).orbitCount" placeholder="0 or 2" />
+              <div v-if="selectedObjects[0].type === 'planet'">
+                <label>ORBIT MOON COUNT</label>
+                <input type="number" v-model.number="ensureCustomData(selectedObjects[0]).orbitCount" placeholder="0 or 2" />
+              </div>
               <label>ORBIT SPEED</label>
               <input type="number" step="0.1" v-model.number="ensureCustomData(selectedObjects[0]).orbitSpeed" placeholder="Speed" />
               <label>ORBIT DISTANCE</label>
@@ -259,7 +271,7 @@ const workspaceRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const audioInputRef = ref<HTMLInputElement | null>(null);
 
-const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb', 'slope', 'triangle', 'steep_triangle', 'piston_v', 'falling_spike', 'hammer', 'rotor', 'cannon', 'spark_mine', 'laser_beam', 'crusher_jaw', 'swing_blade', 'growing_spike', 'planet', 'star'];
+const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb', 'slope', 'triangle', 'steep_triangle', 'piston_v', 'falling_spike', 'hammer', 'rotor', 'cannon', 'spark_mine', 'laser_beam', 'crusher_jaw', 'swing_blade', 'growing_spike', 'planet', 'star', 'invisible_wall', 'fake_block'];
 const portalTypes: PortalType[] = ['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green', 'teleport_in', 'teleport_out'];
 
 const getSymbol = (type: string) => engine.getPortalSymbol(type as any) || '■';
@@ -281,6 +293,25 @@ let previewAudioBuffer: AudioBuffer | null = null;
 let previewAudioCtx: AudioContext | null = null;
 const isSelectionBoxActive = ref(false);
 const selectionBox = ref({ x1: 0, y1: 0, x2: 0, y2: 0 });
+
+// Mobile State
+const isMobile = ref(false);
+const showPalette = ref(true);
+const showProperties = ref(true);
+
+const checkMobile = () => {
+  const wasMobile = isMobile.value;
+  isMobile.value = window.innerWidth <= 1024;
+  if (!wasMobile && isMobile.value) {
+     // Switched to mobile
+     showPalette.value = false;
+     showProperties.value = false;
+  } else if (wasMobile && !isMobile.value) {
+     // Switched to desktop
+     showPalette.value = true;
+     showProperties.value = true;
+  }
+};
 
 // Smart Generation
 import { SmartMapGenerator } from '@/utils/smart-map-generator';
@@ -665,6 +696,10 @@ const setMovementType = (type: string) => {
   const obj = selectedObjects.value[0];
   if (!obj.movement) obj.movement = { type: 'none', range: 0, speed: 0, phase: 0 };
   
+  // Lock checks
+  if (obj.type === 'rotor' && type !== 'rotate') return; 
+  if (obj.type === 'piston_v' && type !== 'updown') return;
+
   if (type === 'none') {
     obj.movement.type = 'none';
   } else {
@@ -1197,21 +1232,276 @@ const draw = () => {
        }
     }
     else if (['piston_v', 'hammer', 'rotor', 'cannon', 'spark_mine', 'laser_beam', 'crusher_jaw', 'swing_blade', 'falling_spike', 'growing_spike'].includes(obs.type)) {
-       // Generic new obstacle handler for editor preview
-       // Ideally copy exact drawing logic from GameCanvas, but for now simple distinct shapes
-       ctx.fillStyle = '#ff8800'; 
+       const cx = drawX + obs.width / 2;
+       const cy = drawY + obs.height / 2;
+       
        if (obs.type === 'hammer') {
-          ctx.fillRect(drawX, drawY, obs.width, obs.height * 0.3); // Handle
-          ctx.fillRect(drawX - 10, drawY, obs.width + 20, obs.height * 0.4); // Head
-       } else if (obs.type === 'rotor') {
-          ctx.beginPath(); ctx.arc(drawX + obs.width/2, drawY + obs.height/2, obs.width/2, 0, Math.PI*2); ctx.stroke();
-          ctx.moveTo(drawX, drawY); ctx.lineTo(drawX + obs.width, drawY + obs.height); ctx.stroke();
-          ctx.moveTo(drawX + obs.width, drawY); ctx.lineTo(drawX, drawY + obs.height); ctx.stroke();
-       } else {
-          // Fallback distinct block
+          ctx.save();
+          ctx.translate(cx, cy);
+          
+          // Hammer swing
+          const swing = Math.sin(time * 3) * 0.5;
+          ctx.rotate(swing);
+
+          // Handle
+          ctx.fillStyle = '#666';
+          ctx.fillRect(-5, -obs.height/2, 10, obs.height * 0.7);
+          
+          // Head
+          ctx.fillStyle = '#888';
+          ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
+          ctx.fillRect(-obs.width/2, obs.height * 0.2 - obs.height/2, obs.width, obs.height * 0.3);
+          
+          // Detail
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-obs.width/2, obs.height * 0.2 - obs.height/2, obs.width, obs.height * 0.3);
+          
+          ctx.restore();
+       } 
+       else if (obs.type === 'rotor') {
+          ctx.save();
+          ctx.translate(cx, cy);
+          const spin = time * 8;
+          ctx.rotate(spin);
+          
+          // 3 Blades
+          ctx.fillStyle = '#ff3333';
+          ctx.shadowBlur = 15; ctx.shadowColor = '#ff0000';
+          for(let i=0; i<3; i++) {
+             ctx.rotate(Math.PI * 2 / 3);
+             ctx.beginPath();
+             ctx.moveTo(0, 0);
+             ctx.lineTo(-5, -obs.height/2);
+             ctx.lineTo(5, -obs.height/2);
+             ctx.fill();
+          }
+          // Center
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+       }
+       else if (obs.type === 'cannon') {
+          // Cannon body
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.fillStyle = '#444';
+          ctx.fillRect(-obs.width/2+5, -obs.height/2+5, obs.width-10, obs.height-10);
+          
+          // Barrel hole
+          ctx.fillStyle = '#000';
+          ctx.beginPath(); ctx.arc(0, 0, obs.width/3, 0, Math.PI*2); ctx.fill();
+          
+          // Red rim
+          ctx.strokeStyle = '#ff0000';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(-obs.width/2+5, -obs.height/2+5, obs.width-10, obs.height-10);
+          
+          ctx.restore();
+       }
+       else if (obs.type === 'crusher_jaw') {
+           // Top/Bottom Jaw style
+           ctx.fillStyle = '#555';
+           ctx.shadowBlur = 10; ctx.shadowColor = '#000';
+           
+           // Main block
+           ctx.fillRect(drawX, drawY, obs.width, obs.height);
+           
+           // Teeth
+           ctx.fillStyle = '#ff8800';
+           const teethCount = 3;
+           const toothW = obs.width / teethCount; // 3 teeth
+           const toothH = 15;
+           
+           ctx.beginPath();
+           // Draw teeth on bottom edge if it looks like a top crusher, or top if bottom. 
+           // Assume generic box with teeth on one side. Let's do both for "Jaw" feel.
+           for(let i=0; i<teethCount; i++) {
+              ctx.moveTo(drawX + i*toothW, drawY + obs.height);
+              ctx.lineTo(drawX + i*toothW + toothW/2, drawY + obs.height + toothH);
+              ctx.lineTo(drawX + (i+1)*toothW, drawY + obs.height);
+           }
+           ctx.fill();
+           
+           // Border
+           ctx.strokeStyle = '#aaa';
+           ctx.lineWidth = 2;
+           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
+       }
+       else if (obs.type === 'falling_spike') {
+           ctx.save();
+           ctx.translate(cx, cy);
+           
+           ctx.fillStyle = '#ff3333';
+           ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000';
+           ctx.beginPath();
+           ctx.moveTo(-obs.width/2, -obs.height/2);
+           ctx.lineTo(obs.width/2, -obs.height/2);
+           ctx.lineTo(0, obs.height/2);
+           ctx.closePath();
+           ctx.fill();
+           
+           // Highlight
+           ctx.strokeStyle = '#fff';
+           ctx.lineWidth = 2;
+           ctx.stroke();
+           ctx.restore();
+       }
+       else if (obs.type === 'laser_beam') {
+           ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+           ctx.fillRect(drawX, drawY, obs.width, obs.height);
+           
+           // Core beam
+           const pulse = Math.sin(time * 20) * 2 + 3;
+           ctx.fillStyle = '#ff0000';
+           ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000';
+           ctx.fillRect(drawX, drawY + obs.height/2 - pulse/2, obs.width, pulse);
+           
+           // Emitters
+           ctx.fillStyle = '#444';
+           ctx.fillRect(drawX, drawY, 10, obs.height);
+           ctx.fillRect(drawX + obs.width - 10, drawY, 10, obs.height);
+       }
+       else if (obs.type === 'swing_blade') {
+           ctx.save();
+           ctx.translate(cx, drawY); // Pivot at top
+           
+           const swing = Math.sin(time * 2) * 0.8;
+           ctx.rotate(swing);
+           
+           // String/Rod
+           ctx.strokeStyle = '#aaa';
+           ctx.lineWidth = 4;
+           ctx.beginPath();
+           ctx.moveTo(0, 0);
+           ctx.lineTo(0, obs.height);
+           ctx.stroke();
+           
+           // Blade
+           ctx.translate(0, obs.height);
+           ctx.fillStyle = '#ccc';
+           ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
+           ctx.beginPath();
+           ctx.arc(0, 0, obs.width/2, 0, Math.PI); // Half circle blade
+           ctx.fill();
+           
+           ctx.fillStyle = '#ff0000'; // Sharp edge
+           ctx.beginPath();
+           ctx.arc(0, 0, obs.width/2, 0, Math.PI, true);
+           ctx.fill();
+           
+           ctx.restore();
+       }
+       else if (obs.type === 'growing_spike') {
+           // Base
+           ctx.fillStyle = '#444';
+           ctx.fillRect(drawX, drawY + obs.height - 10, obs.width, 10);
+           
+           // Spike (animated height preview)
+           const h = obs.height * (0.5 + Math.sin(time * 3) * 0.4);
+           ctx.fillStyle = '#ff3333';
+           ctx.beginPath();
+           ctx.moveTo(drawX + 5, drawY + obs.height - 10);
+           ctx.lineTo(drawX + obs.width - 5, drawY + obs.height - 10);
+           ctx.lineTo(drawX + obs.width/2, drawY + obs.height - 10 - h);
+           ctx.fill();
+       }
+       else if (obs.type === 'spark_mine') {
+           ctx.save();
+           ctx.translate(cx, cy);
+           
+           // Spikes
+           ctx.strokeStyle = '#ffff00';
+           ctx.lineWidth = 2;
+           for(let i=0; i<8; i++) {
+              ctx.rotate(Math.PI/4);
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(0, obs.width/2 + (Math.random()*5));
+              ctx.stroke();
+           }
+           
+           // Core
+           ctx.fillStyle = '#ffaa00';
+           ctx.shadowBlur = 15; ctx.shadowColor = '#ffff00';
+           ctx.beginPath();
+           ctx.arc(0, 0, obs.width/4, 0, Math.PI*2);
+           ctx.fill();
+           ctx.restore();
+       }
+       else if (obs.type === 'piston_v') {
+           const cx = drawX + obs.width / 2;
+           const cy = drawY + obs.height / 2;
+           ctx.save();
+           
+           // Piston Base (Top or Bottom depending on Y)
+           // If it's near bottom (floor), base is bottom. If near top, base is top.
+           // Heuristic: y > 360 -> bottom based
+           const isBottom = obs.y > 360;
+           
+           // Draw Base
+           ctx.fillStyle = '#444';
+           ctx.shadowBlur = 5; ctx.shadowColor = '#000';
+           if (isBottom) {
+              ctx.fillRect(drawX, drawY + obs.height - 15, obs.width, 15);
+           } else {
+              ctx.fillRect(drawX, drawY, obs.width, 15);
+           }
+           
+           // Extension Rod
+           ctx.fillStyle = '#888';
+           const rodW = obs.width * 0.4;
+           const extension = (Math.sin(time*2) + 1) * 0.5 * (obs.height - 40);
+           
+           if (isBottom) {
+              // Rod up
+              ctx.fillRect(drawX + (obs.width-rodW)/2, drawY + obs.height - 15 - extension, rodW, extension);
+              // Head
+              ctx.fillStyle = '#ff8800';
+              ctx.fillRect(drawX, drawY + obs.height - 15 - extension - 25, obs.width, 25);
+              // Stripes
+              ctx.fillStyle = '#000';
+              ctx.beginPath();
+              ctx.moveTo(drawX, drawY + obs.height - 15 - extension - 25);
+              ctx.lineTo(drawX + 10, drawY + obs.height - 15 - extension - 25);
+              ctx.lineTo(drawX, drawY + obs.height - 15 - extension - 15);
+              ctx.fill();
+           } else {
+              // Rod down
+              ctx.fillRect(drawX + (obs.width-rodW)/2, drawY + 15, rodW, extension);
+              // Head
+              ctx.fillStyle = '#ff8800';
+              ctx.fillRect(drawX, drawY + 15 + extension, obs.width, 25);
+           }
+           
+           ctx.restore();
+       }
+       else if (obs.type === 'invisible_wall') {
+           ctx.strokeStyle = '#rgba(255, 255, 255, 0.5)';
+           ctx.lineWidth = 1;
+           ctx.setLineDash([5, 5]);
+           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
+           ctx.setLineDash([]);
+           ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+           ctx.fillText("INVISIBLE", drawX, drawY + 15);
+       }
+       else if (obs.type === 'fake_block') {
+           ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+           ctx.fillRect(drawX, drawY, obs.width, obs.height);
+           ctx.strokeStyle = '#fff';
+           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
+           ctx.fillStyle = '#fff';
+           ctx.font = '10px Arial';
+           ctx.fillText("FAKE", drawX + 5, drawY + 15);
+       }
+       else {
+          // Fallback
           ctx.strokeStyle = '#ff8800';
+          ctx.lineWidth = 2;
           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
-          ctx.fillText(obs.type, drawX, drawY + 10);
+          ctx.fillStyle = '#ff8800';
+          ctx.font = '10px Arial';
+          ctx.fillText(obs.type, drawX, drawY + 15);
        }
     }
     else if (obs.type === 'slope') {
@@ -1580,7 +1870,12 @@ onMounted(() => {
     window.removeEventListener('keyup', handleKeyUp);
     cancelAnimationFrame(animationId);
     stopPreviewAudio();
+    stopPreviewAudio();
+    window.removeEventListener('resize', checkMobile);
   });
+  
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
 });
 </script>
 
@@ -1853,73 +2148,101 @@ input, select {
   font-size: 0.9rem;
 }
 
-/* --- Mobile Responsiveness --- */
-@media (max-width: 1024px) {
-  .editor-page {
-    height: 100vh;
-    overflow: hidden;
-  }
+/* --- Mobile Responsiveness (Drawer System) --- */
+.mobile-toggle {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.2rem;
+  padding: 0.4rem 0.8rem;
+}
 
+.main-layout.is-mobile {
+  display: block; /* Stack (but sidebars are fixed) */
+  position: relative;
+}
+
+.main-layout.is-mobile .workspace {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.sidebar.mobile-drawer {
+  position: fixed;
+  top: 80px;
+  bottom: 0;
+  width: 280px;
+  z-index: 100;
+  background: rgba(10, 10, 20, 0.95);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding-top: 0;
+}
+
+.sidebar.mobile-drawer.left-sidebar {
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.sidebar.mobile-drawer.left-sidebar.open {
+  transform: translateX(0);
+}
+
+.sidebar.mobile-drawer.right-sidebar {
+  right: 0;
+  left: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: none;
+  transform: translateX(100%);
+}
+
+.sidebar.mobile-drawer.right-sidebar.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 1rem;
+  position: sticky;
+  top: 0;
+  background: inherit;
+  z-index: 1;
+}
+
+.close-drawer {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+/* Base Mobile Cleanups */
+@media (max-width: 1024px) {
   .editor-header {
+    padding: 0.5rem;
     height: auto;
-    padding: 0.5rem 1rem;
     flex-wrap: wrap;
-    gap: 10px;
-  }
-  
-  .editor-header .left {
-    width: 100%;
-    margin-bottom: 5px;
-  }
-  
-  .editor-header .center {
-    width: 100%;
-    overflow-x: auto;
   }
   
   .transport-controls {
-    justify-content: flex-start;
-  }
-
-  .main-layout {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    gap: 10px;
-  }
-  
-  .workspace {
-    order: 1;
-    min-height: 50vh;
-    flex-shrink: 0;
-  }
-  
-  .left-sidebar {
-    order: 2;
-    height: auto;
-    max-height: 250px;
-  }
-  
-  .right-sidebar {
-    order: 3;
-    height: auto;
-    margin-bottom: 50px; /* Space for content */
-  }
-
-  .object-list {
-    display: flex;
+    gap: 0.5rem;
     flex-wrap: wrap;
-    gap: 8px;
+    justify-content: center;
   }
   
-  .palette-item {
-    flex: 1 1 calc(33.33% - 8px);
-    min-width: 100px;
+  .control-btn {
+    padding: 0.5rem;
+    font-size: 0.8rem;
   }
   
-  .input-pair {
-    grid-template-columns: 1fr 1fr;
-  }
+  /* Disable old column layout forcing if we are using IS-MOBILE class logic */
 }
 
 @import '@/assets/css/smart_gen_ui.css';

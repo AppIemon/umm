@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"391d8-qzEd+5vgLYCLsaa23ki+YmIiF7k\"",
-    "mtime": "2026-01-30T05:58:00.870Z",
-    "size": 233944,
+    "etag": "\"39c85-+3rMNt3XMondDk2ONlNW9A8ktIQ\"",
+    "mtime": "2026-01-30T06:25:06.965Z",
+    "size": 236677,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"db4e9-gpdlwWw7AHiANghUylPHZtaXV38\"",
-    "mtime": "2026-01-30T05:58:00.872Z",
-    "size": 898281,
+    "etag": "\"ddd9d-v6Ylzo7qNMzW20p0Q9hJLVMvEp4\"",
+    "mtime": "2026-01-30T06:25:07.427Z",
+    "size": 908701,
     "path": "index.mjs.map"
   }
 };
@@ -4335,6 +4335,9 @@ class GameEngine {
       attackTimer: 0,
       projectiles: []
     });
+    // Generation State Persistence
+    __publicField(this, "lastStateEvents", []);
+    __publicField(this, "lastBeatActions", []);
     // Measure Highlights
     __publicField(this, "lastMeasureIndex", -1);
     __publicField(this, "isMeasureHighlight", false);
@@ -4776,13 +4779,18 @@ class GameEngine {
    * 2. 마디마다 포탈을 배치  
    * 3. 동선을 따라가다가 동선에서 벗어나면 충돌하도록 장애물 배치
    * 4. AI 경로 검증 불필요 - 동선이 이미 안전하게 설계됨
+   * @param resumeOptions (Optional) 이전 생성 결과에서 특정 지점까지 유지하고 그 이후부터 재생성
    */
-  generateMap(beatTimes, sections, duration, fixedSeed, verify = true, offsetAttempt = 0, bpm = 120, measureLength = 2, volumeProfile) {
+  generateMap(beatTimes, sections, duration, fixedSeed, verify = true, offsetAttempt = 0, bpm = 120, measureLength = 2, volumeProfile, resumeOptions) {
     this.bpm = bpm;
     this.measureLength = measureLength;
     const seed = fixedSeed || beatTimes.length * 777 + Math.floor(duration * 100);
     this.obstacles = [];
     this.portals = [];
+    if (resumeOptions) {
+      console.log(`[MapGen] Resuming generation from time ${resumeOptions.time.toFixed(2)}s`);
+    }
+    this.beatTimes = beatTimes || [];
     this.beatTimes = beatTimes || [];
     this.trackDuration = duration;
     this.totalLength = duration * this.baseSpeed + 2e3;
@@ -4791,8 +4799,24 @@ class GameEngine {
     const difficulty = this.mapConfig.difficulty;
     console.log(`[MapGen] Procedural Generation with seed: ${seed}, Difficulty: ${difficulty}`);
     const rng = this.seededRandom(seed + offsetAttempt);
-    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile);
-    const mapObjects = generator.generateFromPath(this.autoplayLog, difficulty, beatTimes, stateEvents);
+    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeOptions);
+    this.lastStateEvents = stateEvents;
+    let startX = 0;
+    if (resumeOptions) {
+      const point = this.autoplayLog.find((p) => p.time >= resumeOptions.time);
+      if (point) startX = point.x;
+      const keepX = Math.max(0, startX - 100);
+      this.obstacles = resumeOptions.obstacles.filter((o) => o.x + o.width < keepX);
+      this.portals = resumeOptions.portals.filter((p) => p.x + p.width < keepX);
+    } else {
+      this.obstacles = [];
+      this.portals = [];
+    }
+    let pathForGen = this.autoplayLog;
+    if (resumeOptions && startX > 0) {
+      pathForGen = this.autoplayLog.filter((p) => p.x >= startX - 50);
+    }
+    const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
     for (const obj of mapObjects) {
       if (["gravity_yellow", "gravity_blue", "speed_0.25", "speed_0.5", "speed_1", "speed_2", "speed_3", "speed_4", "mini_pink", "mini_green"].includes(obj.type)) {
         this.portals.push({
@@ -4810,7 +4834,10 @@ class GameEngine {
           width: obj.width || 50,
           height: obj.height || 50,
           type: obj.type,
-          angle: obj.rotation || 0
+          angle: obj.rotation || 0,
+          movement: void 0,
+          // Explicitly undefined if not set to avoid type errors
+          initialY: obj.y
         });
       }
     }
@@ -4823,7 +4850,7 @@ class GameEngine {
    * 핵심: 비트에 맞춰 클릭/릴리즈를 번갈아가며 동선을 먼저 계산하고,
    * 그 동선에 맞춰 포탈과 장애물을 배치
    */
-  generatePathBasedMap(beatTimes, sections, rng, volumeProfile) {
+  generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeOptions) {
     const diff = this.mapConfig.difficulty;
     this.maxY - this.minY;
     const dt = 1 / 60;
@@ -4834,6 +4861,7 @@ class GameEngine {
     for (let t = firstBeat; t < this.trackDuration; t += measureDuration) {
       measureTimes.push(t);
     }
+    const resumeTime = (resumeOptions == null ? void 0 : resumeOptions.time) || 0;
     console.log(`[MapGen] BPM: ${this.bpm}, Measure Duration: ${measureDuration.toFixed(3)}s, Total Measures: ${measureTimes.length}`);
     const stateEvents = [];
     let currentSpeedType = "speed_1";
@@ -4855,8 +4883,20 @@ class GameEngine {
     }
     stateEvents.push(...initialEvents);
     currentSpeedType = initialEvents[0].speedType;
+    if (resumeOptions) {
+      const keptEvents = resumeOptions.stateEvents.filter((e) => e.time < resumeTime);
+      stateEvents.length = 0;
+      stateEvents.push(...keptEvents);
+      if (stateEvents.length > 0) {
+        const last = stateEvents[stateEvents.length - 1];
+        currentSpeedType = last.speedType;
+        currentInverted = last.isInverted;
+        currentMini = last.isMini;
+      }
+    }
     for (const measureTime of measureTimes) {
       if (measureTime < 1) continue;
+      if (measureTime < resumeTime) continue;
       const section = sections == null ? void 0 : sections.find((s) => measureTime >= s.startTime && measureTime < s.endTime);
       (section == null ? void 0 : section.intensity) || 0.5;
       let newSpeedType;
@@ -4915,8 +4955,17 @@ class GameEngine {
       }
     }
     const beatActions = [];
-    const sortedBeats = [...beatTimes].filter((t) => t >= 0.3).sort((a, b) => a - b);
+    if (resumeOptions) {
+      beatActions.push(...resumeOptions.beatActions.filter((b) => b.time < resumeTime));
+    }
+    const sortedBeats = [...beatTimes].filter((t) => t >= 0.3 && t >= resumeTime).sort((a, b) => a - b);
     let isHolding = false;
+    if (resumeOptions && resumeOptions.beatActions.length > 0) {
+      const lastAction = resumeOptions.beatActions[resumeOptions.beatActions.length - 1];
+      if (lastAction.action === "click") {
+        isHolding = true;
+      }
+    }
     const fastThreshold = 0.25;
     for (let i = 0; i < sortedBeats.length; i++) {
       const beatTime = sortedBeats[i];
@@ -4927,12 +4976,18 @@ class GameEngine {
         isHolding = !isHolding;
       } else {
         if (isHolding) {
+          const baseFactor = 0.5;
+          const variance = (rng() - 0.5) * 0.3;
+          const holdFactor = Math.max(0.3, Math.min(0.8, baseFactor + variance));
           beatActions.push({ time: beatTime, action: "click" });
-          beatActions.push({ time: beatTime + interval * 0.5, action: "release" });
+          beatActions.push({ time: beatTime + interval * holdFactor, action: "release" });
           isHolding = false;
         } else {
+          const baseFactor = 0.5;
+          const variance = (rng() - 0.5) * 0.3;
+          const holdFactor = Math.max(0.3, Math.min(0.8, baseFactor + variance));
           beatActions.push({ time: beatTime, action: "click" });
-          beatActions.push({ time: beatTime + interval * 0.5, action: "release" });
+          beatActions.push({ time: beatTime + interval * holdFactor, action: "release" });
           isHolding = false;
         }
       }
@@ -5006,6 +5061,7 @@ class GameEngine {
       });
       simTime += dt;
     }
+    this.lastBeatActions = beatActions;
     this.totalLength = simX + 500;
     for (const se of stateEvents) {
       const pathPoint = this.autoplayLog.find((p) => Math.abs(p.time - se.time) < 0.02);
@@ -6307,9 +6363,11 @@ class GameEngine {
       const time = simTime || performance.now() / 1e3;
       const cx = obs.x + obs.width / 2;
       const cy = obsY + obs.height / 2;
-      const bodyRadius = effectiveWidth / 2;
-      const distSq = (px - cx) ** 2 + (py - cy) ** 2;
-      if (distSq < (bodyRadius + pSize - 5) ** 2) return true;
+      const rx = effectiveWidth / 2;
+      const ry = effectiveHeight / 2;
+      const dx = px - cx;
+      const dy = py - cy;
+      if (dx * dx / ((rx - 2) * (rx - 2)) + dy * dy / ((ry - 2) * (ry - 2)) < 1) return true;
       const hasChildren = obs.children && obs.children.length > 0;
       if (hasChildren) {
         const children = obs.children;
@@ -6433,11 +6491,12 @@ class GameEngine {
     if (obs.type === "saw" || obs.type === "spike_ball" || obs.type === "mine" || obs.type === "orb") {
       const cx = effectiveX + effectiveWidth / 2;
       const cy = effectiveY + effectiveHeight / 2;
-      const radius = effectiveWidth / 2 * 0.9;
+      const rx = effectiveWidth / 2 * 0.9;
+      const ry = effectiveHeight / 2 * 0.9;
       for (const p of points) {
         const dx = p.x - cx;
         const dy = p.y - cy;
-        if (dx * dx + dy * dy < radius * radius) return true;
+        if (dx * dx / (rx * rx) + dy * dy / (ry * ry) < 1) return true;
       }
       return false;
     }
@@ -6470,9 +6529,12 @@ class GameEngine {
     if (["rotor", "cannon", "spark_mine", "crusher_jaw", "swing_blade"].includes(obs.type)) {
       const cx = effectiveX + effectiveWidth / 2;
       const cy = effectiveY + effectiveHeight / 2;
-      const radius = effectiveWidth / 2 * 0.8;
+      const rx = effectiveWidth / 2 * 0.8;
+      const ry = effectiveHeight / 2 * 0.8;
       for (const p of points) {
-        if ((p.x - cx) ** 2 + (p.y - cy) ** 2 < radius ** 2) return true;
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+        if (dx * dx / (rx * rx) + dy * dy / (ry * ry) < 1) return true;
       }
       return false;
     }

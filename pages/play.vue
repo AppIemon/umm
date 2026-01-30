@@ -85,7 +85,7 @@
 
     <!-- Step 2: Game -->
     <GameCanvas 
-      v-if="step === 'play'"
+      v-if="step === 'play' && !showModeSelect"
       :audioBuffer="audioBuffer"
       :obstacles="obstacles"
       :sections="sections"
@@ -97,6 +97,7 @@
       @exit="handleExit"
       @map-ready="handleMapReady"
       @record-update="handleRecordUpdate"
+      @change-mode="showModeSelect = true"
     />
     
     <!-- Mode Selection Modal -->
@@ -407,15 +408,53 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
     const uniqueSeed = Date.now() + Math.floor(Math.random() * 1000000);
     
     let success = false;
+    
+    // Store previous run data for resume
+    let lastResumeData: any = null;
+
     for (let i = 0; ; i++) {
       // Step Update
-      const stepName = i === 0 ? 'MOVEMENT PATH GENERATION' : 'MOVEMENT PATH ADJUSTMENT';
+      const stepName = i === 0 ? 'MOVEMENT PATH GENERATION' : 'FIXING IMPOSSIBLE PARTS...';
       analysisProgress.value = { step: stepName, percent: (i % 10) * 10 }; // Fake pulse for retry
       
       // Delay for visibility on first run
       if (i === 0) await new Promise(r => setTimeout(r, 600));
 
-      tempEngine.generateMap(filteredBeatTimes, filteredSections, effectiveDuration, uniqueSeed + i, false, i, result.bpm, result.measureLength, result.volumeProfile);
+      // Calculate Resume Options
+      let resumeOptions = undefined;
+      // If we have previous data and a failure occurred
+      if (i > 0 && validationFailure.value && lastResumeData) {
+         const failX = validationFailure.value.x;
+         
+         // Find time at failure X
+         // We use the autoplayLog from the LAST run (stored in lastResumeData)
+         const log = lastResumeData.autoplayLog || [];
+         const point = log.find((p: any) => p.x >= failX);
+         const failTime = point ? point.time : (failX / 350); // Fallback speed
+         
+         // Resume from 3 seconds before failure (approx 1-2 measures) to ensure continuity
+         const resumeTime = Math.max(0, failTime - 3.0);
+         
+         console.log(`[SmartGen] Resuming from ${resumeTime.toFixed(2)}s (Fail at ${failTime.toFixed(2)}s)`);
+         
+         resumeOptions = {
+            time: resumeTime,
+            stateEvents: lastResumeData.stateEvents,
+            beatActions: lastResumeData.beatActions,
+            obstacles: lastResumeData.obstacles,
+            portals: lastResumeData.portals
+         };
+      }
+
+      // Generate with Resume Options
+      // Note: We clone obstacles to avoid reference issues when engine clears them
+      const safeResume = resumeOptions ? {
+         ...resumeOptions,
+         obstacles: [...resumeOptions.obstacles],
+         portals: [...resumeOptions.portals]
+      } : undefined;
+
+      tempEngine.generateMap(filteredBeatTimes, filteredSections, effectiveDuration, uniqueSeed + i, false, i, result.bpm, result.measureLength, result.volumeProfile, safeResume);
       
       // Validation
       success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
@@ -423,15 +462,12 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
       });
       
       if (success) {
-        // 3. MAP GENERATION (Visual Step)
+        // ... (Completion logic same as before)
         analysisProgress.value = { step: 'MAP GENERATION', percent: 100 };
         await new Promise(r => setTimeout(r, 500));
-
-        // 4. MAP ADJUSTMENT (Visual Step)
+        // ...
         analysisProgress.value = { step: 'MAP ADJUSTMENT', percent: 100 };
         await new Promise(r => setTimeout(r, 500));
-
-        // 5. MAP SAVING
         analysisProgress.value = { step: 'MAP SAVING', percent: 100 };
         validationFailure.value = null;
         break; 
@@ -445,12 +481,21 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
           rawObstacles: tempEngine.validationFailureInfo.nearObstacles
         };
         nextTick(() => drawFailurePreview());
+        
+        // Capture state for next resume
+        lastResumeData = {
+           stateEvents: [...tempEngine.lastStateEvents],
+           beatActions: [...tempEngine.lastBeatActions],
+           obstacles: [...tempEngine.obstacles],
+           portals: [...tempEngine.portals],
+           autoplayLog: [...tempEngine.autoplayLog]
+        };
       }
       
-      // Explicit yield to event loop to prevent UI freeze during sync generateMap
+      // Explicit yield
       await new Promise(r => setTimeout(r, 10));
 
-      if (i > 2500) { 
+      if (i > 50) { // Reduced max retries since smart resume is more efficient
           console.warn("Max retries reached.");
           break; 
       }
@@ -1003,8 +1048,10 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
   background: #050510;
   color: white;
   font-family: 'Outfit', sans-serif;
-  overflow: hidden;
+  overflow-y: auto; /* Changed from hidden to auto */
+  overflow-x: hidden;
   position: relative;
+  padding-bottom: 4rem; /* Ensure space for scrolling */
 }
 
 .background-anim {
