@@ -138,13 +138,25 @@
             </div>
           </div>
 
-                <label>SPEED</label>
-                <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.speed" />
-                <label>RANGE</label>
-                <input type="number" v-model.number="selectedObjects[0].movement.range" />
-                <label>PHASE OFFSET</label>
-                <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.phase" />
-             </div>
+          <div class="prop-group" v-if="selectedObjects[0].movement">
+            <label>MOVEMENT TYPE</label>
+            <select :value="selectedObjects[0].movement.type" @change="setMovementType(($event.target as HTMLSelectElement).value)">
+              <option value="none">NONE</option>
+              <option value="updown">UP-DOWN</option>
+              <option value="leftright">LEFT-RIGHT</option>
+              <option value="rotate">ROTATE</option>
+              <option value="bounce">BOUNCE</option>
+            </select>
+
+            <template v-if="selectedObjects[0].movement.type !== 'none'">
+              <label>SPEED / RANGE</label>
+              <div class="input-pair">
+                <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.speed" placeholder="Speed" />
+                <input type="number" v-model.number="selectedObjects[0].movement.range" placeholder="Range" />
+              </div>
+              <label>PHASE OFFSET</label>
+              <input type="number" step="0.1" v-model.number="selectedObjects[0].movement.phase" />
+            </template>
           </div>
 
           <template v-if="['planet', 'star'].includes(selectedObjects[0].type)">
@@ -161,13 +173,10 @@
                  Drag a Planet onto this Star to attach it!
               </div>
 
-              <!-- Show attached children info -->
               <div v-if="selectedObjects[0].children && selectedObjects[0].children.length > 0" class="children-list">
                  <label>ATTACHED PLANETS: {{ selectedObjects[0].children.length }}</label>
                  <div v-for="(child, idx) in selectedObjects[0].children" :key="idx" class="child-item">
                     <span>Planet {{ idx + 1 }}</span>
-                    <!-- Could add mini config here, but selecting child directly is hard since they are attached. 
-                         For now, users configure planets BEFORE dragging them. -->
                  </div>
               </div>
            </template>
@@ -189,9 +198,6 @@
 
         <div class="global-settings prop-group">
            <h3>LEVEL CONFIG</h3>
-
-           <label>DIFFICULTY</label>
-           <input type="number" v-model.number="mapData.difficulty" />
         </div>
 
         <div class="audio-settings prop-group">
@@ -240,7 +246,8 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
-import { GameEngine, type Obstacle, type Portal, type ObstacleType, type PortalType } from '@/utils/game-engine';
+import { GameEngine, type MapData, type Obstacle, type Portal, type ObstacleType, type PortalType } from '@/utils/game-engine';
+import { drawObstacle } from '@/utils/canvas-renderer';
 import { CHUNK_SIZE, splitBase64ToChunks } from '@/utils/audioUtils';
 
 const router = useRouter();
@@ -251,7 +258,7 @@ const engine = new GameEngine();
 const mapData = ref<any>({
   title: 'NEW UNTITLED MAP',
   duration: 60,
-  difficulty: 10,
+  difficulty: 15,
   engineObstacles: [],
   enginePortals: [],
   beatTimes: [],
@@ -590,41 +597,35 @@ const onWorkspaceMouseUp = () => {
     isSelectionBoxActive.value = false;
   } else if (isDraggingObject) {
     // Drag-to-Attach Logic
+    // Drag-to-Attach Logic
     if (selectedObjects.value.length === 1) {
       const draggedObj = selectedObjects.value[0];
+      const nonOrbitableTypes = ['falling_spike', 'growing_spike', 'piston_v', 'v_laser', 'laser_beam', 'boss', 'star']; 
       
-      // Check if dragged object is a Planet
-      if (draggedObj.type === 'planet') {
-        // Find if dropping onto a Star
-        // Simple collision check with center point
+      // Check if dragged object is attachable and not a parent itself in a weird way (stars usually root)
+      if (!nonOrbitableTypes.includes(draggedObj.type)) {
         const cx = draggedObj.x + draggedObj.width / 2;
         const cy = draggedObj.y + draggedObj.height / 2;
         
-        let targetStar: any = null;
+        let targetParent: any = null;
         for (const obs of mapData.value.engineObstacles) {
            if (obs === draggedObj) continue;
-           if (obs.type === 'star') {
+           if (obs.type === 'star' || obs.type === 'planet') {
               if (cx >= obs.x && cx <= obs.x + obs.width && cy >= obs.y && cy <= obs.y + obs.height) {
-                 targetStar = obs;
+                 targetParent = obs;
                  break;
               }
            }
         }
 
-        if (targetStar) {
-           // Attach to Star
-           console.log("Attaching Planet to Star");
-           if (!targetStar.children) targetStar.children = [];
+        if (targetParent) {
+           console.log(`Attaching ${draggedObj.type} to ${targetParent.type}`);
+           if (!targetParent.children) targetParent.children = [];
            // Remove from main list
            mapData.value.engineObstacles = mapData.value.engineObstacles.filter((o: any) => o !== draggedObj);
            // Add to children
-           targetStar.children.push(draggedObj);
-           draggedObj.parentId = 'attached'; // Mark as attached
-           // Reset offset relative to parent? Or just keep data?
-           // For now, let's just add it. The rendering logic needs to know it's a child.
-           // Actually, the rendering/collision logic expects children to be abstract params OR objects.
-           // Our game-engine logic previously assumed `orbitCount`.
-           // We need to update game-engine to use `children` if present.
+           targetParent.children.push(draggedObj);
+           draggedObj.parentId = 'attached'; 
         }
       }
     }
@@ -1050,15 +1051,7 @@ const draw = () => {
   mapData.value.engineObstacles.forEach((obs: Obstacle) => {
     ctx.save();
     
-    // 전역 회전 지원 (모든 오브젝트)
-    const hasAngle = obs.angle !== undefined && obs.angle !== 0;
-    if (hasAngle) {
-      ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
-      ctx.rotate(obs.angle! * Math.PI / 180);
-      ctx.translate(-(obs.x + obs.width / 2), -(obs.y + obs.height / 2));
-    }
-    
-    // Draw Movement Path (Ghost/Reference)
+    // Ghost Path logic
     if (obs.movement && obs.movement.type === 'updown') {
        ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
        ctx.beginPath();
@@ -1069,571 +1062,28 @@ const draw = () => {
 
     // Get current animated state
     const state = engine.getObstacleStateAt(obs, time);
-    const drawX = obs.x;
+    // X is usually static unless we add X movement later. However, the shared render function uses input x,y as Top-Left.
+    // engine.getObstacleStateAt returns the modified x,y, angle. 
+    // Obstacles in editor are drawn at static positions? No, we use state for animation previews.
+    
+    // Wait, getObstacleStateAt returns {x, y, angle}.
+    // If we use state.y, we should use state.x too.
+    // The shared drawObstacle takes (x, y).
+    
+    const drawX = obs.x; // Typically static in this game's movement logic (vertical only mostly?)
+    // Actually getObstacleStateAt handles 'updown' which changes Y.
+    // Does it handle X? Currently game-engine only has vertical movement or rotation.
+    // If horizontal movement is added, we should use state.x.
+    
+    // For now, obs.x is fine.
+    
     const drawY = state.y;
     const drawAngle = state.angle;
-
-    if (obs.type === 'spike' || obs.type === 'mini_spike') {
-      ctx.fillStyle = '#ff4d4d';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#ff0000';
-      ctx.beginPath();
-      if (drawY > 300) { // Bottom
-        ctx.moveTo(drawX, drawY + obs.height);
-        ctx.lineTo(drawX + obs.width / 2, drawY);
-        ctx.lineTo(drawX + obs.width, drawY + obs.height);
-      } else { // Top
-        ctx.moveTo(drawX, drawY);
-        ctx.lineTo(drawX + obs.width / 2, drawY + obs.height);
-        ctx.lineTo(drawX + obs.width, drawY);
-      }
-      ctx.closePath();
-      ctx.fill();
-    } else if (obs.type === 'block') {
-      ctx.fillStyle = '#444';
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = '#666';
-      ctx.fillRect(drawX, drawY, obs.width, obs.height);
-      ctx.fillStyle = '#555';
-      ctx.fillRect(drawX + 2, drawY + 2, obs.width - 4, obs.height - 4);
-    } else if (obs.type === 'mine') {
-       ctx.fillStyle = '#222';
-       ctx.strokeStyle = '#ff3333';
-       
-       // Pulsation Visual (Editor: use time for preview)
-       let sizeScale = 1.0;
-       if (obs.customData?.pulseSpeed) {
-          const speed = obs.customData.pulseSpeed || 2;
-          const amount = obs.customData.pulseAmount || 0.2;
-          sizeScale = 1 + Math.sin(time * speed) * amount;
-       }
-
-       const radius = (obs.width / 2) * sizeScale;
-       const cx = drawX + obs.width / 2;
-       const cy = drawY + obs.height / 2;
-
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-       ctx.fill();
-       ctx.stroke();
-
-       // Spikes
-       const spikeCount = 8;
-       ctx.beginPath();
-       for(let k=0; k<spikeCount; k++) {
-         const angle = (Math.PI * 2 * k) / spikeCount;
-         const rIn = radius;
-         const rOut = radius + 6;
-         ctx.moveTo(cx + Math.cos(angle)*rIn, cy + Math.sin(angle)*rIn);
-         ctx.lineTo(cx + Math.cos(angle)*rOut, cy + Math.sin(angle)*rOut);
-       }
-       ctx.stroke();
-    }
-    else if (obs.type === 'planet') {
-       const cx = drawX + obs.width / 2;
-       const cy = drawY + obs.height / 2;
-       const radius = obs.width / 2;
-
-       const grad = ctx.createRadialGradient(cx, cy - radius*0.3, radius*0.1, cx, cy, radius);
-       grad.addColorStop(0, '#4488ff');
-       grad.addColorStop(1, '#002266');
-       ctx.fillStyle = grad;
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius, 0, Math.PI*2);
-       ctx.fill();
-
-       const count = obs.customData?.orbitCount ?? 2;
-       const speed = obs.customData?.orbitSpeed ?? 1.0;
-       const dist = obs.customData?.orbitDistance ?? (obs.width * 0.8);
-      
-       for (let i = 0; i < count; i++) {
-         const theta = time * speed + (i * ((Math.PI * 2) / count));
-         const mx = cx + Math.cos(theta) * dist;
-         const my = cy + Math.sin(theta) * dist;
-         
-         ctx.fillStyle = '#88ccff';
-         ctx.beginPath();
-         ctx.arc(mx, my, 8, 0, Math.PI*2);
-         ctx.fill();
-       }
-    }
-    else if (obs.type === 'star') {
-       const cx = drawX + obs.width / 2;
-       const cy = drawY + obs.height / 2;
-       const radius = obs.width / 2;
-
-       const pulse = 1 + Math.sin(time * 5) * 0.05;
-       const grad = ctx.createRadialGradient(cx, cy, radius*0.2, cx, cy, radius * pulse);
-       grad.addColorStop(0, '#ffff88');
-       grad.addColorStop(0.5, '#ffaa00');
-       grad.addColorStop(1, 'rgba(255, 68, 0, 0)');
-       ctx.fillStyle = grad;
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius * 1.2 * pulse, 0, Math.PI*2);
-       ctx.fill();
-       
-       ctx.fillStyle = '#fff';
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius * 0.6, 0, Math.PI*2);
-       ctx.fill();
-
-       const hasChildren = obs.children && obs.children.length > 0;
-       
-       if (hasChildren) {
-         const children = obs.children!;
-         const speed = obs.customData?.orbitSpeed ?? 1.0;
-         
-         children.forEach((child: any, i: number) => {
-            const theta = time * speed + (i * ((Math.PI * 2) / children.length));
-            const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
-
-            const px = cx + Math.cos(theta) * dist;
-            const py = cy + Math.sin(theta) * dist;
-            
-            ctx.fillStyle = '#00ff88';
-            ctx.beginPath();
-            ctx.arc(px, py, 14, 0, Math.PI*2);
-            ctx.fill();
-
-            if (child.type === 'planet') {
-                const moonCount = child.customData?.orbitCount ?? 2;
-                const moonSpeed = child.customData?.orbitSpeed ?? 2.0;
-                const moonDist = child.customData?.orbitDistance ?? (child.width * 0.8);
-
-                for (let j = 0; j < moonCount; j++) {
-                  const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
-                  const mx = px + Math.cos(mTheta) * moonDist;
-                  const my = py + Math.sin(mTheta) * moonDist;
-                  
-                  ctx.fillStyle = '#fff';
-                  ctx.beginPath();
-                  ctx.arc(mx, my, 4, 0, Math.PI*2);
-                  ctx.fill();
-                }
-            }
-         });
-       } else {
-           const count = obs.customData?.orbitCount ?? 3;
-           if (count > 0) {
-               const speed = obs.customData?.orbitSpeed ?? 1.0;
-               const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
-
-               for (let i = 0; i < count; i++) {
-                 const theta = time * speed + (i * ((Math.PI * 2) / count));
-                 const px = cx + Math.cos(theta) * dist;
-                 const py = cy + Math.sin(theta) * dist;
-                 
-                 ctx.fillStyle = '#00ff88';
-                 ctx.beginPath();
-                 ctx.arc(px, py, 14, 0, Math.PI*2);
-                 ctx.fill();
-               }
-           }
-       }
-    }
-    else if (['piston_v', 'hammer', 'rotor', 'cannon', 'spark_mine', 'laser_beam', 'crusher_jaw', 'swing_blade', 'falling_spike', 'growing_spike'].includes(obs.type)) {
-       const cx = drawX + obs.width / 2;
-       const cy = drawY + obs.height / 2;
-       
-       if (obs.type === 'hammer') {
-          ctx.save();
-          ctx.translate(cx, cy);
-          
-          // Hammer swing
-          const swing = Math.sin(time * 3) * 0.5;
-          ctx.rotate(swing);
-
-          // Handle
-          ctx.fillStyle = '#666';
-          ctx.fillRect(-5, -obs.height/2, 10, obs.height * 0.7);
-          
-          // Head
-          ctx.fillStyle = '#888';
-          ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
-          ctx.fillRect(-obs.width/2, obs.height * 0.2 - obs.height/2, obs.width, obs.height * 0.3);
-          
-          // Detail
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(-obs.width/2, obs.height * 0.2 - obs.height/2, obs.width, obs.height * 0.3);
-          
-          ctx.restore();
-       } 
-       else if (obs.type === 'rotor') {
-          ctx.save();
-          ctx.translate(cx, cy);
-          const spin = time * 8;
-          ctx.rotate(spin);
-          
-          // 3 Blades
-          ctx.fillStyle = '#ff3333';
-          ctx.shadowBlur = 15; ctx.shadowColor = '#ff0000';
-          for(let i=0; i<3; i++) {
-             ctx.rotate(Math.PI * 2 / 3);
-             ctx.beginPath();
-             ctx.moveTo(0, 0);
-             ctx.lineTo(-5, -obs.height/2);
-             ctx.lineTo(5, -obs.height/2);
-             ctx.fill();
-          }
-          // Center
-          ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
-          ctx.restore();
-       }
-       else if (obs.type === 'cannon') {
-          // Cannon body
-          ctx.save();
-          ctx.translate(cx, cy);
-          ctx.fillStyle = '#444';
-          ctx.fillRect(-obs.width/2+5, -obs.height/2+5, obs.width-10, obs.height-10);
-          
-          // Barrel hole
-          ctx.fillStyle = '#000';
-          ctx.beginPath(); ctx.arc(0, 0, obs.width/3, 0, Math.PI*2); ctx.fill();
-          
-          // Red rim
-          ctx.strokeStyle = '#ff0000';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(-obs.width/2+5, -obs.height/2+5, obs.width-10, obs.height-10);
-          
-          ctx.restore();
-       }
-       else if (obs.type === 'crusher_jaw') {
-           // Top/Bottom Jaw style
-           ctx.fillStyle = '#555';
-           ctx.shadowBlur = 10; ctx.shadowColor = '#000';
-           
-           // Main block
-           ctx.fillRect(drawX, drawY, obs.width, obs.height);
-           
-           // Teeth
-           ctx.fillStyle = '#ff8800';
-           const teethCount = 3;
-           const toothW = obs.width / teethCount; // 3 teeth
-           const toothH = 15;
-           
-           ctx.beginPath();
-           // Draw teeth on bottom edge if it looks like a top crusher, or top if bottom. 
-           // Assume generic box with teeth on one side. Let's do both for "Jaw" feel.
-           for(let i=0; i<teethCount; i++) {
-              ctx.moveTo(drawX + i*toothW, drawY + obs.height);
-              ctx.lineTo(drawX + i*toothW + toothW/2, drawY + obs.height + toothH);
-              ctx.lineTo(drawX + (i+1)*toothW, drawY + obs.height);
-           }
-           ctx.fill();
-           
-           // Border
-           ctx.strokeStyle = '#aaa';
-           ctx.lineWidth = 2;
-           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
-       }
-       else if (obs.type === 'falling_spike') {
-           ctx.save();
-           ctx.translate(cx, cy);
-           
-           ctx.fillStyle = '#ff3333';
-           ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000';
-           ctx.beginPath();
-           ctx.moveTo(-obs.width/2, -obs.height/2);
-           ctx.lineTo(obs.width/2, -obs.height/2);
-           ctx.lineTo(0, obs.height/2);
-           ctx.closePath();
-           ctx.fill();
-           
-           // Highlight
-           ctx.strokeStyle = '#fff';
-           ctx.lineWidth = 2;
-           ctx.stroke();
-           ctx.restore();
-       }
-       else if (obs.type === 'laser_beam') {
-           ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-           ctx.fillRect(drawX, drawY, obs.width, obs.height);
-           
-           // Core beam
-           const pulse = Math.sin(time * 20) * 2 + 3;
-           ctx.fillStyle = '#ff0000';
-           ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000';
-           ctx.fillRect(drawX, drawY + obs.height/2 - pulse/2, obs.width, pulse);
-           
-           // Emitters
-           ctx.fillStyle = '#444';
-           ctx.fillRect(drawX, drawY, 10, obs.height);
-           ctx.fillRect(drawX + obs.width - 10, drawY, 10, obs.height);
-       }
-       else if (obs.type === 'swing_blade') {
-           ctx.save();
-           ctx.translate(cx, drawY); // Pivot at top
-           
-           const swing = Math.sin(time * 2) * 0.8;
-           ctx.rotate(swing);
-           
-           // String/Rod
-           ctx.strokeStyle = '#aaa';
-           ctx.lineWidth = 4;
-           ctx.beginPath();
-           ctx.moveTo(0, 0);
-           ctx.lineTo(0, obs.height);
-           ctx.stroke();
-           
-           // Blade
-           ctx.translate(0, obs.height);
-           ctx.fillStyle = '#ccc';
-           ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
-           ctx.beginPath();
-           ctx.arc(0, 0, obs.width/2, 0, Math.PI); // Half circle blade
-           ctx.fill();
-           
-           ctx.fillStyle = '#ff0000'; // Sharp edge
-           ctx.beginPath();
-           ctx.arc(0, 0, obs.width/2, 0, Math.PI, true);
-           ctx.fill();
-           
-           ctx.restore();
-       }
-       else if (obs.type === 'growing_spike') {
-           // Base
-           ctx.fillStyle = '#444';
-           ctx.fillRect(drawX, drawY + obs.height - 10, obs.width, 10);
-           
-           // Spike (animated height preview)
-           const h = obs.height * (0.5 + Math.sin(time * 3) * 0.4);
-           ctx.fillStyle = '#ff3333';
-           ctx.beginPath();
-           ctx.moveTo(drawX + 5, drawY + obs.height - 10);
-           ctx.lineTo(drawX + obs.width - 5, drawY + obs.height - 10);
-           ctx.lineTo(drawX + obs.width/2, drawY + obs.height - 10 - h);
-           ctx.fill();
-       }
-       else if (obs.type === 'spark_mine') {
-           ctx.save();
-           ctx.translate(cx, cy);
-           
-           // Spikes
-           ctx.strokeStyle = '#ffff00';
-           ctx.lineWidth = 2;
-           for(let i=0; i<8; i++) {
-              ctx.rotate(Math.PI/4);
-              ctx.beginPath();
-              ctx.moveTo(0, 0);
-              ctx.lineTo(0, obs.width/2 + (Math.random()*5));
-              ctx.stroke();
-           }
-           
-           // Core
-           ctx.fillStyle = '#ffaa00';
-           ctx.shadowBlur = 15; ctx.shadowColor = '#ffff00';
-           ctx.beginPath();
-           ctx.arc(0, 0, obs.width/4, 0, Math.PI*2);
-           ctx.fill();
-           ctx.restore();
-       }
-       else if (obs.type === 'piston_v') {
-           const cx = drawX + obs.width / 2;
-           const cy = drawY + obs.height / 2;
-           ctx.save();
-           
-           // Piston Base (Top or Bottom depending on Y)
-           // If it's near bottom (floor), base is bottom. If near top, base is top.
-           // Heuristic: y > 360 -> bottom based
-           const isBottom = obs.y > 360;
-           
-           // Draw Base
-           ctx.fillStyle = '#444';
-           ctx.shadowBlur = 5; ctx.shadowColor = '#000';
-           if (isBottom) {
-              ctx.fillRect(drawX, drawY + obs.height - 15, obs.width, 15);
-           } else {
-              ctx.fillRect(drawX, drawY, obs.width, 15);
-           }
-           
-           // Extension Rod
-           ctx.fillStyle = '#888';
-           const rodW = obs.width * 0.4;
-           const extension = (Math.sin(time*2) + 1) * 0.5 * (obs.height - 40);
-           
-           if (isBottom) {
-              // Rod up
-              ctx.fillRect(drawX + (obs.width-rodW)/2, drawY + obs.height - 15 - extension, rodW, extension);
-              // Head
-              ctx.fillStyle = '#ff8800';
-              ctx.fillRect(drawX, drawY + obs.height - 15 - extension - 25, obs.width, 25);
-              // Stripes
-              ctx.fillStyle = '#000';
-              ctx.beginPath();
-              ctx.moveTo(drawX, drawY + obs.height - 15 - extension - 25);
-              ctx.lineTo(drawX + 10, drawY + obs.height - 15 - extension - 25);
-              ctx.lineTo(drawX, drawY + obs.height - 15 - extension - 15);
-              ctx.fill();
-           } else {
-              // Rod down
-              ctx.fillRect(drawX + (obs.width-rodW)/2, drawY + 15, rodW, extension);
-              // Head
-              ctx.fillStyle = '#ff8800';
-              ctx.fillRect(drawX, drawY + 15 + extension, obs.width, 25);
-           }
-           
-           ctx.restore();
-       }
-       else if (obs.type === 'invisible_wall') {
-           ctx.strokeStyle = '#rgba(255, 255, 255, 0.5)';
-           ctx.lineWidth = 1;
-           ctx.setLineDash([5, 5]);
-           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
-           ctx.setLineDash([]);
-           ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-           ctx.fillText("INVISIBLE", drawX, drawY + 15);
-       }
-       else if (obs.type === 'fake_block') {
-           ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-           ctx.fillRect(drawX, drawY, obs.width, obs.height);
-           ctx.strokeStyle = '#fff';
-           ctx.strokeRect(drawX, drawY, obs.width, obs.height);
-           ctx.fillStyle = '#fff';
-           ctx.font = '10px Arial';
-           ctx.fillText("FAKE", drawX + 5, drawY + 15);
-       }
-       else {
-          // Fallback
-          ctx.strokeStyle = '#ff8800';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(drawX, drawY, obs.width, obs.height);
-          ctx.fillStyle = '#ff8800';
-          ctx.font = '10px Arial';
-          ctx.fillText(obs.type, drawX, drawY + 15);
-       }
-    }
-    else if (obs.type === 'slope') {
-      // 코리도 형성 삼각형
-      ctx.fillStyle = '#222';
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#000';
-      ctx.beginPath();
-      if (obs.angle! > 0) {
-        // 왼쪽 하단 직각
-        ctx.moveTo(drawX, drawY + obs.height);
-        ctx.lineTo(drawX + obs.width, drawY);
-        ctx.lineTo(drawX, drawY);
-      } else {
-        // 오른쪽 하단 직각
-        ctx.moveTo(drawX + obs.width, drawY + obs.height);
-        ctx.lineTo(drawX, drawY);
-        ctx.lineTo(drawX + obs.width, drawY);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(100,200,255,0.3)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    } else if (obs.type === 'saw') {
-      const cx = drawX + obs.width / 2;
-      const cy = drawY + obs.height / 2;
-      
-      ctx.save();
-      ctx.translate(cx, cy);
-      // Support non-uniform scaling (Ellipse)
-      ctx.scale(obs.width / 2, obs.height / 2);
-
-      ctx.fillStyle = '#ffaa00';
-      ctx.shadowBlur = 40 / Math.max(obs.width, obs.height) * 10; // Adjust shadow for scale
-      ctx.shadowColor = '#ffaa00';
-      
-      // Draw Body (Unit Circle -> Ellipse)
-      ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill();
-      
-      // Draw Teeth
-      ctx.fillStyle = '#ff6600';
-      const teeth = 10;
-      const rotation = time * 8;
-      
-      for (let i = 0; i < teeth; i++) {
-        const angle = (Math.PI * 2 * i / teeth) + rotation;
-        ctx.beginPath();
-        // Teeth on the edge of unit circle
-        const tx = Math.cos(angle) * 0.75;
-        const ty = Math.sin(angle) * 0.75;
-        const tr = 0.15;
-        ctx.arc(tx, ty, tr, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-
-    } else if (obs.type === 'spike_ball') {
-      const cx = drawX + obs.width / 2;
-      const cy = drawY + obs.height / 2;
-      const rotation = time * 3;
-      
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.scale(obs.width / 2, obs.height / 2);
-
-      ctx.fillStyle = '#444';
-      for (let i = 0; i < 8; i++) {
-        const angle = (Math.PI * 2 * i / 8) + rotation;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(angle - 0.2) * 0.8, Math.sin(angle - 0.2) * 0.8);
-        ctx.lineTo(Math.cos(angle) * 1.2, Math.sin(angle) * 1.2);
-        ctx.lineTo(Math.cos(angle + 0.2) * 0.8, Math.sin(angle + 0.2) * 0.8);
-        ctx.fill();
-      }
-      
-      const grad = ctx.createRadialGradient(-0.3, -0.3, 0.1, 0, 0, 1);
-      grad.addColorStop(0, '#888'); grad.addColorStop(1, '#222');
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(0, 0, 0.8, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-
-    } else if (obs.type === 'laser' || obs.type === 'v_laser') {
-      const isV = obs.type === 'v_laser';
-      const glow = Math.sin(time * 15) * 5 + 10;
-      ctx.strokeStyle = '#ff3333';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = Math.max(0, glow);
-      ctx.shadowColor = '#ff0000';
-      ctx.beginPath();
-      if (isV) {
-        ctx.moveTo(drawX + obs.width/2, drawY); ctx.lineTo(drawX + obs.width/2, drawY + obs.height);
-      } else {
-        ctx.moveTo(drawX, drawY + obs.height/2); ctx.lineTo(drawX + obs.width, drawY + obs.height/2);
-      }
-      ctx.stroke();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.shadowBlur = 0; ctx.stroke();
-    } else if (obs.type === 'mine') {
-       const cx = drawX + obs.width/2; const cy = drawY + obs.height/2;
-       
-       ctx.save();
-       ctx.translate(cx, cy);
-       ctx.scale(obs.width / 2, obs.height / 2);
-
-       const pulse = Math.sin(time * 10) * 0.1 + 0.9;
-       ctx.fillStyle = '#ff3333'; 
-       // Adjusted shadow and scale
-       ctx.shadowBlur = 10 / Math.max(1, (obs.width+obs.height)/100); 
-       ctx.shadowColor = '#ff0000';
-       
-       ctx.beginPath();
-       for(let i=0; i<6; i++){
-         const a = (Math.PI/3)*i + time*2;
-         ctx.lineTo(Math.cos(a)*pulse, Math.sin(a)*pulse);
-       }
-       ctx.closePath(); ctx.fill();
-       ctx.restore();
-
-    } else if (obs.type === 'orb') {
-       const cx = drawX + obs.width/2; const cy = drawY + obs.height/2;
-       ctx.save();
-       ctx.translate(cx, cy);
-       ctx.scale(obs.width/2, obs.height/2);
-
-       const radius = (Math.sin(time*5)*0.1+1); // Base radius is 1.0 logic
-       const grad = ctx.createRadialGradient(0, 0, radius*0.1, 0, 0, radius);
-       grad.addColorStop(0, '#fff'); grad.addColorStop(0.4, '#aa44ff'); grad.addColorStop(1, 'rgba(68,0,204,0)');
-       ctx.fillStyle = grad; ctx.globalCompositeOperation = 'lighter';
-       ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI*2); ctx.fill();
-       ctx.globalCompositeOperation = 'source-over';
-       ctx.restore();
-    }
+    
+    // Draw using shared renderer
+    // We pass overrideAngle = drawAngle to ensure rotation is respected
+    // isEditor = true to see invisible walls/fake blocks
+    drawObstacle(ctx, obs, drawX, drawY, time, true, drawAngle);
 
     if (showHitboxes.value) {
       ctx.strokeStyle = '#00ff00';

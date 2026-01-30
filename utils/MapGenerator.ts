@@ -16,27 +16,33 @@ export class MapGenerator {
    * Difficulty based gap calculation
    * 난이도가 높을수록 좁아짐
    */
+  /**
+   * Difficulty based gap calculation
+   * 난이도가 높을수록 좁아짐
+   */
   private calculateGap(difficulty: number, isMini: boolean): number {
-    // 난이도별 격차 심화 (1~30)
+    // 1~30 난이도 재조정 (User request: Normal/Hard is too hard)
+    // 넓어진 간격으로 조정
     let baseGap: number;
 
-    if (difficulty <= 2) {
-      // 1~2: Ultra Easy (600 ~ 500)
-      baseGap = 600 - (difficulty - 1) * 100;
-    } else if (difficulty < 10) {
-      // 3~9: Easy (450 ~ 300)
-      baseGap = 450 - (difficulty - 3) * 21.4;
-    } else if (difficulty < 24) {
-      // 10~23: Normal/Hard (300 ~ 120)
-      baseGap = 300 - (difficulty - 10) * 12.8;
+    if (difficulty <= 7) {
+      // 1~7: Easy (580 ~ 460)
+      baseGap = 580 - (difficulty - 1) * 20;
+    } else if (difficulty <= 15) {
+      // 8~15: Normal (460 ~ 320)
+      baseGap = 460 - (difficulty - 8) * 17.5;
+    } else if (difficulty <= 23) {
+      // 16~23: Hard (320 ~ 180)
+      baseGap = 320 - (difficulty - 16) * 17.5;
     } else {
-      // 24~30: Impossible (120 ~ 55)
-      baseGap = 120 - (difficulty - 24) * 10.8;
+      // 24~30: Impossible (180 ~ 90) - Relaxed from 60
+      // User request: "impossible의 간격 완화"
+      baseGap = 180 - (difficulty - 24) * 15;
     }
 
-    baseGap = Math.max(55, baseGap);
+    baseGap = Math.max(90, baseGap); // Min gap raised from 60 to 90
 
-    // Mini Portal: 간격 1.5배
+    // Mini Portal: 간격 1.5배 (유지)
     return isMini ? baseGap * 1.5 : baseGap;
   }
 
@@ -158,25 +164,35 @@ export class MapGenerator {
 
       // Calculate target Y
       const targetFloorY = np.y + halfGap;
+      const targetCeilY = np.y - halfGap;
 
-      // ... (rest is same logic, just use targetFloorY logic and sync ceil to gap)
-
-      // 2. Determine Step Direction
+      // 2. Determine Step Direction Independently for Floor and Ceiling
       let stepY = 0;
-      const diff = targetFloorY - currentFloorY;
+      let ceilStepY = 0;
       const threshold = 10;
 
+      // Floor stepping
+      const floorDiff = targetFloorY - currentFloorY;
       if (isMini) {
-        // Mini Mode: Support 60-degree (steep) slopes
-        // If diff is large (> 1.5 blocks), use steep step (2 blocks)
-        if (diff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (diff < -threshold) stepY = -blockSize;
-        else if (diff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (diff > threshold) stepY = blockSize;
+        if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
+        else if (floorDiff < -threshold) stepY = -blockSize;
+        else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
+        else if (floorDiff > threshold) stepY = blockSize;
       } else {
-        // Normal Mode: 45-degree slopes max
-        if (diff < -threshold) stepY = -blockSize;
-        else if (diff > threshold) stepY = blockSize;
+        if (floorDiff < -threshold) stepY = -blockSize;
+        else if (floorDiff > threshold) stepY = blockSize;
+      }
+
+      // Ceiling stepping
+      const ceilDiff = targetCeilY - currentCeilY;
+      if (isMini) {
+        if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
+        else if (ceilDiff < -threshold) ceilStepY = -blockSize;
+        else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
+        else if (ceilDiff > threshold) ceilStepY = blockSize;
+      } else {
+        if (ceilDiff < -threshold) ceilStepY = -blockSize;
+        else if (ceilDiff > threshold) ceilStepY = blockSize;
       }
 
       // 3. Terrain Generation
@@ -224,7 +240,6 @@ export class MapGenerator {
       }
 
       // --- CEILING ---
-      const ceilStepY = stepY; // Parallel to floor
       if (ceilStepY < 0) {
         // UP Slope ◥
         const isSteep = ceilStepY === -blockSize * 2;
@@ -277,14 +292,16 @@ export class MapGenerator {
       // 난이도 1~2는 장애물을 생성하지 않거나 매우 제한적으로 생성
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
 
-      if (difficulty <= 2) {
-        // Very low difficulty: No spikes, no mines. Skip to Beat Decoration.
-      } else if (stepY === 0 && currentGap > 100 && rand < 0.2) {
-        const spikeH = difficulty <= 5 ? 20 : 40; // 낮은 난이도에선 작은 가시
-        const spikeType = difficulty <= 5 ? 'mini_spike' : 'spike';
+      // 4. Decoration - Diverse Obstacles (Spikes, Mines, etc.)
+      // User Update: Enable obstacle variety for all difficulties, scale by difficulty
+      if (stepY === 0 && currentGap > 100 && rand < 0.2) {
+        // Dynamic Size based on Difficulty
+        // 1-5: Small (20), 6-10: Medium (30), 11+: Large (40)
+        let spikeH = 40;
+        if (difficulty <= 5) spikeH = 20;
+        else if (difficulty <= 10) spikeH = 30;
 
         // Randomly choose from new floor/ceiling obstacles
-        // 'piston_v', 'falling_spike', 'hammer', 'crusher_jaw', 'growing_spike', 'cannon', 'swing_blade'
         // Segment Logic
         const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
         const segIdx = Math.floor(progress * SEGMENT_COUNT);
@@ -292,17 +309,19 @@ export class MapGenerator {
         const currentFloorOptions = segmentFloor[segIdx]!;
         const currentCeilOptions = segmentCeil[segIdx]!;
 
-        const chosenFloor = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || 'spike';
-        const chosenCeil = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || 'spike';
+        let floorType = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || 'spike';
+        let ceilType = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || 'spike';
+
+        // Visual adjustment: Use 'mini_spike' for small spikes
+        if (floorType === 'spike' && difficulty <= 8) floorType = 'mini_spike';
+        if (ceilType === 'spike' && difficulty <= 8) ceilType = 'mini_spike';
 
         // Floor Obstacle
         if (rand < 0.1) {
           // Ensure enough space
           if (currentPoint.y < currentFloorY - spikeH - 40 && currentFloorY - spikeH > currentCeilY + 40) {
-            // Difficulty threshold lowered from 5 to 3 for variety in lower diff
-            const type = difficulty > 3 ? chosenFloor : spikeType;
             objects.push({
-              type: type,
+              type: floorType,
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
@@ -313,9 +332,8 @@ export class MapGenerator {
         // Ceiling Obstacle
         else {
           if (currentPoint.y > currentCeilY + spikeH + 40 && currentCeilY + spikeH < currentFloorY - 40) {
-            const type = difficulty > 3 ? chosenCeil : spikeType;
             objects.push({
-              type: type,
+              type: ceilType,
               x: currentX,
               y: currentCeilY,
               width: blockSize,
@@ -327,18 +345,20 @@ export class MapGenerator {
       }
 
       // Chance to place Floating Hazards (Mines) 
-      // 난이도 1~4는 지뢰 생성 안함
-      if (rand > 0.95 && currentGap > 200 && difficulty > 4) {
-        // High difficulty (tight gaps) -> smaller mines to ensure passability
-        const mineSize = difficulty > 20 ? 20 : (difficulty <= 10 ? 20 : 30);
+      // All difficulties allowed
+      if (rand > 0.95 && currentGap > 200) {
+        // Size Scaling: 20 (Easy) -> 30 (Hard)
+        const mineSize = difficulty <= 7 ? 20 : 30;
+
         // Try to place in the "other" side of player
-        // If player is high, place low, etc.
         const midY = (currentFloorY + currentCeilY) / 2;
         let pY = midY;
 
         if (currentPoint.y < midY) {
           // Player is in upper half -> place mine in lower half
           pY = midY + (currentFloorY - midY) * 0.5;
+        } else {
+          // Player is in lower half -> place mine in upper half
           pY = midY - (midY - currentCeilY) * 0.5;
         }
 
@@ -349,7 +369,8 @@ export class MapGenerator {
 
         const chosenFloat = currentFloatOptions[Math.floor(Math.random() * currentFloatOptions.length)] || 'mine';
 
-        const obsType = difficulty > 4 ? chosenFloat : 'mine';
+        // Remove difficulty check for type
+        const obsType = chosenFloat;
 
         objects.push({
           type: obsType,

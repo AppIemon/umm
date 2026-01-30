@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
   map.ratingSum += rating
   map.ratingCount += 1
   map.rating = Number((map.ratingSum / map.ratingCount).toFixed(1))
+  map.difficulty = Math.round(map.rating)
 
   await map.save()
 

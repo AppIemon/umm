@@ -136,8 +136,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { GameEngine, type Obstacle, type Portal } from '@/utils/game-engine';
-
+import { GameEngine, type MapData, Obstacle } from '../utils/game-engine';
+import { drawObstacle } from '../utils/canvas-renderer';
 const props = defineProps<{
   audioBuffer: AudioBuffer | null;
   obstacles: number[];
@@ -146,8 +146,6 @@ const props = defineProps<{
   loadMap?: any; // 저장된 맵 데이터 로드용
   isViewOnly?: boolean; // 맵 탭에서 확인용
   multiplayerMode?: boolean; // 멀티플레이어 레이싱 모드
-  difficulty?: number; // 외부에서 전달받은 난이도
-  opponentY?: number;
   difficulty?: number; // 외부에서 전달받은 난이도
   opponentY?: number;
   opponentProgress?: number;
@@ -309,7 +307,14 @@ let clickDownBuffer: AudioBuffer | null = null;
 let clickUpBuffer: AudioBuffer | null = null;
 let lastAiHolding = false;
 
+const dynamicTutorialMessage = ref<string | null>(null);
+let messageTimeout: any = null;
+
 const activeTutorialMessage = computed(() => {
+  // 1. Dynamic Override (Events)
+  if (dynamicTutorialMessage.value) return dynamicTutorialMessage.value;
+
+  // 2. Static Progress-based
   if (!props.loadMap?.messages) return null;
   const currentProgress = progress.value;
   // Find the last message that is less than or equal to current progress
@@ -317,6 +322,14 @@ const activeTutorialMessage = computed(() => {
   if (msgs.length === 0) return null;
   return msgs[msgs.length - 1].text;
 });
+
+const showDynamicMessage = (text: string, duration: number = 3000) => {
+  dynamicTutorialMessage.value = text;
+  if (messageTimeout) clearTimeout(messageTimeout);
+  messageTimeout = setTimeout(() => {
+    dynamicTutorialMessage.value = null;
+  }, duration);
+};
 
 let animationId: number;
 let lastFrameTime = 0;
@@ -745,6 +758,33 @@ const handleKeyDown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown);
+  
+  // Set up Portal Signal for Tutorial Mode
+  engine.value.onPortalActivation = (type) => {
+    if (!props.tutorialMode) return;
+    
+    switch (type) {
+      case 'gravity_yellow':
+      case 'gravity_blue':
+        showDynamicMessage("GRAVITY SWITCHED! ↕");
+        break;
+      case 'speed_2':
+      case 'speed_3':
+      case 'speed_4':
+        showDynamicMessage("SPEED UP! ⏩");
+        break;
+      case 'speed_0.5':
+      case 'speed_0.25':
+        showDynamicMessage("SLOW DOWN! ⏪");
+        break;
+      case 'mini_pink':
+        showDynamicMessage("MINI MODE: TIGHT SPACES! ✨");
+        break;
+      case 'mini_green':
+        showDynamicMessage("NORMAL SIZE RESTORED");
+        break;
+    }
+  };
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown);
@@ -853,8 +893,8 @@ const update = () => {
   engine.value.update(dt, trackTime);
   currentTrackTime.value = trackTime;
 
-  // AI 클릭 소리 재생
-  if (engine.value.isAutoplay) {
+  // AI 클릭 소리 재생 (튜토리얼 모드에서만)
+  if (engine.value.isAutoplay && props.tutorialMode) {
     if (engine.value.isHolding && !lastAiHolding) {
       playSfx(clickDownBuffer, 1.5);
     } else if (!engine.value.isHolding && lastAiHolding) {
@@ -1049,570 +1089,11 @@ const draw = () => {
     if (obs.x > engine.value.cameraX + w + 50) return;
     
     ctx.save();
-    
-    // 전역 회전 지원 (모든 오브젝트)
-    const hasAngle = obs.angle !== undefined && obs.angle !== 0;
-    if (hasAngle) {
-      ctx.translate(obs.x + obs.width / 2, obs.y + obs.height / 2);
-      ctx.rotate(obs.angle! * Math.PI / 180);
-      ctx.translate(-(obs.x + obs.width / 2), -(obs.y + obs.height / 2));
-    }
-
-    if (obs.type === 'spike' || obs.type === 'mini_spike') {
-      const isMini = obs.type === 'mini_spike';
-      ctx.fillStyle = isMini ? '#ff6666' : '#ff4444';
-      ctx.shadowBlur = isMini ? 8 : 12;
-      ctx.shadowColor = '#ff4444';
-      
-      ctx.beginPath();
-      if (obs.y > 300) {
-        // 바닥 가시 (위를 가리킴)
-        ctx.moveTo(obs.x, obs.y + obs.height);
-        ctx.lineTo(obs.x + obs.width / 2, obs.y);
-        ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
-      } else {
-        // 천장 가시 (아래를 가리킴)
-        ctx.moveTo(obs.x, obs.y);
-        ctx.lineTo(obs.x + obs.width / 2, obs.y + obs.height);
-        ctx.lineTo(obs.x + obs.width, obs.y);
-      }
-      ctx.closePath();
-      ctx.fill();
-    } else if (obs.type === 'block') {
-      ctx.fillStyle = '#444';
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = '#666';
-      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-      
-      ctx.fillStyle = '#555';
-      ctx.fillRect(obs.x + 2, obs.y + 2, obs.width - 4, obs.height - 4);
-      
-    } else if (obs.type === 'triangle' || obs.type === 'steep_triangle') {
-      const isSteep = obs.type === 'steep_triangle';
-      
-      // 삼각형 (기본적으로 우상향 / 형태 ◢)
-      // 회전은 상단 공통 로직에서 이미 적용됨
-      
-      ctx.fillStyle = isSteep ? '#222' : '#333'; // 가파른 건 더 어두운 색
-      ctx.shadowBlur = 5;
-      ctx.shadowColor = '#555';
-      
-      ctx.beginPath();
-      // Draw ◢ shape (Right angle at Bottom-Right)
-      ctx.moveTo(obs.x, obs.y + obs.height);           // Bottom-Left
-      ctx.lineTo(obs.x + obs.width, obs.y + obs.height); // Bottom-Right
-      ctx.lineTo(obs.x + obs.width, obs.y);            // Top-Right
-      ctx.closePath();
-      ctx.fill();
-      
-      // Inner detail (Bevel effect)
-      ctx.fillStyle = isSteep ? '#444' : '#555';
-      const pad = 4;
-      ctx.beginPath();
-      ctx.moveTo(obs.x + pad * 2, obs.y + obs.height - pad); 
-      ctx.lineTo(obs.x + obs.width - pad, obs.y + obs.height - pad);
-      ctx.lineTo(obs.x + obs.width - pad, obs.y + pad * 2);
-      ctx.fill();
-
-    } else if (obs.type === 'saw') {
-      const cx = obs.x + obs.width / 2;
-      const cy = obs.y + obs.height / 2;
-      const rx = obs.width / 2;
-      const ry = obs.height / 2;
-      
-      ctx.fillStyle = '#ffaa00';
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = '#ffaa00';
-      
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Teeth
-      ctx.fillStyle = '#ff6600';
-      const teeth = 10;
-      const time = currentTrackTime.value * 8;
-      for (let i = 0; i < teeth; i++) {
-        const angle = (Math.PI * 2 * i / teeth) + time;
-        const tx = cx + Math.cos(angle) * rx * 0.75;
-        const ty = cy + Math.sin(angle) * ry * 0.75;
-        ctx.beginPath();
-        ctx.ellipse(tx, ty, rx * 0.15, ry * 0.15, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      
-      ctx.fillStyle = '#cc8800';
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rx * 0.25, ry * 0.25, 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (obs.type === 'spike_ball') {
-      const cx = obs.x + obs.width / 2;
-      const cy = obs.y + obs.height / 2;
-      const rx = obs.width / 2;
-      const ry = obs.height / 2;
-      
-      ctx.fillStyle = '#666';
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#444';
-      
-      // Spikes
-      const spikes = 8;
-      const rotation = currentTrackTime.value * 3;
-      ctx.fillStyle = '#444';
-      for (let i = 0; i < spikes; i++) {
-        const angle = (Math.PI * 2 * i / spikes) + rotation;
-        ctx.beginPath();
-        const tx = cx + Math.cos(angle) * rx * 1.2;
-        const ty = cy + Math.sin(angle) * ry * 1.2;
-        ctx.moveTo(cx + Math.cos(angle - 0.2) * rx * 0.8, cy + Math.sin(angle - 0.2) * ry * 0.8);
-        ctx.lineTo(tx, ty);
-        ctx.lineTo(cx + Math.cos(angle + 0.2) * rx * 0.8, cy + Math.sin(angle + 0.2) * ry * 0.8);
-        ctx.fill();
-      }
-      
-      // Main ball
-      const grad = ctx.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, rx * 0.1, cx, cy, rx);
-      grad.addColorStop(0, '#888');
-      grad.addColorStop(1, '#222');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rx * 0.8, ry * 0.8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-    } else if (obs.type === 'laser') {
-      const centerY = obs.y + obs.height / 2;
-      const glow = Math.sin(currentTrackTime.value * 15) * 5 + 10;
-      
-      ctx.strokeStyle = '#ff3333';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = Math.max(0, glow);
-      ctx.shadowColor = '#ff0000';
-      
-      ctx.beginPath();
-      ctx.moveTo(obs.x, centerY);
-      ctx.lineTo(obs.x + obs.width, centerY);
-      ctx.stroke();
-      
-      // Laser core
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(obs.x, centerY);
-      ctx.lineTo(obs.x + obs.width, centerY);
-      ctx.stroke();
-
-      // Side brackets
-      ctx.fillStyle = '#777';
-      ctx.fillRect(obs.x, obs.y, 8, obs.height);
-      ctx.fillRect(obs.x + obs.width - 8, obs.y, 8, obs.height);
-    } else if (obs.type === 'v_laser') {
-      const centerX = obs.x + obs.width / 2;
-      const glow = Math.sin(currentTrackTime.value * 15) * 5 + 10;
-      
-      ctx.strokeStyle = '#ff3333';
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = Math.max(0, glow);
-      ctx.shadowColor = '#ff0000';
-      
-      ctx.beginPath();
-      ctx.moveTo(centerX, obs.y);
-      ctx.lineTo(centerX, obs.y + obs.height);
-      ctx.stroke();
-      
-      // Laser core
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(centerX, obs.y);
-      ctx.lineTo(centerX, obs.y + obs.height);
-      ctx.stroke();
-
-      // Top/Bottom brackets
-      ctx.fillStyle = '#777';
-      ctx.fillRect(obs.x, obs.y, obs.width, 8);
-      ctx.fillRect(obs.x, obs.y + obs.height - 8, obs.width, 8);
-
-    } else if (obs.type === 'slope') {
-      // Slope rendering (Triangle) - 웨이브 코리도 형성
-      // angle > 0: 왼쪽 하단에 직각 (올라가는 웨이브용 위쪽 슬로프)
-      // angle < 0: 오른쪽 하단에 직각 (올라가는 웨이브용 아래쪽 슬로프)
-      
-      ctx.fillStyle = '#222';
-      // Optimization: Removed heavy shadow blur
-      // ctx.shadowBlur = 15;
-      // ctx.shadowColor = '#000';
-      
-      ctx.beginPath();
-      if (obs.angle! > 0) {
-        // 왼쪽 하단 직각 삼각형 (위쪽 슬로프 - 오른쪽으로 경사)
-        // (x, y+h) -> (x+w, y) -> (x, y)
-        ctx.moveTo(obs.x, obs.y + obs.height);
-        ctx.lineTo(obs.x + obs.width, obs.y);
-        ctx.lineTo(obs.x, obs.y);
-      } else {
-        // 오른쪽 하단 직각 삼각형 (아래쪽 슬로프 - 왼쪽으로 경사)
-        // (x+w, y+h) -> (x, y) -> (x+w, y)
-        ctx.moveTo(obs.x + obs.width, obs.y + obs.height);
-        ctx.lineTo(obs.x, obs.y);
-        ctx.lineTo(obs.x + obs.width, obs.y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      
-      // 테두리 하이라이트
-      ctx.strokeStyle = 'rgba(100,200,255,0.3)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-    } else if (obs.type === 'mine') {
-      const cx = obs.x + obs.width / 2;
-      const cy = obs.y + obs.height / 2;
-      const radius = obs.width / 2;
-      
-      const pulse = Math.sin(currentTrackTime.value * 10) * 0.1 + 0.9;
-      
-      ctx.fillStyle = '#ff3333';
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#ff0000';
-      
-      ctx.beginPath();
-      // Hexagon shape for mine
-      for (let i = 0; i < 6; i++) {
-        const angle = (Math.PI / 3) * i + currentTrackTime.value * 2;
-        const x = cx + Math.cos(angle) * radius * pulse;
-        const y = cy + Math.sin(angle) * radius * pulse;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      
-      // Inner detail
-      ctx.fillStyle = '#550000';
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-
-    } else if (obs.type === 'orb') {
-      const cx = obs.x + obs.width / 2;
-      const cy = obs.y + obs.height / 2;
-      const rx = obs.width / 2;
-      const ry = obs.height / 2;
-      
-      const pulse = Math.sin(currentTrackTime.value * 5) * 0.1 + 1.0;
-
-      const grad = ctx.createRadialGradient(cx, cy, rx * 0.1, cx, cy, rx * pulse);
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.4, '#aa44ff'); // Purple
-      grad.addColorStop(0.8, '#4400cc');
-      grad.addColorStop(1, 'rgba(68, 0, 204, 0)');
-      
-      ctx.fillStyle = grad;
-      ctx.globalCompositeOperation = 'lighter'; // Additive blending for glow
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, rx * pulse, ry * pulse, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = 'source-over'; // Reset
-    }
-    // NEW OBSTACLES RENDERING
-    else if (obs.type === 'hammer') {
-       const cx = obs.x + obs.width / 2;
-       const cy = obs.y + obs.height / 2;
-       // Handle
-       ctx.strokeStyle = '#888';
-       ctx.linewidth = 4;
-       ctx.beginPath();
-       ctx.moveTo(cx, cy);
-       ctx.lineTo(cx, cy + 40); // Simple static handle visual
-       ctx.stroke();
-       // Head
-       ctx.fillStyle = '#aaa';
-       ctx.beginPath();
-       ctx.arc(cx, cy, obs.width/2, 0, Math.PI*2);
-       ctx.fill();
-    }
-    else if (['rotor', 'saw', 'spark_mine'].includes(obs.type)) {
-       // Shared rotating visuals
-       const cx = obs.x + obs.width/2;
-       const cy = obs.y + obs.height/2;
-       const radius = obs.width/2;
-       
-       if (obs.type === 'rotor') {
-         ctx.fillStyle = '#ddd';
-         const bladeCount = 4;
-         const rot = (obs.angle || 0) * Math.PI / 180;
-         for(let k=0; k<bladeCount; k++) {
-            const theta = rot + (Math.PI*2*k)/bladeCount;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.arc(cx, cy, radius, theta - 0.2, theta + 0.2);
-            ctx.fill();
-         }
-       } else if (obs.type === 'spark_mine') {
-         ctx.fillStyle = '#ffaa00';
-         ctx.beginPath();
-         const spikes = 12;
-         const rot = (obs.angle || 0) * Math.PI / 180;
-         for(let k=0; k<spikes*2; k++) {
-            const r = (k%2===0 ? radius : radius*0.4);
-            const theta = rot + (Math.PI*k)/spikes;
-            ctx.lineTo(cx + Math.cos(theta)*r, cy + Math.sin(theta)*r);
-         }
-         ctx.fill();
-       }
-    }
-    else if (obs.type === 'laser_beam') {
-       // Intense beam
-       const cy = obs.y + obs.height/2;
-       ctx.strokeStyle = '#00ffff';
-       ctx.lineWidth = obs.height;
-       ctx.shadowColor = '#00ffff';
-       ctx.shadowBlur = 20;
-       ctx.beginPath();
-       ctx.moveTo(obs.x, cy);
-       ctx.lineTo(obs.x + obs.width, cy);
-       ctx.stroke();
-       ctx.shadowBlur = 0;
-       
-       ctx.strokeStyle = '#fff';
-       ctx.lineWidth = obs.height * 0.3;
-       ctx.stroke();
-    }
-    else if (obs.type === 'piston_v') {
-       ctx.fillStyle = '#555';
-       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-       // Piston rod
-       ctx.fillStyle = '#888';
-       ctx.fillRect(obs.x + obs.width*0.3, obs.y, obs.width*0.4, obs.height);
-       // Head
-       ctx.fillStyle = '#333';
-       if (obs.y < 360) ctx.fillRect(obs.x, obs.y + obs.height - 20, obs.width, 20);
-       else ctx.fillRect(obs.x, obs.y, obs.width, 20);
-    }
-    else if (obs.type === 'cannon') {
-       ctx.fillStyle = '#444';
-       ctx.beginPath();
-       ctx.arc(obs.x + obs.width/2, obs.y + obs.height/2, obs.width/2, 0, Math.PI*2);
-       ctx.fill();
-       ctx.fillStyle = '#000';
-       ctx.beginPath();
-       ctx.arc(obs.x + obs.width/2, obs.y + obs.height/2, obs.width/3, 0, Math.PI*2);
-       ctx.fill();
-    }
-    else if (['falling_spike', 'growing_spike', 'crusher_jaw'].includes(obs.type)) {
-       // Sharp spikey visuals
-       ctx.fillStyle = '#ff4444';
-       ctx.beginPath();
-       const cx = obs.x + obs.width/2;
-       if (obs.type === 'falling_spike') {
-         // Pointing down (usually) or varies by rotation
-         // If generic, draw a spike
-         ctx.moveTo(obs.x, obs.y);
-         ctx.lineTo(obs.x + obs.width, obs.y);
-         ctx.lineTo(cx, obs.y + obs.height);
-       } else {
-         // Pointing up
-         ctx.moveTo(obs.x, obs.y + obs.height);
-         ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
-         ctx.lineTo(cx, obs.y);
-       }
-       ctx.fill();
-    }
-    else if (obs.type === 'swing_blade') {
-       const cx = obs.x + obs.width/2;
-       const cy = obs.y; // Pivot at top
-       ctx.strokeStyle = '#eee';
-       ctx.lineWidth = 2;
-       ctx.beginPath();
-       ctx.moveTo(cx, cy);
-       ctx.lineTo(cx, cy + obs.height);
-       ctx.stroke();
-       
-       // Blade disc
-       ctx.fillStyle = '#ccc';
-       ctx.beginPath();
-       ctx.ellipse(cx, cy + obs.height, obs.width/2, obs.height/2, 0, 0, Math.PI*2);
-       ctx.fill();
-    }
-    else if (obs.type === 'mine') {
-       ctx.fillStyle = '#222';
-       ctx.strokeStyle = '#ff3333';
-       
-       // Pulsation Visual
-       let sizeScale = 1.0;
-       if (obs.customData?.pulseSpeed) {
-          const time = currentTrackTime.value;
-          const speed = obs.customData.pulseSpeed || 2;
-          const amount = obs.customData.pulseAmount || 0.2;
-          sizeScale = 1 + Math.sin(time * speed) * amount;
-       }
-
-       const radius = (obs.width / 2) * sizeScale;
-       const cx = obs.x + obs.width / 2;
-       const cy = obs.y + obs.height / 2;
-
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-       ctx.fill();
-       ctx.stroke();
-
-       // Spikes
-       const spikeCount = 8;
-       ctx.beginPath();
-       for(let k=0; k<spikeCount; k++) {
-         const angle = (Math.PI * 2 * k) / spikeCount;
-         const rxIn = rx;
-         const ryIn = ry;
-         const rxOut = rx + 6;
-         const ryOut = ry + 6;
-         ctx.moveTo(cx + Math.cos(angle)*rxIn, cy + Math.sin(angle)*ryIn);
-         ctx.lineTo(cx + Math.cos(angle)*rxOut, cy + Math.sin(angle)*ryOut);
-       }
-       ctx.stroke();
-    }
-    else if (obs.type === 'planet') {
-       const cx = obs.x + obs.width / 2;
-       const cy = obs.y + obs.height / 2;
-       const radius = obs.width / 2;
-
-       // Planet Body
-       const grad = ctx.createRadialGradient(cx, cy - radius*0.3, radius*0.1, cx, cy, radius);
-       grad.addColorStop(0, '#4488ff');
-       grad.addColorStop(1, '#002266');
-       ctx.fillStyle = grad;
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius, 0, Math.PI*2);
-       ctx.fill();
-
-       // Moons
-       const time = currentTrackTime.value;
-       const count = obs.customData?.orbitCount ?? 2;
-       const speed = obs.customData?.orbitSpeed ?? 1.0;
-       const dist = obs.customData?.orbitDistance ?? (obs.width * 0.8);
-      
-       for (let i = 0; i < count; i++) {
-         const theta = time * speed + (i * ((Math.PI * 2) / count));
-         const mx = cx + Math.cos(theta) * dist;
-         const my = cy + Math.sin(theta) * dist;
-         
-         ctx.fillStyle = '#88ccff';
-         ctx.beginPath();
-         ctx.arc(mx, my, 8, 0, Math.PI*2);
-         ctx.fill();
-       }
-    }
-    else if (obs.type === 'star') {
-       const cx = obs.x + obs.width / 2;
-       const cy = obs.y + obs.height / 2;
-       const radius = obs.width / 2;
-       const time = currentTrackTime.value;
-
-       // Star Body (Glowing)
-       const pulse = 1 + Math.sin(time * 5) * 0.05;
-       const grad = ctx.createRadialGradient(cx, cy, radius*0.2, cx, cy, radius * pulse);
-       grad.addColorStop(0, '#ffff88');
-       grad.addColorStop(0.5, '#ffaa00');
-       grad.addColorStop(1, 'rgba(255, 68, 0, 0)');
-       ctx.fillStyle = grad;
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius * 1.2 * pulse, 0, Math.PI*2);
-       ctx.fill();
-       
-       // Core
-       ctx.fillStyle = '#fff';
-       ctx.beginPath();
-       ctx.arc(cx, cy, radius * 0.6, 0, Math.PI*2);
-       ctx.fill();
-
-       // Orbiting Planets
-       const hasChildren = obs.children && obs.children.length > 0;
-       
-       if (hasChildren) {
-         const children = obs.children!;
-         const speed = obs.customData?.orbitSpeed ?? 1.0;
-         
-         children.forEach((child, i) => {
-            const theta = time * speed + (i * ((Math.PI * 2) / children.length));
-            const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
-
-            const px = cx + Math.cos(theta) * dist;
-            const py = cy + Math.sin(theta) * dist;
-            
-            // Planet (Draggable Child)
-            ctx.fillStyle = '#00ff88';
-            ctx.beginPath();
-            ctx.arc(px, py, 14, 0, Math.PI*2);
-            ctx.fill();
-
-            // Nested Moons (if child planet has them)
-            if (child.type === 'planet') {
-                const moonCount = child.customData?.orbitCount ?? 2;
-                const moonSpeed = child.customData?.orbitSpeed ?? 2.0;
-                const moonDist = child.customData?.orbitDistance ?? (child.width * 0.8);
-
-                for (let j = 0; j < moonCount; j++) {
-                  const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
-                  const mx = px + Math.cos(mTheta) * moonDist;
-                  const my = py + Math.sin(mTheta) * moonDist;
-                  
-                  ctx.fillStyle = '#fff';
-                  ctx.beginPath();
-                  ctx.arc(mx, my, 4, 0, Math.PI*2);
-                  ctx.fill();
-                }
-            }
-         });
-       } else {
-         // Fallback legacy (Abstract Orbit)
-         const count = obs.customData?.orbitCount ?? (obs.type === 'star' ? 0 : 3); // Default 0 for star
-         if (count > 0) {
-            const speed = obs.customData?.orbitSpeed ?? 1.0;
-            const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
-
-            for (let i = 0; i < count; i++) {
-              const theta = time * speed + (i * ((Math.PI * 2) / count));
-              const px = cx + Math.cos(theta) * dist;
-              const py = cy + Math.sin(theta) * dist;
-              
-              ctx.fillStyle = '#00ff88';
-              ctx.beginPath();
-              ctx.arc(px, py, 14, 0, Math.PI*2);
-              ctx.fill();
-            
-              // Legacy nested logic if any
-               if (obs.type === 'star' && obs.customData?.nestedOrbit) {
-                  const subMoonCount = 2;
-                  const subDist = 25;
-                  const subSpeed = speed * 2.5;
-                  for(let j=0; j<subMoonCount; j++) {
-                     const subTheta = time * subSpeed + (j * ((Math.PI * 2) / subMoonCount));
-                     const smx = px + Math.cos(subTheta) * subDist;
-                     const smy = py + Math.sin(subTheta) * subDist;
-                     
-                     ctx.fillStyle = '#fff';
-                     ctx.beginPath();
-                     ctx.arc(smx, smy, 4, 0, Math.PI*2);
-                     ctx.fill();
-                  }
-               }
-            }
-         }
-       }
-    }
-    else {
-       // Fallback
-       ctx.fillStyle = '#ff00ff';
-       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-       ctx.fillStyle = '#fff';
-       ctx.font = '10px Arial';
-       ctx.fillText('?', obs.x + obs.width/2 - 3, obs.y + obs.height/2 + 3);
-    }
-
-    
+    drawObstacle(ctx, obs, obs.x, obs.y, currentTrackTime.value);
     ctx.restore();
   });
+
+
   
   // Draw AI Predicted Path (실선으로 이어지는 지그재그 경로)
   if (engine.value.isAutoplay && engine.value.aiPredictedPath.length > 1) {
@@ -2137,6 +1618,7 @@ canvas {
   font-weight: 900;
   background: linear-gradient(to right, #00ffff, #ff00ff);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -2540,6 +2022,7 @@ button.secondary:hover {
 
 .rating-slider {
   -webkit-appearance: none;
+  appearance: none;
   width: 200px;
   height: 4px;
   background: rgba(255, 255, 255, 0.1);
@@ -2549,6 +2032,7 @@ button.secondary:hover {
 
 .rating-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 18px;
   height: 18px;
   background: #00ffaa;
@@ -2764,6 +2248,7 @@ button.secondary:hover {
 .game-title.tutorial {
   background: linear-gradient(135deg, #ff00ff 0%, #00ffff 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 

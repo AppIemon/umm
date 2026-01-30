@@ -5,7 +5,7 @@
 
 import { MapGenerator, type MapObject } from './MapGenerator';
 
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle' | 'piston_v' | 'falling_spike' | 'hammer' | 'rotor' | 'cannon' | 'spark_mine' | 'laser_beam' | 'crusher_jaw' | 'swing_blade' | 'growing_spike' | 'planet' | 'star';
+export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle' | 'piston_v' | 'falling_spike' | 'hammer' | 'rotor' | 'cannon' | 'spark_mine' | 'laser_beam' | 'crusher_jaw' | 'swing_blade' | 'growing_spike' | 'planet' | 'star' | 'invisible_wall' | 'fake_block';
 export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green' | 'teleport_in' | 'teleport_out';
 
 export interface ObstacleMovement {
@@ -34,6 +34,9 @@ export interface Obstacle {
     pulseSpeed?: number;     // Pulsation speed (for mines)
     pulseAmount?: number;    // Pulsation size variance
     nestedOrbit?: boolean;   // Legacy nested orbit flag
+    // Falling Spike State
+    isFalling?: boolean;
+    vy?: number;
   };
   children?: Obstacle[];     // Attached objects (e.g. Planets attached to Star)
   parentId?: string;         // Helper to track attachment in editor
@@ -91,7 +94,6 @@ export interface StateEvent {
   time: number;
   speedType: PortalType;
   isInverted: boolean;
-  isInverted: boolean;
   isMini: boolean;
 }
 
@@ -115,6 +117,15 @@ export class GameEngine {
   isHolding: boolean = false;
   waveAngle: number = 45;  // 기본 45도
   miniWaveAngle: number = 60;  // 미니 모드 60도
+
+  // Get dynamic base speed based on difficulty
+  getDynamicBaseSpeed(): number {
+    const diff = this.mapConfig.difficulty;
+    if (diff <= 2) return 260; // Ultra Slow
+    if (diff <= 7) return 300; // Slow
+    if (diff <= 12) return 330; // Normal (Slightly slower)
+    return 350; // Hard/Impossible
+  }
 
   // Gravity system
   isGravityInverted: boolean = false;
@@ -168,7 +179,6 @@ export class GameEngine {
 
   // AI state persistence
   aiStateTimer: number = 0; // 현재 입력을 유지한 시간 (초)
-  aiStateTimer: number = 0; // 현재 입력을 유지한 시간 (초)
   aiPredictedPath: { x: number; y: number }[] = [];
 
   beatTimes: number[] = []; // Store beat times for effect synchronization
@@ -193,11 +203,13 @@ export class GameEngine {
   lastMeasureIndex: number = -1;
   isMeasureHighlight: boolean = false;
 
+  public onPortalActivation: ((type: PortalType) => void) | null = null;
+
   constructor(config?: Partial<MapConfig>) {
     if (config) {
       this.mapConfig = { ...this.mapConfig, ...config };
     }
-    this.reset();
+    this.baseSpeed = this.getDynamicBaseSpeed();
     this.reset();
   }
 
@@ -651,8 +663,7 @@ export class GameEngine {
     this.portals = [];
     this.isGravityInverted = false;
 
-    this.speedMultiplier = 1.0;
-
+    this.baseSpeed = this.getDynamicBaseSpeed();
     this.waveSpeed = this.baseSpeed * this.speedMultiplier;
     this.waveAmplitude = this.baseSpeed;
     this.showHitboxes = false;
@@ -764,11 +775,11 @@ export class GameEngine {
       if (point) startX = point.x;
 
       // Restore obstacles/portals before startX
-      // Use a margin to avoid cut-off artifacts (e.g. -200px)
-      const keepX = Math.max(0, startX - 100);
+      // Standardize keepX to avoid gaps at the seam.
+      const keepX = startX;
 
-      this.obstacles = resumeOptions.obstacles.filter(o => o.x + o.width < keepX);
-      this.portals = resumeOptions.portals.filter(p => p.x + p.width < keepX);
+      this.obstacles = resumeOptions.obstacles.filter(o => o.x + o.width <= keepX);
+      this.portals = resumeOptions.portals.filter(p => p.x + p.width <= keepX);
 
       // Also restore MapGenerator internal state? 
       // MapGenerator is stateless per call usually.
@@ -785,7 +796,7 @@ export class GameEngine {
 
     let pathForGen = this.autoplayLog;
     if (resumeOptions && startX > 0) {
-      pathForGen = this.autoplayLog.filter(p => p.x >= startX - 50); // slight overlap for continuity
+      pathForGen = this.autoplayLog.filter(p => p.x >= startX); // Perfect seam alignment 
     }
 
     const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
@@ -868,7 +879,9 @@ export class GameEngine {
     }
 
     stateEvents.push(...initialEvents);
-    currentSpeedType = initialEvents[0].speedType;
+    if (initialEvents[0]) {
+      currentSpeedType = initialEvents[0].speedType;
+    }
 
     // Resume: Restore previous events
     if (resumeOptions) {
@@ -881,9 +894,11 @@ export class GameEngine {
       // Update current state from last kept event
       if (stateEvents.length > 0) {
         const last = stateEvents[stateEvents.length - 1];
-        currentSpeedType = last.speedType;
-        currentInverted = last.isInverted;
-        currentMini = last.isMini;
+        if (last) {
+          currentSpeedType = last.speedType;
+          currentInverted = last.isInverted;
+          currentMini = last.isMini;
+        }
       }
     }
 
@@ -1881,7 +1896,8 @@ export class GameEngine {
 
     const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 0): boolean => {
       // 바닥/천장 충돌 체크 (실제 게임과 동일하게 마진 없음)
-      if (ty < this.minY + sz || ty > this.maxY - sz) return true;
+      // 바닥/천장 충돌 체크 제거 (슬라이딩 처리로 변경)
+      // if (ty < this.minY + sz || ty > this.maxY - sz) return true;
 
       const startI = findStartIndex(tx - 1000); // 1000px lookback is safe for max obstacle width
 
@@ -1934,6 +1950,10 @@ export class GameEngine {
         sTime += dt;
         const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
         sy += amp * vy * dt;
+
+        // 바닥/천장 슬라이딩 처리
+        if (sy < this.minY + sz) sy = this.minY + sz;
+        if (sy > this.maxY - sz) sy = this.maxY - sz;
 
         // 생존 확인: 안전 마진 1px 적용 (더 정밀한 경로 탐색 허용)
         if (checkColl(sx, sy, sz, sTime, 1)) return false;
@@ -1996,8 +2016,14 @@ export class GameEngine {
       const sz = nM ? this.miniPlayerSize : this.basePlayerSize;
       const nT = curr.time + dt;
       const nX = curr.x + spd * dt;
-      const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
-      const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
+      let nYH = curr.y + amp * (nG ? 1 : -1) * dt;
+      let nYR = curr.y + amp * (nG ? -1 : 1) * dt;
+
+      // 바닥/천장 슬라이딩 처리
+      if (nYH < this.minY + sz) nYH = this.minY + sz;
+      if (nYH > this.maxY - sz) nYH = this.maxY - sz;
+      if (nYR < this.minY + sz) nYR = this.minY + sz;
+      if (nYR > this.maxY - sz) nYR = this.maxY - sz;
 
       let dH = checkColl(nX, nYH, sz, nT, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
       let dR = checkColl(nX, nYR, sz, nT, 3);
@@ -2289,15 +2315,11 @@ export class GameEngine {
 
     if (this.playerY < this.minY + this.playerSize) {
       this.playerY = this.minY + this.playerSize;
-      this.die('천장에 충돌!');
-      this.spawnDeathParticles();
-      return;
+      // 천장 충돌 시 죽지 않음 (슬라이딩)
     }
     if (this.playerY > this.maxY - this.playerSize) {
       this.playerY = this.maxY - this.playerSize;
-      this.die('바닥에 충돌!');
-      this.spawnDeathParticles();
-      return;
+      // 바닥 충돌 시 죽지 않음 (슬라이딩)
     }
 
     this.cameraX = this.playerX - 280;
@@ -2311,7 +2333,7 @@ export class GameEngine {
 
     // 오토플레이 모드에서는 AI 시뮬레이션 시간(simTime)을 사용하여 이동 오브젝트 동기화
     const effectiveTime = simTime !== null ? simTime : currentTime;
-    this.updateMovingObstacles(effectiveTime);
+    this.updateMovingObstacles(dt, effectiveTime);
     this.updateBoss(dt, effectiveTime); // Boss update
     this.checkPortalCollisions();
     this.checkCollisions(effectiveTime);
@@ -2371,6 +2393,9 @@ export class GameEngine {
         portal.activated = true;
         this.activatePortal(portal.type);
         this.spawnPortalParticles(portal);
+        if (this.onPortalActivation) {
+          this.onPortalActivation(portal.type);
+        }
       }
     }
   }
@@ -2699,6 +2724,67 @@ export class GameEngine {
       { x: px, y: py }
     ];
 
+    // --- Falling Spike Dynamic Logic (Validation Mode) ---
+    // If simTime is provided (AI validation), calculate position deterministically
+    // based on when the player WOULD have triggered it.
+    if (obs.type === 'falling_spike' && simTime !== undefined) {
+      // Trigger logic: Approaching within 150px
+      const triggerX = obs.x - 150;
+
+      // If player is past the trigger point
+      if (px > triggerX) {
+        // Estimate time since trigger
+        // We don't have exact trigger time in simple check, but we can estimate:
+        // time_elapsed = distance_past_trigger / current_speed (Approx)
+        // For better accuracy in loop, we'd need tracked state, but let's use the passed time?
+        // No, time is total time.
+
+        // Heuristic: If we are close enough to trigger, it starts falling.
+        // Gravity = 2500.
+        // Max Speed consideration?
+        // Let's assume constant speed for the short duration of the fall interaction ??
+        // Or just use the distance difference and current velocity estimate.
+
+        // In actual gameplay, updateMovingObstacles accumulates velocity.
+        // y = y0 + 0.5 * g * t^2
+
+        // How to map px to time?
+        // In validation, we know `simTime`.
+        // But we don't know `simTimeAtTrigger`.
+        // Let's assume standard speed around this obstacle?
+        // Or just simply: 
+        // If we are past triggerX, calculate `dist = px - triggerX`.
+        // `t = dist / (baseSpeed * speedMultiplier)` (assuming constant speed nearby)
+        // This is "good enough" for generating a path that avoids it.
+
+        // Find current speed multiplier (approximate or passed?)
+        // checkObstacleCollision doesn't know current speed.
+        // But `baseSpeed` is known.
+
+        // Let's try to get speed multiplier from map config or average?
+        // Actually, `simTime` is passed, but not speed.
+        // Let's assume speed=1 speed if unknown, or try to infer.
+        // Safe approach: assume fast fall (instant block?) No.
+
+        // Let's use a standard speed estimation 
+        const estimatedSpeed = this.baseSpeed * (this.speedMultiplier || 1);
+        // Note: this.speedMultiplier is the CURRENT engine state, which might differ from SearchState.
+        // However, checkObstacleCollision is usually called within checkColl which doesn't pass speed.
+        // Limitation accepted.
+
+        const dist = Math.max(0, px - triggerX);
+        const t = dist / estimatedSpeed;
+        const drop = 0.5 * 2500 * t * t;
+
+        obsY = (obs.initialY !== undefined ? obs.initialY : obs.y) + drop;
+
+        // Optimization: If it fell out of screen, return false immediately?
+        if (obsY > this.maxY + 100) return false;
+      } else {
+        obsY = obs.initialY !== undefined ? obs.initialY : obs.y;
+      }
+    }
+
     // --- Orbit Collision Check (Planet & Star) ---
     if (obs.type === 'planet' || obs.type === 'star') {
       const time = simTime || performance.now() / 1000;
@@ -2721,22 +2807,18 @@ export class GameEngine {
         const children = obs.children!;
         const speed = obs.customData?.orbitSpeed ?? 1.0;
 
-        children.forEach((child, i) => {
-          // Calculate Child Position (Planet orbiting Star)
-          // Each child is distributed or has its own phase?
-          // For simplicity, distribute them evenly or use their initial drag position?
-          // Let's standard distribute them for now to ensure working orbits
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          if (!child) continue;
           const theta = time * speed + (i * ((Math.PI * 2) / children.length));
           const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
 
-          const px = cx + Math.cos(theta) * dist;
-          const py = cy + Math.sin(theta) * dist;
+          const childX = cx + Math.cos(theta) * dist;
+          const childY = cy + Math.sin(theta) * dist;
 
           // Check collision with Child (Planet)
-          const childSize = child.width / 2; // Radius
-          const pDistSq = (px - px) ** 2 + (py - py) ** 2; // Wait, px/py conflict with player px/py
-          // Let's rename player px/py to playerX/playerY for clarity locally, or just use context vars
-          const distToChildSq = (points[4].x - px) ** 2 + (points[4].y - py) ** 2; // points[4] is center
+          const childSize = child.width ? child.width / 2 : 14;
+          const distToChildSq = (points[4].x - childX) ** 2 + (points[4].y - childY) ** 2;
           if (distToChildSq < (childSize + pSize - 2) ** 2) return true;
 
           // Check Child's Moons (Moon orbiting Planet)
@@ -2747,14 +2829,14 @@ export class GameEngine {
 
             for (let j = 0; j < moonCount; j++) {
               const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
-              const mx = px + Math.cos(mTheta) * moonDist;
-              const my = py + Math.sin(mTheta) * moonDist;
+              const mx = childX + Math.cos(mTheta) * moonDist;
+              const my = childY + Math.sin(mTheta) * moonDist;
 
               const distToMoonSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
               if (distToMoonSq < (8 + pSize - 2) ** 2) return true;
             }
           }
-        });
+        }
 
       } else {
         // Fallback: Abstract Orbit generation (Old Logic)
@@ -2876,7 +2958,7 @@ export class GameEngine {
       ];
 
       for (const p of points) {
-        if (this.isPointInTriangle(p.x, p.y, tri[0]!.x, tri[0]!.y, tri[1]!.x, tri[1]!.y, tri[2]!.x, tri[2]!.y)) return true;
+        if (tri[0] && tri[1] && tri[2] && this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
       return false;
     }
@@ -2926,7 +3008,7 @@ export class GameEngine {
         { x: effectiveX + effectiveWidth, y: effectiveY }
       ];
       for (const p of points) {
-        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+        if (tri[0] && tri[1] && tri[2] && this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
       return false;
     }
@@ -2954,7 +3036,7 @@ export class GameEngine {
         { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight }
       ];
       for (const p of points) {
-        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+        if (tri[0] && tri[1] && tri[2] && this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
       return false;
     }
@@ -3138,13 +3220,52 @@ export class GameEngine {
     return { y, angle };
   }
 
-  private updateMovingObstacles(time: number) {
+  private updateMovingObstacles(dt: number, time: number) {
     for (const obs of this.obstacles) {
+      // 1. Existing deterministic movement
       if (obs.movement) {
         const state = this.getObstacleStateAt(obs, time);
         obs.y = state.y;
         if (obs.movement.type === 'rotate') {
           obs.angle = state.angle;
+        }
+      }
+
+      // 2. Falling Spike Logic
+      if (obs.type === 'falling_spike') {
+        if (!obs.customData) obs.customData = {};
+
+        // Initialize state if checking for the first time
+        if (obs.customData.isFalling === undefined) {
+          obs.customData.isFalling = false;
+          obs.customData.vy = 0;
+          // If initialY is not set by map data, capture it now
+          if (obs.initialY === undefined) obs.initialY = obs.y;
+        }
+
+        const isFalling = obs.customData.isFalling;
+
+        if (isFalling) {
+          // Apply Gravity
+          const gravity = 2500; // Falling acceleration
+          obs.customData.vy = (obs.customData.vy || 0) + gravity * dt;
+          obs.y += obs.customData.vy * dt;
+
+          // Optional: Stop if hits floor? 
+          // For now, let it fall through or clamp at maxY if desired.
+          // Usually spikes fall off screen. 
+        } else {
+          // Check trigger
+          // Trigger when player approaches
+          const dist = obs.x - this.playerX;
+          // Trigger range: 150px ahead to 50px behind (so you can't just stand under it safely)
+          // Actually, standard is trigger when getting close. 
+          if (dist < 150 && dist > -50) {
+            obs.customData.isFalling = true;
+            obs.customData.vy = 0; // Start with 0 velocity
+          }
+          // Maintain position
+          if (obs.initialY !== undefined) obs.y = obs.initialY;
         }
       }
     }

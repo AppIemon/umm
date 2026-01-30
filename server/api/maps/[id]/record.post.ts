@@ -34,13 +34,26 @@ export default defineEventHandler(async (event) => {
     mapTitle = map.title;
   }
 
-  // 1. Update global best score only if new score is higher
+  // 1. Update global best score and verification status
   let globalUpdated = false;
-  if (map && score > (map.bestScore || 0)) {
-    map.bestScore = score
-    map.bestPlayer = username || 'Guest'
-    globalUpdated = true;
-    await map.save()
+  let mapSaved = false;
+  if (map) {
+    if (score > (map.bestScore || 0)) {
+      map.bestScore = score
+      map.bestPlayer = username || 'Guest'
+      globalUpdated = true;
+      mapSaved = true;
+    }
+
+    // If cleared (progress 100%), mark as verified
+    if (progress >= 100 && !map.isVerified) {
+      map.isVerified = true;
+      mapSaved = true;
+    }
+
+    if (mapSaved) {
+      await map.save()
+    }
   }
 
   // 2. If logged in, update personal record

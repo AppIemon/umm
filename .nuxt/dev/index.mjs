@@ -1,11 +1,12 @@
 import process from 'node:process';globalThis._importMeta_={url:import.meta.url,env:process.env};import { tmpdir } from 'node:os';
 import { Server } from 'node:http';
-import { resolve, dirname, join } from 'node:path';
-import nodeCrypto from 'node:crypto';
+import path, { resolve, dirname, join } from 'node:path';
+import crypto$1 from 'node:crypto';
 import { parentPort, threadId } from 'node:worker_threads';
 import { defineEventHandler, handleCacheHeaders, splitCookiesString, createEvent, fetchWithEvent, isEvent, eventHandler, setHeaders, sendRedirect, proxyRequest, getRequestHeader, setResponseHeaders, setResponseStatus, send, getRequestHeaders, setResponseHeader, appendResponseHeader, getRequestURL, getResponseHeader, removeResponseHeader, createError, getQuery as getQuery$1, readBody, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getResponseStatus, getRouterParam, setCookie, deleteCookie, getCookie, sendStream, getResponseStatusText } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/h3/dist/index.mjs';
 import { escapeHtml } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/@vue/shared/dist/shared.cjs.js';
-import mongoose$1 from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
+import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
+import fs, { promises } from 'node:fs';
 import { Readable } from 'node:stream';
 import { createRenderer, getRequestDependencies, getPreloadLinks, getPrefetchLinks } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { parseURL, withoutBase, joinURL, getQuery, withQuery, withTrailingSlash, decodePath, withLeadingSlash, withoutTrailingSlash, joinRelativeURL } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/ufo/dist/index.mjs';
@@ -33,7 +34,6 @@ import { SourceMapConsumer } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%E
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getContext } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/unctx/dist/index.mjs';
 import { captureRawStackTrace, parseRawStackTrace } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/errx/dist/index.js';
-import { promises } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname as dirname$1, resolve as resolve$1 } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/pathe/dist/index.mjs';
 import { walkResolver } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/unhead/dist/utils.mjs';
@@ -1446,11 +1446,11 @@ function defineNitroPlugin(def) {
   return def;
 }
 
-mongoose$1.set("bufferCommands", false);
+mongoose.set("bufferCommands", false);
 let cachedPromise = null;
 const connectDB = async () => {
-  if (mongoose$1.connection.readyState === 1) {
-    return mongoose$1.connection;
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection;
   }
   if (!cachedPromise) {
     const config = useRuntimeConfig();
@@ -1464,7 +1464,7 @@ const connectDB = async () => {
       connectTimeoutMS: 1e4
     };
     console.log("[DB] Connecting to MongoDB...");
-    cachedPromise = mongoose$1.connect(uri, opts).then((m) => {
+    cachedPromise = mongoose.connect(uri, opts).then((m) => {
       console.log("[DB] Connected");
       return m;
     }).catch((err) => {
@@ -1475,7 +1475,7 @@ const connectDB = async () => {
   }
   try {
     await cachedPromise;
-    return mongoose$1.connection;
+    return mongoose.connection;
   } catch (e) {
     cachedPromise = null;
     throw e;
@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"39c85-+3rMNt3XMondDk2ONlNW9A8ktIQ\"",
-    "mtime": "2026-01-30T06:25:06.965Z",
-    "size": 236677,
+    "etag": "\"3be1e-TqB3UANfzZ/mGwZt7YdZKYMyTSA\"",
+    "mtime": "2026-01-30T14:37:03.005Z",
+    "size": 245278,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"ddd9d-v6Ylzo7qNMzW20p0Q9hJLVMvEp4\"",
-    "mtime": "2026-01-30T06:25:07.427Z",
-    "size": 908701,
+    "etag": "\"e6103-y4j3RaYSEL7tD6Jzh13uZszRb+U\"",
+    "mtime": "2026-01-30T14:37:03.006Z",
+    "size": 942339,
     "path": "index.mjs.map"
   }
 };
@@ -1935,6 +1935,7 @@ async function getIslandContext(event) {
   return ctx;
 }
 
+const _lazy_ywrpmm = () => Promise.resolve().then(function () { return optimize_get$1; });
 const _lazy_QlGAJG = () => Promise.resolve().then(function () { return login_post$1; });
 const _lazy_7tLEHb = () => Promise.resolve().then(function () { return logout_post$1; });
 const _lazy_Wwtgsn = () => Promise.resolve().then(function () { return me_get$1; });
@@ -1963,6 +1964,7 @@ const _lazy_Lesw2n = () => Promise.resolve().then(function () { return renderer$
 const handlers = [
   { route: '', handler: _ps_ONP, lazy: false, middleware: true, method: undefined },
   { route: '', handler: _GI7qvb, lazy: false, middleware: true, method: undefined },
+  { route: '/api/admin/optimize', handler: _lazy_ywrpmm, lazy: true, middleware: false, method: "get" },
   { route: '/api/auth/login', handler: _lazy_QlGAJG, lazy: true, middleware: false, method: "post" },
   { route: '/api/auth/logout', handler: _lazy_7tLEHb, lazy: true, middleware: false, method: "post" },
   { route: '/api/auth/me', handler: _lazy_Wwtgsn, lazy: true, middleware: false, method: "get" },
@@ -2209,7 +2211,7 @@ async function runTask(name, {
 }
 
 if (!globalThis.crypto) {
-  globalThis.crypto = nodeCrypto.webcrypto;
+  globalThis.crypto = crypto$1.webcrypto;
 }
 const { NITRO_NO_UNIX_SOCKET, NITRO_DEV_WORKER_ID } = process.env;
 trapUnhandledNodeErrors();
@@ -2319,7 +2321,247 @@ const styles$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   default: styles
 }, Symbol.toStringTag, { value: 'Module' }));
 
-const userSchema = new mongoose$1.Schema({
+const mapSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true,
+    maxlength: 120,
+    trim: true
+  },
+  creator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true
+  },
+  creatorName: {
+    type: String,
+    required: true
+  },
+  audioUrl: {
+    type: String,
+    default: null
+  },
+  audioData: {
+    type: String,
+    default: null
+  },
+  audioChunks: {
+    type: [String],
+    default: []
+  },
+  audioContentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "AudioContent",
+    default: null
+  },
+  difficulty: {
+    type: Number,
+    required: true,
+    min: 1,
+    max: 100
+  },
+  seed: {
+    type: Number,
+    required: true
+  },
+  beatTimes: {
+    type: [Number],
+    required: true
+  },
+  sections: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  },
+  engineObstacles: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  },
+  enginePortals: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  },
+  autoplayLog: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  },
+  duration: {
+    type: Number,
+    required: true
+  },
+  isShared: {
+    type: Boolean,
+    default: false
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  playCount: {
+    type: Number,
+    default: 0
+  },
+  clearCount: {
+    type: Number,
+    default: 0
+  },
+  likes: {
+    type: Number,
+    default: 0
+  },
+  bestScore: {
+    type: Number,
+    default: 0
+  },
+  bestPlayer: {
+    type: String,
+    default: null
+  },
+  bpm: {
+    type: Number,
+    default: 120
+  },
+  measureLength: {
+    type: Number,
+    default: 2
+  },
+  ratingSum: {
+    type: Number,
+    default: 0
+  },
+  ratingCount: {
+    type: Number,
+    default: 0
+  },
+  rating: {
+    type: Number,
+    default: 0
+  },
+  isVerified: {
+    type: Boolean,
+    default: false
+  }
+});
+mapSchema.index({ creator: 1 });
+mapSchema.index({ playCount: -1 });
+mapSchema.index({ clearCount: -1 });
+mapSchema.index({ likes: -1 });
+mapSchema.index({ createdAt: -1 });
+mapSchema.index({ difficulty: 1 });
+mapSchema.index({ rating: -1 });
+mapSchema.index({ isShared: 1, createdAt: -1 });
+const GameMap = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
+
+const audioContentSchema = new mongoose.Schema({
+  hash: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
+  chunks: {
+    type: [Buffer],
+    required: true
+  },
+  size: {
+    type: Number,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+const AudioContent = mongoose.models.AudioContent || mongoose.model("AudioContent", audioContentSchema);
+
+const optimize_get = defineEventHandler(async (event) => {
+  var _a, _b;
+  const results = {
+    totalMaps: 0,
+    migratedMaps: 0,
+    freedSpaceApprox: 0,
+    // bytes
+    errors: []
+  };
+  try {
+    const maps = await GameMap.find({
+      $or: [
+        { audioData: { $ne: null } },
+        { audioChunks: { $not: { $size: 0 } } }
+      ]
+    });
+    results.totalMaps = maps.length;
+    for (const map of maps) {
+      try {
+        let fullBase64 = map.audioData || "";
+        if (map.audioChunks && map.audioChunks.length > 0) {
+          fullBase64 = map.audioChunks.join("");
+        }
+        if (!fullBase64 || !fullBase64.includes("base64,")) {
+          if (!fullBase64) {
+            map.audioData = null;
+            map.audioChunks = [];
+            await map.save();
+            results.migratedMaps++;
+            continue;
+          }
+        }
+        const dataParts = fullBase64.split("base64,");
+        const b64 = dataParts[1] || dataParts[0];
+        const binary = Buffer.from(b64, "base64");
+        const hash = crypto$1.createHash("sha256").update(binary).digest("hex");
+        let ac = await AudioContent.findOne({ hash });
+        if (!ac) {
+          ac = await AudioContent.create({
+            hash,
+            chunks: [binary],
+            size: binary.length
+          });
+        }
+        const oldSize = ((_a = map.audioData) == null ? void 0 : _a.length) || 0 + (((_b = map.audioChunks) == null ? void 0 : _b.reduce((acc, c) => acc + c.length, 0)) || 0);
+        map.audioContentId = ac._id;
+        map.audioData = null;
+        map.audioChunks = [];
+        if (map.autoplayLog && Array.isArray(map.autoplayLog)) {
+          const optimized = [];
+          let last = map.autoplayLog[0];
+          if (last) {
+            optimized.push(last);
+            for (let i = 1; i < map.autoplayLog.length; i++) {
+              const curr = map.autoplayLog[i];
+              const distSq = Math.pow(curr.x - last.x, 2) + Math.pow(curr.y - last.y, 2);
+              if (distSq > 900 || curr.holding !== last.holding) {
+                optimized.push(curr);
+                last = curr;
+              }
+            }
+            map.autoplayLog = optimized;
+          }
+        }
+        await map.save();
+        results.migratedMaps++;
+        results.freedSpaceApprox += oldSize;
+      } catch (err) {
+        results.errors.push(`Map ${map._id}: ${err.message}`);
+      }
+    }
+    return {
+      message: "Database optimization complete!",
+      results
+    };
+  } catch (e) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Optimization failed: " + e.message
+    });
+  }
+});
+
+const optimize_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: optimize_get
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
@@ -2371,7 +2613,7 @@ const userSchema = new mongoose$1.Schema({
 });
 userSchema.index({ totalScore: -1 });
 userSchema.index({ mapsCleared: -1 });
-const User = mongoose$1.models.User || mongoose$1.model("User", userSchema);
+const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 const login_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -2565,131 +2807,6 @@ const updateStats_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.define
   default: updateStats_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
-const mapSchema = new mongoose$1.Schema({
-  title: {
-    type: String,
-    required: true,
-    maxlength: 120,
-    trim: true
-  },
-  creator: {
-    type: mongoose$1.Schema.Types.ObjectId,
-    ref: "User",
-    required: true
-  },
-  creatorName: {
-    type: String,
-    required: true
-  },
-  audioUrl: {
-    type: String,
-    default: null
-  },
-  audioData: {
-    type: String,
-    default: null
-  },
-  audioChunks: {
-    type: [String],
-    default: []
-  },
-  difficulty: {
-    type: Number,
-    required: true,
-    min: 1,
-    max: 100
-  },
-  seed: {
-    type: Number,
-    required: true
-  },
-  beatTimes: {
-    type: [Number],
-    required: true
-  },
-  sections: {
-    type: mongoose$1.Schema.Types.Mixed,
-    default: []
-  },
-  engineObstacles: {
-    type: mongoose$1.Schema.Types.Mixed,
-    default: []
-  },
-  enginePortals: {
-    type: mongoose$1.Schema.Types.Mixed,
-    default: []
-  },
-  autoplayLog: {
-    type: mongoose$1.Schema.Types.Mixed,
-    default: []
-  },
-  duration: {
-    type: Number,
-    required: true
-  },
-  isShared: {
-    type: Boolean,
-    default: false
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  playCount: {
-    type: Number,
-    default: 0
-  },
-  clearCount: {
-    type: Number,
-    default: 0
-  },
-  likes: {
-    type: Number,
-    default: 0
-  },
-  bestScore: {
-    type: Number,
-    default: 0
-  },
-  bestPlayer: {
-    type: String,
-    default: null
-  },
-  bpm: {
-    type: Number,
-    default: 120
-  },
-  measureLength: {
-    type: Number,
-    default: 2
-  },
-  ratingSum: {
-    type: Number,
-    default: 0
-  },
-  ratingCount: {
-    type: Number,
-    default: 0
-  },
-  rating: {
-    type: Number,
-    default: 0
-  },
-  isVerified: {
-    type: Boolean,
-    default: false
-  }
-});
-mapSchema.index({ creator: 1 });
-mapSchema.index({ playCount: -1 });
-mapSchema.index({ clearCount: -1 });
-mapSchema.index({ likes: -1 });
-mapSchema.index({ createdAt: -1 });
-mapSchema.index({ difficulty: 1 });
-mapSchema.index({ rating: -1 });
-mapSchema.index({ isShared: 1, createdAt: -1 });
-const GameMap = mongoose$1.models.GameMap || mongoose$1.model("GameMap", mapSchema);
-
 const _id__delete = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
   const deletedMap = await GameMap.findByIdAndDelete(id);
@@ -2709,7 +2826,7 @@ const _id__delete$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePrope
 
 const _id__get = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
-  const map = await GameMap.findById(id);
+  const map = await GameMap.findById(id).populate("audioContentId");
   if (!map) {
     throw createError({
       statusCode: 404,
@@ -2717,7 +2834,29 @@ const _id__get = defineEventHandler(async (event) => {
     });
   }
   const mapObj = map.toObject();
-  if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
+  if (mapObj.audioUrl && mapObj.audioUrl.length > 5) {
+    mapObj.audioData = mapObj.audioUrl;
+    delete mapObj.audioContentId;
+    delete mapObj.audioChunks;
+  } else if (mapObj.audioContentId) {
+    const ac = mapObj.audioContentId;
+    if (ac.chunks && ac.chunks.length > 0) {
+      const validChunks = ac.chunks.filter((c) => c !== null).map((c) => {
+        if (Buffer.isBuffer(c)) return c;
+        if (c && typeof c === "object" && c.buffer && Buffer.isBuffer(c.buffer)) return c.buffer;
+        if (c && c.buffer instanceof ArrayBuffer) return Buffer.from(c.buffer);
+        try {
+          return Buffer.from(c);
+        } catch (e) {
+          console.warn("Failed to convert chunk to Buffer:", c);
+          return Buffer.alloc(0);
+        }
+      });
+      const buffer = Buffer.concat(validChunks);
+      mapObj.audioData = `data:audio/wav;base64,${buffer.toString("base64")}`;
+    }
+    delete mapObj.audioContentId;
+  } else if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
     mapObj.audioData = mapObj.audioChunks.join("");
   }
   delete mapObj.audioChunks;
@@ -2794,9 +2933,23 @@ const audioChunk_post = defineEventHandler(async (event) => {
   if (!map) {
     throw createError({ statusCode: 404, statusMessage: "Map not found" });
   }
-  await GameMap.updateOne(
-    { _id: id },
-    { $set: { [`audioChunks.${chunkIndex}`]: chunkData } }
+  const binaryChunk = Buffer.from(chunkData, "base64");
+  let audioContent;
+  if (map.audioContentId) {
+    audioContent = await AudioContent.findById(map.audioContentId);
+  }
+  if (!audioContent) {
+    audioContent = await AudioContent.create({
+      hash: `map_${id}_temp`,
+      chunks: new Array(totalChunks).fill(null),
+      size: 0
+    });
+    map.audioContentId = audioContent._id;
+    await map.save();
+  }
+  await AudioContent.updateOne(
+    { _id: audioContent._id },
+    { $set: { [`chunks.${chunkIndex}`]: binaryChunk } }
   );
   return { success: true, index: chunkIndex };
 });
@@ -2826,6 +2979,7 @@ const rate_post = defineEventHandler(async (event) => {
   map.ratingSum += rating;
   map.ratingCount += 1;
   map.rating = Number((map.ratingSum / map.ratingCount).toFixed(1));
+  map.difficulty = Math.round(map.rating);
   await map.save();
   return {
     success: true,
@@ -2839,9 +2993,9 @@ const rate_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePropert
   default: rate_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
-const scoreSchema = new mongoose$1.Schema({
+const scoreSchema = new mongoose.Schema({
   map: {
-    type: mongoose$1.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "GameMap",
     required: true
   },
@@ -2850,7 +3004,7 @@ const scoreSchema = new mongoose$1.Schema({
     required: true
   },
   player: {
-    type: mongoose$1.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true
   },
@@ -2886,7 +3040,7 @@ scoreSchema.index({ player: 1, playedAt: -1 });
 scoreSchema.index({ score: -1 });
 scoreSchema.index({ isCleared: 1, score: -1 });
 scoreSchema.index({ map: 1, player: 1 });
-const Score = mongoose$1.models.Score || mongoose$1.model("Score", scoreSchema);
+const Score = mongoose.models.Score || mongoose.model("Score", scoreSchema);
 
 const record_post = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
@@ -2916,11 +3070,21 @@ const record_post = defineEventHandler(async (event) => {
     mapTitle = map.title;
   }
   let globalUpdated = false;
-  if (map && score > (map.bestScore || 0)) {
-    map.bestScore = score;
-    map.bestPlayer = username || "Guest";
-    globalUpdated = true;
-    await map.save();
+  let mapSaved = false;
+  if (map) {
+    if (score > (map.bestScore || 0)) {
+      map.bestScore = score;
+      map.bestPlayer = username || "Guest";
+      globalUpdated = true;
+      mapSaved = true;
+    }
+    if (progress >= 100 && !map.isVerified) {
+      map.isVerified = true;
+      mapSaved = true;
+    }
+    if (mapSaved) {
+      await map.save();
+    }
   }
   let personalUpdated = false;
   if (userId) {
@@ -3047,13 +3211,39 @@ const index_post = defineEventHandler(async (event) => {
       autoplayLog,
       duration,
       creatorName,
-      audioUrl,
+      audioUrl: providedAudioUrl,
       audioData,
       audioChunks,
       isShared,
       bpm,
       measureLength
     } = body;
+    let finalAudioUrl = providedAudioUrl;
+    if (audioData && typeof audioData === "string" && audioData.startsWith("data:")) {
+      const matches = audioData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const binaryData = Buffer.from(base64Data, "base64");
+        const hash = crypto$1.createHash("sha256").update(binaryData).digest("hex");
+        let ext = ".wav";
+        if (mimeType.includes("mpeg") || mimeType.includes("mp3")) ext = ".mp3";
+        else if (mimeType.includes("ogg")) ext = ".ogg";
+        const filename = `${hash}${ext}`;
+        const musicDir = path.join(process.cwd(), "public", "music");
+        if (!fs.existsSync(musicDir)) {
+          fs.mkdirSync(musicDir, { recursive: true });
+        }
+        const filePath = path.join(musicDir, filename);
+        if (!fs.existsSync(filePath)) {
+          fs.writeFileSync(filePath, binaryData);
+          console.log(`[Audio] Saved new music file: ${filename}`);
+        } else {
+          console.log(`[Audio] Music file exists, skipping write: ${filename}`);
+        }
+        finalAudioUrl = `/music/${filename}`;
+      }
+    }
     let user = await User.findOne({ username: (creatorName == null ? void 0 : creatorName.toLowerCase()) || "guest" });
     if (!user) {
       user = await User.create({
@@ -3095,7 +3285,7 @@ const index_post = defineEventHandler(async (event) => {
           continue;
         }
         const distSq = Math.pow(curr.x - last.x, 2) + Math.pow(curr.y - last.y, 2);
-        if (distSq > 225) {
+        if (distSq > 900) {
           const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
           optimized.push(p);
           last = curr;
@@ -3108,8 +3298,13 @@ const index_post = defineEventHandler(async (event) => {
       title,
       creator: user._id,
       creatorName: user.displayName,
-      audioUrl,
-      audioData,
+      audioUrl: finalAudioUrl,
+      audioData: null,
+      // Clear Base64 data to save space
+      audioChunks: [],
+      // Clear chunks to save space
+      audioContentId: null,
+      // No longer using AudioContent for new maps
       difficulty,
       seed: seed || 0,
       beatTimes: beatTimes || [],
@@ -3119,8 +3314,8 @@ const index_post = defineEventHandler(async (event) => {
       // Portals share similar structure
       autoplayLog: autoplayLog ? optimizeLog(autoplayLog) : [],
       duration: duration || 60,
-      audioChunks: audioChunks || [],
       isShared: isShared !== void 0 ? isShared : false,
+      isVerified: autoplayLog && autoplayLog.length > 0,
       bpm: bpm || 120,
       measureLength: measureLength || 2
     };
@@ -3145,19 +3340,19 @@ const index_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProper
   default: index_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
-const roomSchema = new mongoose$1.Schema({
+const roomSchema = new mongoose.Schema({
   title: { type: String, required: true },
   hostId: { type: String, required: true },
   maxPlayers: { type: Number, required: true, min: 2, max: 10 },
   duration: { type: Number, required: true, default: 60 },
   difficulty: { type: Number, required: true, default: 5 },
   map: {
-    type: mongoose$1.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "GameMap",
     required: false
     // May not be assigned initially
   },
-  mapQueue: [{ type: mongoose$1.Schema.Types.ObjectId, ref: "GameMap" }],
+  mapQueue: [{ type: mongoose.Schema.Types.ObjectId, ref: "GameMap" }],
   players: [{
     userId: { type: String, required: true },
     username: { type: String, required: true },
@@ -3180,7 +3375,7 @@ const roomSchema = new mongoose$1.Schema({
     // Auto-delete after 1 hour
   }
 });
-const Room = mongoose$1.models.Room || mongoose$1.model("Room", roomSchema);
+const Room = mongoose.models.Room || mongoose.model("Room", roomSchema);
 
 const start_post = defineEventHandler(async (event) => {
   var _a;
@@ -3330,7 +3525,7 @@ const create_post = defineEventHandler(async (event) => {
   if (!userId || !title) {
     throw createError({ statusCode: 400, statusMessage: "Missing required fields" });
   }
-  const isValidId = mongoose$1.Types.ObjectId.isValid(userId);
+  const isValidId = mongoose.Types.ObjectId.isValid(userId);
   const user = isValidId ? await User.findById(userId) : null;
   const username = passedUsername || (user == null ? void 0 : user.displayName) || (user == null ? void 0 : user.username) || `Guest_${Math.floor(Math.random() * 1e3)}`;
   const newRoom = await Room.create({
@@ -3400,7 +3595,7 @@ const join_post = defineEventHandler(async (event) => {
   if (existingPlayer) {
     return { success: true, roomId: room._id };
   }
-  const isValidId = mongoose$1.Types.ObjectId.isValid(userId);
+  const isValidId = mongoose.Types.ObjectId.isValid(userId);
   const user = isValidId ? await User.findById(userId) : null;
   const username = passedUsername || (user == null ? void 0 : user.displayName) || (user == null ? void 0 : user.username) || `Guest_${Math.floor(Math.random() * 1e3)}`;
   room.players.push({
@@ -3976,18 +4171,22 @@ class MapGenerator {
    * Difficulty based gap calculation
    * 난이도가 높을수록 좁아짐
    */
+  /**
+   * Difficulty based gap calculation
+   * 난이도가 높을수록 좁아짐
+   */
   calculateGap(difficulty, isMini) {
     let baseGap;
-    if (difficulty <= 2) {
-      baseGap = 600 - (difficulty - 1) * 100;
-    } else if (difficulty < 10) {
-      baseGap = 450 - (difficulty - 3) * 21.4;
-    } else if (difficulty < 24) {
-      baseGap = 300 - (difficulty - 10) * 12.8;
+    if (difficulty <= 7) {
+      baseGap = 580 - (difficulty - 1) * 20;
+    } else if (difficulty <= 15) {
+      baseGap = 460 - (difficulty - 8) * 17.5;
+    } else if (difficulty <= 23) {
+      baseGap = 320 - (difficulty - 16) * 17.5;
     } else {
-      baseGap = 120 - (difficulty - 24) * 10.8;
+      baseGap = 180 - (difficulty - 24) * 15;
     }
-    baseGap = Math.max(55, baseGap);
+    baseGap = Math.max(90, baseGap);
     return isMini ? baseGap * 1.5 : baseGap;
   }
   /**
@@ -4061,17 +4260,29 @@ class MapGenerator {
       }
       const np = path[nextPathIdx];
       const targetFloorY = np.y + halfGap;
+      const targetCeilY = np.y - halfGap;
       let stepY = 0;
-      const diff = targetFloorY - currentFloorY;
+      let ceilStepY = 0;
       const threshold = 10;
+      const floorDiff = targetFloorY - currentFloorY;
       if (isMini) {
-        if (diff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (diff < -threshold) stepY = -blockSize;
-        else if (diff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (diff > threshold) stepY = blockSize;
+        if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
+        else if (floorDiff < -threshold) stepY = -blockSize;
+        else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
+        else if (floorDiff > threshold) stepY = blockSize;
       } else {
-        if (diff < -threshold) stepY = -blockSize;
-        else if (diff > threshold) stepY = blockSize;
+        if (floorDiff < -threshold) stepY = -blockSize;
+        else if (floorDiff > threshold) stepY = blockSize;
+      }
+      const ceilDiff = targetCeilY - currentCeilY;
+      if (isMini) {
+        if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
+        else if (ceilDiff < -threshold) ceilStepY = -blockSize;
+        else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
+        else if (ceilDiff > threshold) ceilStepY = blockSize;
+      } else {
+        if (ceilDiff < -threshold) ceilStepY = -blockSize;
+        else if (ceilDiff > threshold) ceilStepY = blockSize;
       }
       if (stepY < 0) {
         const isSteep = stepY === -blockSize * 2;
@@ -4108,7 +4319,6 @@ class MapGenerator {
         objects.push({ type: "block", x: currentX, y: blockY, width: blockSize, height: blockSize });
         this.fillBelow(objects, currentX, blockY + blockSize, blockSize);
       }
-      const ceilStepY = stepY;
       if (ceilStepY < 0) {
         const isSteep = ceilStepY === -blockSize * 2;
         const slopeType = isSteep ? "steep_triangle" : "triangle";
@@ -4145,20 +4355,22 @@ class MapGenerator {
         this.fillAbove(objects, currentX, blockY, blockSize);
       }
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
-      if (difficulty <= 2) ; else if (stepY === 0 && currentGap > 100 && rand < 0.2) {
-        const spikeH = difficulty <= 5 ? 20 : 40;
-        const spikeType = difficulty <= 5 ? "mini_spike" : "spike";
+      if (stepY === 0 && currentGap > 100 && rand < 0.2) {
+        let spikeH = 40;
+        if (difficulty <= 5) spikeH = 20;
+        else if (difficulty <= 10) spikeH = 30;
         const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
         const segIdx = Math.floor(progress * SEGMENT_COUNT);
         const currentFloorOptions = segmentFloor[segIdx];
         const currentCeilOptions = segmentCeil[segIdx];
-        const chosenFloor = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || "spike";
-        const chosenCeil = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || "spike";
+        let floorType = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || "spike";
+        let ceilType = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || "spike";
+        if (floorType === "spike" && difficulty <= 8) floorType = "mini_spike";
+        if (ceilType === "spike" && difficulty <= 8) ceilType = "mini_spike";
         if (rand < 0.1) {
           if (currentPoint.y < currentFloorY - spikeH - 40 && currentFloorY - spikeH > currentCeilY + 40) {
-            const type = difficulty > 3 ? chosenFloor : spikeType;
             objects.push({
-              type,
+              type: floorType,
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
@@ -4167,9 +4379,8 @@ class MapGenerator {
           }
         } else {
           if (currentPoint.y > currentCeilY + spikeH + 40 && currentCeilY + spikeH < currentFloorY - 40) {
-            const type = difficulty > 3 ? chosenCeil : spikeType;
             objects.push({
-              type,
+              type: ceilType,
               x: currentX,
               y: currentCeilY,
               width: blockSize,
@@ -4179,19 +4390,20 @@ class MapGenerator {
           }
         }
       }
-      if (rand > 0.95 && currentGap > 200 && difficulty > 4) {
-        const mineSize = difficulty > 20 ? 20 : difficulty <= 10 ? 20 : 30;
+      if (rand > 0.95 && currentGap > 200) {
+        const mineSize = difficulty <= 7 ? 20 : 30;
         const midY = (currentFloorY + currentCeilY) / 2;
         let pY = midY;
         if (currentPoint.y < midY) {
           pY = midY + (currentFloorY - midY) * 0.5;
+        } else {
           pY = midY - (midY - currentCeilY) * 0.5;
         }
         const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
         const segIdx = Math.floor(progress * SEGMENT_COUNT);
         const currentFloatOptions = segmentFloat[segIdx];
         const chosenFloat = currentFloatOptions[Math.floor(Math.random() * currentFloatOptions.length)] || "mine";
-        const obsType = difficulty > 4 ? chosenFloat : "mine";
+        const obsType = chosenFloat;
         objects.push({
           type: obsType,
           x: currentX + 10,
@@ -4277,7 +4489,6 @@ class GameEngine {
     __publicField(this, "waveAngle", 45);
     // 기본 45도
     __publicField(this, "miniWaveAngle", 60);
-    // 미니 모드 60도
     // Gravity system
     __publicField(this, "isGravityInverted", false);
     __publicField(this, "speedMultiplier", 1);
@@ -4319,8 +4530,6 @@ class GameEngine {
     // AI state persistence
     __publicField(this, "aiStateTimer", 0);
     // 현재 입력을 유지한 시간 (초)
-    __publicField(this, "aiStateTimer", 0);
-    // 현재 입력을 유지한 시간 (초)
     __publicField(this, "aiPredictedPath", []);
     __publicField(this, "beatTimes", []);
     // Store beat times for effect synchronization
@@ -4341,6 +4550,7 @@ class GameEngine {
     // Measure Highlights
     __publicField(this, "lastMeasureIndex", -1);
     __publicField(this, "isMeasureHighlight", false);
+    __publicField(this, "onPortalActivation", null);
     // Autoplay data
     __publicField(this, "isAutoplay", false);
     __publicField(this, "autoplayLog", []);
@@ -4353,8 +4563,17 @@ class GameEngine {
     if (config) {
       this.mapConfig = { ...this.mapConfig, ...config };
     }
+    this.baseSpeed = this.getDynamicBaseSpeed();
     this.reset();
-    this.reset();
+  }
+  // 미니 모드 60도
+  // Get dynamic base speed based on difficulty
+  getDynamicBaseSpeed() {
+    const diff = this.mapConfig.difficulty;
+    if (diff <= 2) return 260;
+    if (diff <= 7) return 300;
+    if (diff <= 12) return 330;
+    return 350;
   }
   /**
    * 100개의 미리 정의된 패턴 초기화 (난이도 반영)
@@ -4744,7 +4963,7 @@ class GameEngine {
     this.obstacles = [];
     this.portals = [];
     this.isGravityInverted = false;
-    this.speedMultiplier = 1;
+    this.baseSpeed = this.getDynamicBaseSpeed();
     this.waveSpeed = this.baseSpeed * this.speedMultiplier;
     this.waveAmplitude = this.baseSpeed;
     this.showHitboxes = false;
@@ -4805,16 +5024,16 @@ class GameEngine {
     if (resumeOptions) {
       const point = this.autoplayLog.find((p) => p.time >= resumeOptions.time);
       if (point) startX = point.x;
-      const keepX = Math.max(0, startX - 100);
-      this.obstacles = resumeOptions.obstacles.filter((o) => o.x + o.width < keepX);
-      this.portals = resumeOptions.portals.filter((p) => p.x + p.width < keepX);
+      const keepX = startX;
+      this.obstacles = resumeOptions.obstacles.filter((o) => o.x + o.width <= keepX);
+      this.portals = resumeOptions.portals.filter((p) => p.x + p.width <= keepX);
     } else {
       this.obstacles = [];
       this.portals = [];
     }
     let pathForGen = this.autoplayLog;
     if (resumeOptions && startX > 0) {
-      pathForGen = this.autoplayLog.filter((p) => p.x >= startX - 50);
+      pathForGen = this.autoplayLog.filter((p) => p.x >= startX);
     }
     const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
     for (const obj of mapObjects) {
@@ -4882,16 +5101,20 @@ class GameEngine {
       else if (r < 0.6) initialEvent.speedType = "speed_2";
     }
     stateEvents.push(...initialEvents);
-    currentSpeedType = initialEvents[0].speedType;
+    if (initialEvents[0]) {
+      currentSpeedType = initialEvents[0].speedType;
+    }
     if (resumeOptions) {
       const keptEvents = resumeOptions.stateEvents.filter((e) => e.time < resumeTime);
       stateEvents.length = 0;
       stateEvents.push(...keptEvents);
       if (stateEvents.length > 0) {
         const last = stateEvents[stateEvents.length - 1];
-        currentSpeedType = last.speedType;
-        currentInverted = last.isInverted;
-        currentMini = last.isMini;
+        if (last) {
+          currentSpeedType = last.speedType;
+          currentInverted = last.isInverted;
+          currentMini = last.isMini;
+        }
       }
     }
     for (const measureTime of measureTimes) {
@@ -5677,7 +5900,6 @@ class GameEngine {
       return `${xi}_${yi}_${s.g ? 1 : 0}_${Math.round(s.sm * 10)}_${s.m ? 1 : 0}`;
     };
     const checkColl = (tx, ty, sz, tm, margin = 0) => {
-      if (ty < this.minY + sz || ty > this.maxY - sz) return true;
       const startI = findStartIndex(tx - 1e3);
       for (let i = startI; i < sortedObs.length; i++) {
         const o = sortedObs[i];
@@ -5717,6 +5939,8 @@ class GameEngine {
         sTime += dt;
         const vy = sg ? testH ? 1 : -1 : testH ? -1 : 1;
         sy += amp * vy * dt;
+        if (sy < this.minY + sz) sy = this.minY + sz;
+        if (sy > this.maxY - sz) sy = this.maxY - sz;
         if (checkColl(sx, sy, sz, sTime, 1)) return false;
       }
       return true;
@@ -5774,8 +5998,12 @@ class GameEngine {
       const sz = nM ? this.miniPlayerSize : this.basePlayerSize;
       const nT = curr.time + dt;
       const nX = curr.x + spd * dt;
-      const nYH = curr.y + amp * (nG ? 1 : -1) * dt;
-      const nYR = curr.y + amp * (nG ? -1 : 1) * dt;
+      let nYH = curr.y + amp * (nG ? 1 : -1) * dt;
+      let nYR = curr.y + amp * (nG ? -1 : 1) * dt;
+      if (nYH < this.minY + sz) nYH = this.minY + sz;
+      if (nYH > this.maxY - sz) nYH = this.maxY - sz;
+      if (nYR < this.minY + sz) nYR = this.minY + sz;
+      if (nYR > this.maxY - sz) nYR = this.maxY - sz;
       let dH = checkColl(nX, nYH, sz, nT, 3);
       let dR = checkColl(nX, nYR, sz, nT, 3);
       const vDist = sz * 0.8;
@@ -5997,15 +6225,9 @@ class GameEngine {
     }
     if (this.playerY < this.minY + this.playerSize) {
       this.playerY = this.minY + this.playerSize;
-      this.die("\uCC9C\uC7A5\uC5D0 \uCDA9\uB3CC!");
-      this.spawnDeathParticles();
-      return;
     }
     if (this.playerY > this.maxY - this.playerSize) {
       this.playerY = this.maxY - this.playerSize;
-      this.die("\uBC14\uB2E5\uC5D0 \uCDA9\uB3CC!");
-      this.spawnDeathParticles();
-      return;
     }
     this.cameraX = this.playerX - 280;
     this.progress = Math.min(100, this.playerX / this.totalLength * 100);
@@ -6014,7 +6236,7 @@ class GameEngine {
     if (this.trail.length > 80) this.trail.shift();
     this.updateParticles(dt);
     const effectiveTime = simTime !== null ? simTime : currentTime;
-    this.updateMovingObstacles(effectiveTime);
+    this.updateMovingObstacles(dt, effectiveTime);
     this.updateBoss(dt, effectiveTime);
     this.checkPortalCollisions();
     this.checkCollisions(effectiveTime);
@@ -6064,6 +6286,9 @@ class GameEngine {
         portal.activated = true;
         this.activatePortal(portal.type);
         this.spawnPortalParticles(portal);
+        if (this.onPortalActivation) {
+          this.onPortalActivation(portal.type);
+        }
       }
     }
   }
@@ -6328,7 +6553,7 @@ class GameEngine {
    * 전역 회전 지원: 플레이어 점들을 역회전시켜 AABB와 체크
    */
   checkObstacleCollision(obs, px, py, pSize, simTime) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
     let obsY = obs.y;
     let obsAngle = obs.angle || 0;
     if (simTime !== void 0 && obs.movement) {
@@ -6359,6 +6584,19 @@ class GameEngine {
       { x: px + pSize, y: py + pSize },
       { x: px, y: py }
     ];
+    if (obs.type === "falling_spike" && simTime !== void 0) {
+      const triggerX = obs.x - 150;
+      if (px > triggerX) {
+        const estimatedSpeed = this.baseSpeed * (this.speedMultiplier || 1);
+        const dist = Math.max(0, px - triggerX);
+        const t = dist / estimatedSpeed;
+        const drop = 0.5 * 2500 * t * t;
+        obsY = (obs.initialY !== void 0 ? obs.initialY : obs.y) + drop;
+        if (obsY > this.maxY + 100) return false;
+      } else {
+        obsY = obs.initialY !== void 0 ? obs.initialY : obs.y;
+      }
+    }
     if (obs.type === "planet" || obs.type === "star") {
       const time = simTime || performance.now() / 1e3;
       const cx = obs.x + obs.width / 2;
@@ -6372,33 +6610,34 @@ class GameEngine {
       if (hasChildren) {
         const children = obs.children;
         const speed = (_c = (_b = obs.customData) == null ? void 0 : _b.orbitSpeed) != null ? _c : 1;
-        children.forEach((child, i) => {
-          var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2;
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          if (!child) continue;
           const theta = time * speed + i * (Math.PI * 2 / children.length);
-          const dist = (_b2 = (_a2 = obs.customData) == null ? void 0 : _a2.orbitDistance) != null ? _b2 : obs.width * 0.85;
-          const px2 = cx + Math.cos(theta) * dist;
-          const py2 = cy + Math.sin(theta) * dist;
-          const childSize = child.width / 2;
-          const distToChildSq = (points[4].x - px2) ** 2 + (points[4].y - py2) ** 2;
+          const dist = (_e = (_d = obs.customData) == null ? void 0 : _d.orbitDistance) != null ? _e : obs.width * 0.85;
+          const childX = cx + Math.cos(theta) * dist;
+          const childY = cy + Math.sin(theta) * dist;
+          const childSize = child.width ? child.width / 2 : 14;
+          const distToChildSq = (points[4].x - childX) ** 2 + (points[4].y - childY) ** 2;
           if (distToChildSq < (childSize + pSize - 2) ** 2) return true;
           if (child.type === "planet") {
-            const moonCount = (_d2 = (_c2 = child.customData) == null ? void 0 : _c2.orbitCount) != null ? _d2 : 2;
-            const moonSpeed = (_f2 = (_e2 = child.customData) == null ? void 0 : _e2.orbitSpeed) != null ? _f2 : 2;
-            const moonDist = (_h2 = (_g2 = child.customData) == null ? void 0 : _g2.orbitDistance) != null ? _h2 : child.width * 0.8;
+            const moonCount = (_g = (_f = child.customData) == null ? void 0 : _f.orbitCount) != null ? _g : 2;
+            const moonSpeed = (_i = (_h = child.customData) == null ? void 0 : _h.orbitSpeed) != null ? _i : 2;
+            const moonDist = (_k = (_j = child.customData) == null ? void 0 : _j.orbitDistance) != null ? _k : child.width * 0.8;
             for (let j = 0; j < moonCount; j++) {
               const mTheta = time * moonSpeed + j * (Math.PI * 2 / moonCount);
-              const mx = px2 + Math.cos(mTheta) * moonDist;
-              const my = py2 + Math.sin(mTheta) * moonDist;
+              const mx = childX + Math.cos(mTheta) * moonDist;
+              const my = childY + Math.sin(mTheta) * moonDist;
               const distToMoonSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
               if (distToMoonSq < (8 + pSize - 2) ** 2) return true;
             }
           }
-        });
+        }
       } else {
-        const count = (_e = (_d = obs.customData) == null ? void 0 : _d.orbitCount) != null ? _e : obs.type === "star" ? 0 : 2;
+        const count = (_m = (_l = obs.customData) == null ? void 0 : _l.orbitCount) != null ? _m : obs.type === "star" ? 0 : 2;
         if (count === 0 && obs.type === "star") ; else {
-          const speed = (_g = (_f = obs.customData) == null ? void 0 : _f.orbitSpeed) != null ? _g : 1;
-          const dist = (_i = (_h = obs.customData) == null ? void 0 : _h.orbitDistance) != null ? _i : obs.width * 0.8;
+          const speed = (_o = (_n = obs.customData) == null ? void 0 : _n.orbitSpeed) != null ? _o : 1;
+          const dist = (_q = (_p = obs.customData) == null ? void 0 : _p.orbitDistance) != null ? _q : obs.width * 0.8;
           for (let i = 0; i < count; i++) {
             const theta = time * speed + i * (Math.PI * 2 / count);
             const mx = cx + Math.cos(theta) * dist;
@@ -6406,7 +6645,7 @@ class GameEngine {
             const moonRadius = obs.type === "star" ? 20 : 10;
             const mDistSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
             if (mDistSq < (moonRadius + pSize - 2) ** 2) return true;
-            if (obs.type === "star" && ((_j = obs.customData) == null ? void 0 : _j.nestedOrbit)) {
+            if (obs.type === "star" && ((_r = obs.customData) == null ? void 0 : _r.nestedOrbit)) {
               const subMoonCount = 2;
               const subDist = 25;
               const subSpeed = speed * 2.5;
@@ -6484,7 +6723,7 @@ class GameEngine {
         { x: effectiveX + effectiveWidth, y: effectiveY }
       ];
       for (const p of points) {
-        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+        if (tri[0] && tri[1] && tri[2] && this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
       return false;
     }
@@ -6522,7 +6761,7 @@ class GameEngine {
         { x: effectiveX + effectiveWidth, y: effectiveY }
       ];
       for (const p of points) {
-        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+        if (tri[0] && tri[1] && tri[2] && this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
       return false;
     }
@@ -6548,7 +6787,7 @@ class GameEngine {
         { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight }
       ];
       for (const p of points) {
-        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+        if (tri[0] && tri[1] && tri[2] && this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
       return false;
     }
@@ -6723,13 +6962,34 @@ class GameEngine {
     }
     return { y, angle };
   }
-  updateMovingObstacles(time) {
+  updateMovingObstacles(dt, time) {
     for (const obs of this.obstacles) {
       if (obs.movement) {
         const state = this.getObstacleStateAt(obs, time);
         obs.y = state.y;
         if (obs.movement.type === "rotate") {
           obs.angle = state.angle;
+        }
+      }
+      if (obs.type === "falling_spike") {
+        if (!obs.customData) obs.customData = {};
+        if (obs.customData.isFalling === void 0) {
+          obs.customData.isFalling = false;
+          obs.customData.vy = 0;
+          if (obs.initialY === void 0) obs.initialY = obs.y;
+        }
+        const isFalling = obs.customData.isFalling;
+        if (isFalling) {
+          const gravity = 2500;
+          obs.customData.vy = (obs.customData.vy || 0) + gravity * dt;
+          obs.y += obs.customData.vy * dt;
+        } else {
+          const dist = obs.x - this.playerX;
+          if (dist < 150 && dist > -50) {
+            obs.customData.isFalling = true;
+            obs.customData.vy = 0;
+          }
+          if (obs.initialY !== void 0) obs.y = obs.initialY;
         }
       }
     }

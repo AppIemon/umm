@@ -249,7 +249,7 @@ async function loadNextMap() {
 // 1. LOBBY
 async function refreshRooms() {
   try {
-    const res: any = await $fetch('/api/rooms/index');
+    const res: any = await $fetch('/api/rooms');
     rooms.value = res.rooms;
   } catch (e) {
     console.error("Failed to fetch rooms", e);

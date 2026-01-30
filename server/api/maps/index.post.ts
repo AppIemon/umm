@@ -1,5 +1,9 @@
 import { GameMap } from '~/server/models/Map'
 import { User } from '~/server/models/User'
+import { AudioContent } from '~/server/models/AudioContent' // Keep for legacy if needed, or remove if unused. Better to keep import for now just in case.
+import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -7,9 +11,52 @@ export default defineEventHandler(async (event) => {
     const {
       _id, title, difficulty, seed, beatTimes, sections,
       engineObstacles, enginePortals, autoplayLog,
-      duration, creatorName, audioUrl, audioData, audioChunks,
+      duration, creatorName, audioUrl: providedAudioUrl, audioData, audioChunks,
       isShared, bpm, measureLength
     } = body
+
+    // Calculate audio hash and handle separate storage if data exists
+    let finalAudioUrl = providedAudioUrl;
+
+    // Process new audio upload
+    if (audioData && typeof audioData === 'string' && audioData.startsWith('data:')) {
+      const matches = audioData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+        const binaryData = Buffer.from(base64Data, 'base64');
+        const hash = crypto.createHash('sha256').update(binaryData).digest('hex');
+
+        // Determine extension
+        let ext = '.wav';
+        if (mimeType.includes('mpeg') || mimeType.includes('mp3')) ext = '.mp3';
+        else if (mimeType.includes('ogg')) ext = '.ogg';
+
+        const filename = `${hash}${ext}`;
+        const musicDir = path.join(process.cwd(), 'public', 'music');
+
+        // Ensure directory exists
+        if (!fs.existsSync(musicDir)) {
+          fs.mkdirSync(musicDir, { recursive: true });
+        }
+
+        const filePath = path.join(musicDir, filename);
+
+        // Write file if it doesn't exist
+        if (!fs.existsSync(filePath)) {
+          fs.writeFileSync(filePath, binaryData);
+          console.log(`[Audio] Saved new music file: ${filename}`);
+        } else {
+          console.log(`[Audio] Music file exists, skipping write: ${filename}`);
+        }
+
+        finalAudioUrl = `/music/${filename}`;
+      }
+    }
+    // Handle chunked upload (legacy or if client still uses it, but we prefer single string now. 
+    // If client sends chunks, we should reconstruct and save. 
+    // But for now let's assume client sends audioData for new approach or we just handle the provided url if no data.)
 
     // Attempt to find user
     let user = await User.findOne({ username: creatorName?.toLowerCase() || 'guest' })
@@ -71,9 +118,9 @@ export default defineEventHandler(async (event) => {
           continue;
         }
 
-        // Downsample: Keep point only if distance > 15px (Visual fidelity)
+        // Downsample: Keep point only if distance > 30px (Significant reduction)
         const distSq = Math.pow(curr.x - last.x, 2) + Math.pow(curr.y - last.y, 2);
-        if (distSq > 225) { // 15^2
+        if (distSq > 900) { // 30^2 instead of 15^2
           const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
           optimized.push(p);
           last = curr;
@@ -87,8 +134,10 @@ export default defineEventHandler(async (event) => {
       title,
       creator: user._id,
       creatorName: user.displayName,
-      audioUrl,
-      audioData,
+      audioUrl: finalAudioUrl,
+      audioData: null, // Clear Base64 data to save space
+      audioChunks: [], // Clear chunks to save space
+      audioContentId: null, // No longer using AudioContent for new maps
       difficulty,
       seed: seed || 0,
       beatTimes: beatTimes || [],
@@ -97,8 +146,8 @@ export default defineEventHandler(async (event) => {
       enginePortals: enginePortals ? optimizeObstacles(enginePortals) : [], // Portals share similar structure
       autoplayLog: autoplayLog ? optimizeLog(autoplayLog) : [],
       duration: duration || 60,
-      audioChunks: audioChunks || [],
       isShared: isShared !== undefined ? isShared : false,
+      isVerified: (autoplayLog && autoplayLog.length > 0),
       bpm: bpm || 120,
       measureLength: measureLength || 2.0
     }

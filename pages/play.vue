@@ -57,9 +57,6 @@
           </div>
         </div>
       </div>
-
-      
-
     </div>
 
     <!-- Smart Gen Mode UI -->
@@ -234,9 +231,7 @@ const generateTutorialMap = () => {
   const tutorialMessages: { progress: number, text: string }[] = [
     { progress: 0, text: "HOLD to go UP ↗" },
     { progress: 5, text: "RELEASE to go DOWN ↘" },
-    { progress: 12, text: "DODGE obstacles!" },
-    { progress: 25, text: "PASS through portals to switch gravity!" },
-    { progress: 45, text: "Use MINI mode for tight spaces" }
+    { progress: 12, text: "DODGE obstacles! ⚠️" }
   ];
   
   // Section 1: Basic Input (0-15s) - More open space
@@ -253,8 +248,8 @@ const generateTutorialMap = () => {
   
   // Section 4: Mini Mode (45s)
   tutorialPortals.push({ x: 8500, y: 150, width: 80, height: 430, type: 'mini_pink', activated: false });
-  tutorialObstacles.push({ x: 9500, y: 340, width: 60, height: 40, type: 'block', initialY: 340 });
-  tutorialObstacles.push({ x: 9500, y: 420, width: 60, height: 40, type: 'block', initialY: 420 }); // Tight gap
+  tutorialObstacles.push({ x: 9500, y: 300, width: 60, height: 40, type: 'block', initialY: 300 });
+  tutorialObstacles.push({ x: 9500, y: 460, width: 60, height: 40, type: 'block', initialY: 460 }); // Increased gap from 40 to 120
   tutorialPortals.push({ x: 10500, y: 150, width: 80, height: 430, type: 'mini_green', activated: false });
 
   return {
@@ -320,7 +315,7 @@ const selectMode = async (mode: 'practice' | 'normal' | 'tutorial') => {
 
 
 const handleSongSelect = async (input: File | { type: string, data: any }) => {
-  if ('type' in input && input.type === 'storage') {
+  if (!(input instanceof File) && input.type === 'storage') {
      const item = input.data;
      loadedMapData.value = item.mapData;
      obstacles.value = item.mapData.beatTimes;
@@ -432,8 +427,11 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
          const point = log.find((p: any) => p.x >= failX);
          const failTime = point ? point.time : (failX / 350); // Fallback speed
          
-         // Resume from 3 seconds before failure (approx 1-2 measures) to ensure continuity
-         const resumeTime = Math.max(0, failTime - 3.0);
+         // Resume strategy:
+         // For Hard/Impossible: Short lookback (keep rhythm, just fix the specific trap) -> 8s
+         // For Easy/Normal: Long lookback (rewrite whole section) -> 30s
+         const safeBuffer = (adjustedDifficulty >= 16) ? 8.0 : 30.0;
+         const resumeTime = Math.max(0, failTime - safeBuffer);
          
          console.log(`[SmartGen] Resuming from ${resumeTime.toFixed(2)}s (Fail at ${failTime.toFixed(2)}s)`);
          

@@ -1,5 +1,6 @@
 import { Room } from '~/server/models/Room'
 import { GameMap } from '~/server/models/Map'
+import mongoose from 'mongoose'
 
 export default defineEventHandler(async (event) => {
   const roomId = event.context.params?.id

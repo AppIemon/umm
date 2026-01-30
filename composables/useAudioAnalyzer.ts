@@ -56,7 +56,7 @@ export const useAudioAnalyzer = () => {
     // 난이도(1~30)에 따른 동적 설정
     const thresholdRate = 0.45 - ((difficulty - 1) / 29) * 0.35;
     const threshold = peak * thresholdRate;
-    const minDistance = 0.35 - ((difficulty - 1) / 29) * 0.3;
+    const minDistance = 0.45 - ((difficulty - 1) / 29) * 0.4; // 0.45s (Easy) ~ 0.05s (Impossible)
 
     if (onProgress) onProgress({ step: '비트 패턴을 분석 중입니다...', percent: 35 });
 

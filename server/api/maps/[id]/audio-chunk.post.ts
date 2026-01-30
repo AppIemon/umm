@@ -1,4 +1,5 @@
 import { GameMap } from '~/server/models/Map'
+import { AudioContent } from '~/server/models/AudioContent'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -19,18 +20,33 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Map not found' })
   }
 
-  // Ensure audioChunks array exists and is properly sized if starting
-  // (MongoDB automatically handles array expansion, but we want to be safe)
+  // Binary Conversion
+  const binaryChunk = Buffer.from(chunkData, 'base64');
 
-  // Update the specific chunk
-  // Using $set with index to ensure order
-  await GameMap.updateOne(
-    { _id: id },
-    { $set: { [`audioChunks.${chunkIndex}`]: chunkData } }
-  )
+  // Find or create AudioContent
+  let audioContent;
+  if (map.audioContentId) {
+    audioContent = await AudioContent.findById(map.audioContentId);
+  }
 
-  // If this is the last chunk (or we have all chunks), we might check integrity?
-  // But for now, just saving is enough. The client handles the loop.
+  if (!audioContent) {
+    // Create new content (hash will be 'temp' until finished if we don't have client hash)
+    // Actually, let's use map ID as a temporary unique identifier or just hashing the first chunk
+    audioContent = await AudioContent.create({
+      hash: `map_${id}_temp`,
+      chunks: new Array(totalChunks).fill(null),
+      size: 0
+    });
+    map.audioContentId = audioContent._id;
+    await map.save();
+  }
+
+  // Update specific chunk using positional operator or Direct assignment
+  // Mongoose $set on arrays
+  await AudioContent.updateOne(
+    { _id: audioContent._id },
+    { $set: { [`chunks.${chunkIndex}`]: binaryChunk } }
+  );
 
   return { success: true, index: chunkIndex }
 })

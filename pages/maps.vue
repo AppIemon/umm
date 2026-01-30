@@ -22,7 +22,7 @@
       </header>
 
       <div class="map-grid" v-if="!loading">
-        <div v-for="map in filteredMaps" :key="map._id" class="map-card">
+        <div v-for="map in filteredMaps" :key="map._id" :class="['map-card', { 'is-verified': map.isVerified }]">
           <div class="card-header">
             <span class="diff-tag" :style="{ color: getDiffColor(map.difficulty) }">
               DIFF: {{ map.difficulty }}
@@ -36,7 +36,10 @@
             </span>
             <span class="date">{{ new Date(map.createdAt).toLocaleDateString() }}</span>
           </div>
-          <h3 class="map-title">{{ map.title }}</h3>
+          <h3 class="map-title">
+            {{ map.title }}
+            <span v-if="map.isVerified" class="verified-icon" title="Verified Map">✓</span>
+          </h3>
           <div class="map-info">
             <span class="creator">BY: {{ map.creatorName }}</span>
             <span class="duration">{{ Math.floor(map.duration) }}s</span>
@@ -51,8 +54,6 @@
                 <button 
                   @click="toggleShare(map)" 
                   class="action-btn share"
-                  :disabled="!map.autoplayLog || map.autoplayLog.length === 0"
-                  :title="!map.autoplayLog || map.autoplayLog.length === 0 ? 'AI 검증된 맵만 공유 가능' : ''"
                 >
                   {{ map.isShared ? 'PRIVATE' : 'SHARE' }}
                 </button>
@@ -281,6 +282,7 @@ onMounted(() => {
   letter-spacing: 4px;
   background: linear-gradient(135deg, #00ffff 0%, #ff00ff 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 0;
 }
@@ -314,23 +316,53 @@ onMounted(() => {
 }
 
 .map-card {
-  background: rgba(20, 20, 30, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 1.5rem;
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
-  transition: transform 0.2s, border-color 0.2s;
+  background: rgba(20, 20, 30, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.8rem;
+  border-radius: 20px;
+  backdrop-filter: blur(15px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.05) 0%, rgba(255, 0, 255, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: -1;
 }
 
 .map-card:hover {
-  transform: translateY(-5px);
-  border-color: #ff00ff;
+  transform: translateY(-8px) scale(1.02);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.map-card:hover::before {
+  opacity: 1;
+}
+
+.map-card.is-verified {
+  border-color: rgba(0, 255, 255, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.05);
+}
+
+.map-card.is-verified:hover {
+  border-color: #00ffff;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  align-items: center;
+  margin-bottom: 1.2rem;
   font-size: 0.8rem;
 }
 
@@ -346,12 +378,23 @@ onMounted(() => {
 }
 
 .map-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin-bottom: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 1px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.verified-icon {
+  color: #00ffff;
+  font-size: 1rem;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
 }
 
 .map-info {
@@ -359,53 +402,79 @@ onMounted(() => {
   justify-content: space-between;
   color: #888;
   font-size: 0.9rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.creator {
+  color: #aaa;
+  font-weight: 500;
 }
 
 .my-progress {
   color: #00ffff;
   font-weight: 900;
-  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  text-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
 }
 
 .actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
+  margin-top: auto;
+  flex-wrap: wrap;
 }
 
 .action-btn {
   flex: 1;
-  padding: 0.8rem;
+  min-width: 60px;
+  padding: 0.8rem 0.5rem;
   text-align: center;
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 900;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   text-decoration: none;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  border: none;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .action-btn.play {
   background: #00ffff;
   color: #000;
+  box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
 }
 
 .action-btn.edit {
-  background: rgba(255, 255, 255, 0.05);
-  color: #aaa;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .action-btn.share {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.action-btn:hover {
-  opacity: 0.8;
-  border-color: #00ffff;
-  color: #fff;
+.action-btn.rename {
+  background: white;
+  color: black;
+}
+
+.action-btn.delete {
+  background: #eee;
+  color: #333;
+}
+
+.action-btn:hover:not(:disabled) {
+  opacity: 1;
+  transform: translateY(-2px);
+  filter: brightness(1.2);
+}
+
+.action-btn.play:hover {
+  box-shadow: 0 8px 25px rgba(0, 255, 255, 0.5);
 }
 
 /* Modal Styles */
@@ -517,6 +586,7 @@ onMounted(() => {
 
 .rating-slider {
   -webkit-appearance: none;
+  appearance: none;
   flex: 1;
   height: 8px;
   background: rgba(255, 255, 255, 0.1);
@@ -526,6 +596,7 @@ onMounted(() => {
 
 .rating-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 20px;
   height: 20px;
   background: #fff;
