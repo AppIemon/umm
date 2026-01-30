@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3be1e-TqB3UANfzZ/mGwZt7YdZKYMyTSA\"",
-    "mtime": "2026-01-30T14:37:03.005Z",
-    "size": 245278,
+    "etag": "\"3cdd2-RnusVDscM8md7f5HivcOjhGTsok\"",
+    "mtime": "2026-01-30T18:24:49.278Z",
+    "size": 249298,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"e6103-y4j3RaYSEL7tD6Jzh13uZszRb+U\"",
-    "mtime": "2026-01-30T14:37:03.006Z",
-    "size": 942339,
+    "etag": "\"ea2cc-BYMwSfFC/pyhLbUSlIaNUN8f4qA\"",
+    "mtime": "2026-01-30T18:24:49.287Z",
+    "size": 959180,
     "path": "index.mjs.map"
   }
 };
@@ -4263,26 +4263,44 @@ class MapGenerator {
       const targetCeilY = np.y - halfGap;
       let stepY = 0;
       let ceilStepY = 0;
-      const threshold = 10;
+      let segMinY = Infinity;
+      let segMaxY = -Infinity;
+      for (let i = pathIdx; i <= nextPathIdx; i++) {
+        const py = path[i].y;
+        if (py < segMinY) segMinY = py;
+        if (py > segMaxY) segMaxY = py;
+      }
+      const pSize = isMini ? 7.5 : 15;
+      const genSafety = 5;
+      const floorBoundary = segMaxY + pSize + genSafety;
+      const ceilBoundary = segMinY - pSize - genSafety;
+      const floorExpandThreshold = 10;
+      const ceilContractThreshold = 35;
       const floorDiff = targetFloorY - currentFloorY;
       if (isMini) {
         if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (floorDiff < -threshold) stepY = -blockSize;
+        else if (floorDiff < -35) stepY = -blockSize;
         else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (floorDiff > threshold) stepY = blockSize;
+        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
       } else {
-        if (floorDiff < -threshold) stepY = -blockSize;
-        else if (floorDiff > threshold) stepY = blockSize;
+        if (floorDiff < -35) stepY = -blockSize;
+        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
       }
       const ceilDiff = targetCeilY - currentCeilY;
       if (isMini) {
         if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
-        else if (ceilDiff < -threshold) ceilStepY = -blockSize;
+        else if (ceilDiff < -10) ceilStepY = -blockSize;
         else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
-        else if (ceilDiff > threshold) ceilStepY = blockSize;
+        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
       } else {
-        if (ceilDiff < -threshold) ceilStepY = -blockSize;
-        else if (ceilDiff > threshold) ceilStepY = blockSize;
+        if (ceilDiff < -10) ceilStepY = -blockSize;
+        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
+      }
+      if (stepY < 0 && currentFloorY + stepY < floorBoundary) {
+        stepY = 0;
+      }
+      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) {
+        ceilStepY = 0;
       }
       if (stepY < 0) {
         const isSteep = stepY === -blockSize * 2;
@@ -4374,7 +4392,8 @@ class MapGenerator {
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
-              height: spikeH
+              height: spikeH,
+              movement: this.getRandomMovement(floorType, 0.25)
             });
           }
         } else {
@@ -4385,7 +4404,8 @@ class MapGenerator {
               y: currentCeilY,
               width: blockSize,
               height: spikeH,
-              rotation: 180
+              rotation: 180,
+              movement: this.getRandomMovement(ceilType, 0.25)
             });
           }
         }
@@ -4404,6 +4424,21 @@ class MapGenerator {
         const currentFloatOptions = segmentFloat[segIdx];
         const chosenFloat = currentFloatOptions[Math.floor(Math.random() * currentFloatOptions.length)] || "mine";
         const obsType = chosenFloat;
+        let children = void 0;
+        let customData = void 0;
+        if (obsType === "planet") {
+          customData = { orbitSpeed: 1.5, orbitDistance: mineSize * 0.8, orbitCount: 2 };
+          children = [];
+          for (let k = 0; k < 2; k++) {
+            children.push({ type: "planet", x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true });
+          }
+        } else if (obsType === "star") {
+          customData = { orbitSpeed: 1, orbitDistance: mineSize * 0.8, orbitCount: 3 };
+          children = [];
+          for (let k = 0; k < 3; k++) {
+            children.push({ type: "planet", x: 0, y: 0, width: mineSize * 0.5, height: mineSize * 0.5, isHitbox: true });
+          }
+        }
         objects.push({
           type: obsType,
           x: currentX + 10,
@@ -4411,7 +4446,10 @@ class MapGenerator {
           width: mineSize,
           height: mineSize,
           isHitbox: true,
-          rotation: obsType === "laser_beam" ? 90 : 0
+          rotation: obsType === "laser_beam" ? 90 : 0,
+          children,
+          customData,
+          movement: this.getRandomMovement(obsType, 0.5)
         });
       }
       while (beatIdx < beatTimes.length && beatTimes[beatIdx] < currentPoint.time) {
@@ -4465,6 +4503,26 @@ class MapGenerator {
         height,
         isHitbox: true
       });
+    }
+  }
+  getRandomMovement(type, prob) {
+    if (Math.random() > prob) return void 0;
+    const useRotate = ["saw", "mine", "spike_ball", "rotor", "cannon", "spark_mine", "planet", "star"].includes(type);
+    const useUpDown = !useRotate || Math.random() < 0.3;
+    if (useRotate && !useUpDown) {
+      return {
+        type: "rotate",
+        speed: 1 + Math.random() * 2,
+        range: 360,
+        phase: Math.random() * Math.PI * 2
+      };
+    } else {
+      return {
+        type: "updown",
+        speed: 1.5 + Math.random() * 2.5,
+        range: 30 + Math.random() * 70,
+        phase: Math.random() * Math.PI * 2
+      };
     }
   }
 }
@@ -5054,9 +5112,10 @@ class GameEngine {
           height: obj.height || 50,
           type: obj.type,
           angle: obj.rotation || 0,
-          movement: void 0,
-          // Explicitly undefined if not set to avoid type errors
-          initialY: obj.y
+          movement: obj.movement,
+          initialY: obj.y,
+          children: obj.children,
+          customData: obj.customData
         });
       }
     }
@@ -5948,7 +6007,7 @@ class GameEngine {
     const stack = [initialState];
     let maxX = startX;
     let loops = 0;
-    const maxLoops = 25e4;
+    const maxLoops = 5e5;
     let bestState = null;
     let furthestFailX = startX;
     let failY = startY;
@@ -6018,7 +6077,7 @@ class GameEngine {
         failY = curr.y;
       }
       const prevH = curr.h;
-      const lookaheadFrames = 45;
+      const lookaheadFrames = 60;
       const MIN_SWITCH_INTERVAL = 0.125 / Math.pow(curr.sm, 0.7);
       const timeSinceLastSwitch = curr.time - curr.lastSwitchTime;
       let isSwitchRestricted = timeSinceLastSwitch < MIN_SWITCH_INTERVAL;
@@ -6038,7 +6097,19 @@ class GameEngine {
       let preferHold = false;
       const isHoldSafe = !dH && checkSurvival({ ...curr, x: nX, y: nYH, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, lastSwitchTime: prevH ? curr.lastSwitchTime : nT}, true, lookaheadFrames);
       const isReleaseSafe = !dR && checkSurvival({ ...curr, x: nX, y: nYR, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, lastSwitchTime: !prevH ? curr.lastSwitchTime : nT}, false, lookaheadFrames);
-      if (prevH) {
+      let fallingSpikeAhead = false;
+      const scanEnd = nX + 400;
+      for (let i = findStartIndex(nX); i < sortedObs.length; i++) {
+        const o = sortedObs[i];
+        if (o.x > scanEnd) break;
+        if (o.type === "falling_spike") {
+          fallingSpikeAhead = true;
+          break;
+        }
+      }
+      if (fallingSpikeAhead) {
+        preferHold = true;
+      } else if (prevH) {
         if (isHoldSafe) preferHold = true;
         else preferHold = false;
       } else {
@@ -6959,17 +7030,35 @@ class GameEngine {
         const rad = time * speed + phase;
         angle = rad * 180 / Math.PI % 360;
       }
+    } else {
+      if (["saw", "rotor", "spike_ball"].includes(obs.type)) {
+        const speed = 3;
+        angle = time * speed * 180 / Math.PI % 360;
+      } else if (["hammer", "swing_blade"].includes(obs.type)) {
+        const speed = 3;
+        const range = 60;
+        angle = Math.sin(time * speed) * range;
+      } else if (["piston_v", "crusher_jaw"].includes(obs.type)) {
+        if (obs.initialY !== void 0) {
+          const speed = 2;
+          const range = 50;
+          y = obs.initialY + Math.sin(time * speed) * range;
+        }
+      }
     }
     return { y, angle };
   }
   updateMovingObstacles(dt, time) {
+    var _a;
     for (const obs of this.obstacles) {
-      if (obs.movement) {
+      const hasImplicit = ["saw", "rotor", "spike_ball", "hammer", "swing_blade", "piston_v", "crusher_jaw"].includes(obs.type);
+      if (obs.movement || hasImplicit) {
         const state = this.getObstacleStateAt(obs, time);
-        obs.y = state.y;
-        if (obs.movement.type === "rotate") {
-          obs.angle = state.angle;
+        if ((hasImplicit || ((_a = obs.movement) == null ? void 0 : _a.type) === "updown") && obs.initialY === void 0) {
+          obs.initialY = obs.y;
         }
+        obs.y = state.y;
+        obs.angle = state.angle;
       }
       if (obs.type === "falling_spike") {
         if (!obs.customData) obs.customData = {};

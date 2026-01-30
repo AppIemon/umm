@@ -5,15 +5,7 @@
 
 import { MapGenerator, type MapObject } from './MapGenerator';
 
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle' | 'piston_v' | 'falling_spike' | 'hammer' | 'rotor' | 'cannon' | 'spark_mine' | 'laser_beam' | 'crusher_jaw' | 'swing_blade' | 'growing_spike' | 'planet' | 'star' | 'invisible_wall' | 'fake_block';
-export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green' | 'teleport_in' | 'teleport_out';
-
-export interface ObstacleMovement {
-  type: 'updown' | 'rotate';
-  range: number;
-  speed: number;
-  phase: number;
-}
+import type { ObstacleType, PortalType, ObstacleMovement } from './types';
 
 export interface Obstacle {
   x: number;
@@ -821,8 +813,10 @@ export class GameEngine {
           height: obj.height || 50,
           type: obj.type as ObstacleType,
           angle: obj.rotation || 0,
-          movement: undefined, // Explicitly undefined if not set to avoid type errors
-          initialY: obj.y
+          movement: obj.movement,
+          initialY: obj.y,
+          children: obj.children,
+          customData: obj.customData
         });
       }
     }
@@ -1964,7 +1958,7 @@ export class GameEngine {
     const stack: SearchState[] = [initialState];
     let maxX = startX;
     let loops = 0;
-    const maxLoops = 250000;
+    const maxLoops = 500000; // Increased search depth
     let bestState: SearchState | null = null;
     let furthestFailX = startX;
     let failY = startY;
@@ -2041,8 +2035,8 @@ export class GameEngine {
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
 
       const prevH = curr.h;
-      // Increased lookahead to 45 frames (~0.75s) for better stability.
-      const lookaheadFrames = 45;
+      // Increased lookahead to 60 frames (~1.0s) for better stability.
+      const lookaheadFrames = 60;
 
       // CPS Limiting Logic:
       // Scale interval: 0.125 / (speedMultiplier^0.7)
@@ -2079,7 +2073,26 @@ export class GameEngine {
 
       // Default preference based on safety
       // Default preference based on safety
-      if (prevH) {
+      // USER REQUEST: "falling spike에서 자꾸 tutorial mode가 죽음. 최대한 위로 가라."
+      // Detect falling spike ahead and bias UP (Hold)
+      let fallingSpikeAhead = false;
+      const scanEnd = nX + 400;
+      // Optimize: continue from previous index if possible, but binary search is fast enough
+      // We reusing sortedObs.
+      // We can reuse `findStartIndex` but let's just loop a bit or reuse `startI` concept if available.
+      // `findStartIndex` is available in scope.
+      for (let i = findStartIndex(nX); i < sortedObs.length; i++) {
+        const o = sortedObs[i]!;
+        if (o.x > scanEnd) break;
+        if (o.type === 'falling_spike') {
+          fallingSpikeAhead = true;
+          break;
+        }
+      }
+
+      if (fallingSpikeAhead) {
+        preferHold = true;
+      } else if (prevH) {
         if (isHoldSafe) preferHold = true;
         else preferHold = false;
       } else {
@@ -3216,22 +3229,55 @@ export class GameEngine {
         const rad = time * speed + phase;
         angle = (rad * 180 / Math.PI) % 360;
       }
+    } else {
+      // Implicit Animations (if no explicit movement set)
+      if (['saw', 'rotor', 'spike_ball'].includes(obs.type)) {
+        // Continuous Rotation
+        const speed = 3; // rad/s approx 170 deg/s
+        angle = ((time * speed) * 180 / Math.PI) % 360;
+      } else if (['hammer', 'swing_blade'].includes(obs.type)) {
+        // Pendulum Swing
+        const speed = 3;
+        const range = 60; // degrees
+        angle = Math.sin(time * speed) * range;
+      } else if (['piston_v', 'crusher_jaw'].includes(obs.type)) {
+        // Up/Down Piston
+        if (obs.initialY !== undefined) {
+          const speed = 2;
+          const range = 50;
+          // Piston usually smashes down/up. Let's use simple sine for now.
+          y = obs.initialY + Math.sin(time * speed) * range;
+        }
+      }
     }
     return { y, angle };
   }
 
   private updateMovingObstacles(dt: number, time: number) {
     for (const obs of this.obstacles) {
-      // 1. Existing deterministic movement
-      if (obs.movement) {
+      // 1. Deterministic movement (Explicit OR Implicit)
+      const hasImplicit = ['saw', 'rotor', 'spike_ball', 'hammer', 'swing_blade', 'piston_v', 'crusher_jaw'].includes(obs.type);
+
+      if (obs.movement || hasImplicit) {
         const state = this.getObstacleStateAt(obs, time);
-        obs.y = state.y;
-        if (obs.movement.type === 'rotate') {
-          obs.angle = state.angle;
+        // Only update Y if it's supposed to move vertically (preserve Y for pure rotators if getObstacleStateAt returns input Y)
+        // Actually getObstacleStateAt returns current obs.y if no Y movement.
+        // But for implicit rotators, getObstacleStateAt returns obs.y passed in.
+        // If we assign back, it's a no-op, which is fine.
+        // BUT `getObstacleStateAt` uses `obs.y` as base.
+        // If we keep assigning, `obs.y` might drift if we had `y += ...` logic, but here we use `initialY`.
+        // So we strictly need `initialY` for position animations.
+
+        // Ensure initialY is set for position movers
+        if ((hasImplicit || obs.movement?.type === 'updown') && obs.initialY === undefined) {
+          obs.initialY = obs.y;
         }
+
+        obs.y = state.y;
+        obs.angle = state.angle;
       }
 
-      // 2. Falling Spike Logic
+      // 2. Falling Spike Logic (Stateful)
       if (obs.type === 'falling_spike') {
         if (!obs.customData) obs.customData = {};
 

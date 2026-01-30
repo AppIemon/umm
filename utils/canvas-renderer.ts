@@ -375,7 +375,7 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, x: nu
     ctx.arc(x + obs.width / 2, y + obs.height / 2, obs.width / 3, 0, Math.PI * 2);
     ctx.fill();
 
-  } else if (['falling_spike', 'growing_spike', 'crusher_jaw'].includes(obs.type)) {
+  } else if (['falling_spike', 'growing_spike'].includes(obs.type)) {
     ctx.fillStyle = '#ff4444';
     ctx.beginPath();
     const cx = x + obs.width / 2;
@@ -388,6 +388,42 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, x: nu
       ctx.lineTo(x + obs.width, y + obs.height);
       ctx.lineTo(cx, y);
     }
+    ctx.fill();
+
+  } else if (obs.type === 'crusher_jaw') {
+    // Unique Crusher Jaw Design (Biting Trap)
+    const cx = x + obs.width / 2;
+    const cy = y + obs.height / 2;
+    const padding = 5;
+
+    ctx.fillStyle = '#ff4444';
+
+    // Top Jaw
+    ctx.beginPath();
+    ctx.moveTo(x + padding, y);
+    ctx.lineTo(x + obs.width - padding, y);
+    ctx.lineTo(cx, cy - 5);
+    ctx.fill();
+
+    // Bottom Jaw
+    ctx.beginPath();
+    ctx.moveTo(x + padding, y + obs.height);
+    ctx.lineTo(x + obs.width - padding, y + obs.height);
+    ctx.lineTo(cx, cy + 5);
+    ctx.fill();
+
+    // Teeth details
+    ctx.fillStyle = '#ffaaaa';
+    ctx.beginPath();
+    ctx.moveTo(x + obs.width * 0.3, y);
+    ctx.lineTo(x + obs.width * 0.35, y + obs.height * 0.3);
+    ctx.lineTo(x + obs.width * 0.4, y);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(x + obs.width * 0.6, y + obs.height);
+    ctx.lineTo(x + obs.width * 0.65, y + obs.height * 0.7);
+    ctx.lineTo(x + obs.width * 0.7, y + obs.height);
     ctx.fill();
 
   } else if (obs.type === 'swing_blade') {

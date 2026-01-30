@@ -246,7 +246,8 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/composables/useAuth';
-import { GameEngine, type MapData, type Obstacle, type Portal, type ObstacleType, type PortalType } from '@/utils/game-engine';
+import { GameEngine, type MapData, type Obstacle, type Portal } from '@/utils/game-engine';
+import type { ObstacleType, PortalType } from '@/utils/types';
 import { drawObstacle } from '@/utils/canvas-renderer';
 import { CHUNK_SIZE, splitBase64ToChunks } from '@/utils/audioUtils';
 

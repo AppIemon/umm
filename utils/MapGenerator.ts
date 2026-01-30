@@ -1,5 +1,4 @@
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle' | 'piston_v' | 'falling_spike' | 'hammer' | 'rotor' | 'cannon' | 'spark_mine' | 'laser_beam' | 'crusher_jaw' | 'swing_blade' | 'growing_spike' | 'planet' | 'star';
-export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green' | 'teleport_in' | 'teleport_out';
+import type { ObstacleType, PortalType, ObstacleMovement } from './types';
 
 export interface MapObject {
   type: ObstacleType | PortalType;
@@ -9,7 +8,11 @@ export interface MapObject {
   height?: number;
   rotation?: number;
   isHitbox?: boolean; // 장식용인지 여부 (false면 장식)
+  children?: any[]; // Orbiting objects
+  customData?: any; // Extra properties like orbitSpeed
+  movement?: ObstacleMovement;
 }
+
 
 export class MapGenerator {
   /**
@@ -169,31 +172,67 @@ export class MapGenerator {
       // 2. Determine Step Direction Independently for Floor and Ceiling
       let stepY = 0;
       let ceilStepY = 0;
-      const threshold = 10;
+
+      // NEW: Safety Segment Check
+      // Scan all path points in this block's X-range to find vertical peaks
+      let segMinY = Infinity;
+      let segMaxY = -Infinity;
+      for (let i = pathIdx; i <= nextPathIdx; i++) {
+        const py = path[i]!.y;
+        if (py < segMinY) segMinY = py;
+        if (py > segMaxY) segMaxY = py;
+      }
+
+      const pSize = isMini ? 7.5 : 15;
+      const genSafety = 5; // 5px extra buffer during generation
+      const floorBoundary = segMaxY + pSize + genSafety;
+      const ceilBoundary = segMinY - pSize - genSafety;
+
+      // Asymmetric Thresholds for Safety
+      // We want walls to be "lazy" when moving towards the player (Contracting)
+      // and "eager" when moving away (Expanding) to ensure safe gaps.
+      const floorContractThreshold = 35;
+      const floorExpandThreshold = 10;
+
+      const ceilContractThreshold = 35;
+      const ceilExpandThreshold = 10;
 
       // Floor stepping
       const floorDiff = targetFloorY - currentFloorY;
       if (isMini) {
         if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (floorDiff < -threshold) stepY = -blockSize;
+        else if (floorDiff < -floorContractThreshold) stepY = -blockSize; // Move UP (Contract)
         else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (floorDiff > threshold) stepY = blockSize;
+        else if (floorDiff > floorExpandThreshold) stepY = blockSize;     // Move DOWN (Expand)
       } else {
-        if (floorDiff < -threshold) stepY = -blockSize;
-        else if (floorDiff > threshold) stepY = blockSize;
+        if (floorDiff < -floorContractThreshold) stepY = -blockSize;      // Move UP (Contract)
+        else if (floorDiff > floorExpandThreshold) stepY = blockSize;     // Move DOWN (Expand)
       }
 
-      // Ceiling stepping
+      // CEILING stepping
       const ceilDiff = targetCeilY - currentCeilY;
       if (isMini) {
         if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
-        else if (ceilDiff < -threshold) ceilStepY = -blockSize;
+        else if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;    // Move UP (Expand)
         else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
-        else if (ceilDiff > threshold) ceilStepY = blockSize;
+        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;    // Move DOWN (Contract)
       } else {
-        if (ceilDiff < -threshold) ceilStepY = -blockSize;
-        else if (ceilDiff > threshold) ceilStepY = blockSize;
+        if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;         // Move UP (Expand)
+        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;    // Move DOWN (Contract)
       }
+
+      // FINAL SAFETY OVERRIDE: Prevent stepping into path
+      // If Floor wants to move UP, ensure it doesn't cross floorBoundary
+      if (stepY < 0 && currentFloorY + stepY < floorBoundary) {
+        stepY = 0; // Force stay flat
+      }
+      // If Floor wants to move DOWN, it's always safe (Expanding)
+
+      // If Ceiling wants to move DOWN, ensure it doesn't cross ceilBoundary
+      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) {
+        ceilStepY = 0; // Force stay flat
+      }
+      // If Ceiling wants to move UP, it's always safe (Expanding)
 
       // 3. Terrain Generation
       // --- FLOOR ---
@@ -325,7 +364,8 @@ export class MapGenerator {
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
-              height: spikeH
+              height: spikeH,
+              movement: this.getRandomMovement(floorType as ObstacleType, 0.25)
             });
           }
         }
@@ -338,7 +378,8 @@ export class MapGenerator {
               y: currentCeilY,
               width: blockSize,
               height: spikeH,
-              rotation: 180
+              rotation: 180,
+              movement: this.getRandomMovement(ceilType as ObstacleType, 0.25)
             });
           }
         }
@@ -372,6 +413,26 @@ export class MapGenerator {
         // Remove difficulty check for type
         const obsType = chosenFloat;
 
+        // Custom config for Planets/Stars (Satellites)
+        let children: any[] | undefined = undefined;
+        let customData: any | undefined = undefined;
+
+        if (obsType === 'planet') {
+          // Planet with moons
+          customData = { orbitSpeed: 1.5, orbitDistance: mineSize * 0.8, orbitCount: 2 };
+          children = [];
+          for (let k = 0; k < 2; k++) {
+            children.push({ type: 'planet', x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true });
+          }
+        } else if (obsType === 'star') {
+          // Star with planets
+          customData = { orbitSpeed: 1.0, orbitDistance: mineSize * 0.8, orbitCount: 3 };
+          children = [];
+          for (let k = 0; k < 3; k++) {
+            children.push({ type: 'planet', x: 0, y: 0, width: mineSize * 0.5, height: mineSize * 0.5, isHitbox: true });
+          }
+        }
+
         objects.push({
           type: obsType,
           x: currentX + 10,
@@ -379,7 +440,10 @@ export class MapGenerator {
           width: mineSize,
           height: mineSize,
           isHitbox: true,
-          rotation: obsType === 'laser_beam' ? 90 : 0
+          rotation: obsType === 'laser_beam' ? 90 : 0,
+          children,
+          customData,
+          movement: this.getRandomMovement(obsType as ObstacleType, 0.5)
         });
       }
 
@@ -461,6 +525,29 @@ export class MapGenerator {
         height: height,
         isHitbox: true
       });
+    }
+  }
+
+  private getRandomMovement(type: ObstacleType, prob: number): ObstacleMovement | undefined {
+    if (Math.random() > prob) return undefined;
+
+    const useRotate = ['saw', 'mine', 'spike_ball', 'rotor', 'cannon', 'spark_mine', 'planet', 'star'].includes(type);
+    const useUpDown = !useRotate || Math.random() < 0.3;
+
+    if (useRotate && !useUpDown) {
+      return {
+        type: 'rotate',
+        speed: 1.0 + Math.random() * 2.0,
+        range: 360,
+        phase: Math.random() * Math.PI * 2
+      };
+    } else {
+      return {
+        type: 'updown',
+        speed: 1.5 + Math.random() * 2.5,
+        range: 30 + Math.random() * 70,
+        phase: Math.random() * Math.PI * 2
+      };
     }
   }
 }

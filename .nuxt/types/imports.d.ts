@@ -221,11 +221,14 @@ declare global {
   export type { AudioAnalyzerClient } from '../../utils/audio-analyzer-client'
   import('../../utils/audio-analyzer-client')
   // @ts-ignore
-  export type { GameEngine, ObstacleType, PortalType, ObstacleMovement, Obstacle, Portal, Boss, Pattern, GameState, MapConfig, StateEvent, BeatAction } from '../../utils/game-engine'
+  export type { GameEngine, Obstacle, Portal, Boss, Pattern, GameState, MapConfig, StateEvent, BeatAction } from '../../utils/game-engine'
   import('../../utils/game-engine')
   // @ts-ignore
   export type { SmartMapGenerator, SmartGenStatus } from '../../utils/smart-map-generator'
   import('../../utils/smart-map-generator')
+  // @ts-ignore
+  export type { ObstacleType, PortalType, ObstacleMovement } from '../../utils/types'
+  import('../../utils/types')
 }
 // for vue template auto import
 import { UnwrapRef } from 'vue'
