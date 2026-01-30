@@ -1,3 +1,258 @@
+class MapGenerator {
+  /**
+   * Difficulty based gap calculation
+   * 난이도가 높을수록 좁아짐
+   */
+  calculateGap(difficulty, isMini) {
+    const baseGap = Math.max(60, 450 - difficulty * 13);
+    return isMini ? baseGap * 1.5 : baseGap;
+  }
+  /**
+   * 주어진 경로(path)를 따라 Geometry Dash Wave 스타일 맵 생성
+   * - Grid Snapped Slopes (45도 경사 연결성 보장)
+   * - Saw-filled Walls (Nine Circles)
+   * - Rhythm-synced Decorations
+   */
+  generateFromPath(path, difficulty, beatTimes, stateEvents = []) {
+    if (!path || path.length < 2) return [];
+    const objects = [];
+    const blockSize = 50;
+    const baseGapVal = this.calculateGap(difficulty, false);
+    const startX = Math.floor(path[0].x / blockSize) * blockSize;
+    const endX = path[path.length - 1].x;
+    if (isNaN(startX) || isNaN(endX) || endX <= startX) return [];
+    let currentFloorY = Math.floor((path[0].y + baseGapVal / 2) / blockSize) * blockSize;
+    let currentCeilY = Math.floor((path[0].y - baseGapVal / 2) / blockSize) * blockSize;
+    let pathIdx = 0;
+    let beatIdx = 0;
+    beatTimes.sort((a, b) => a - b);
+    let eventIdx = 0;
+    let isMini = false;
+    let currentGap = baseGapVal * (1 / 1.4);
+    for (let currentX = startX; currentX < endX; currentX += blockSize) {
+      const centerX = currentX + blockSize / 2;
+      while (pathIdx < path.length - 1 && path[pathIdx + 1].x < centerX) {
+        pathIdx++;
+      }
+      const currentPoint = path[pathIdx];
+      if (!currentPoint) continue;
+      const nextPoint = pathIdx < path.length - 1 ? path[pathIdx + 1] : currentPoint;
+      const currentTime = currentPoint.time;
+      while (eventIdx < stateEvents.length && stateEvents[eventIdx].time <= currentTime) {
+        isMini = stateEvents[eventIdx].isMini;
+        eventIdx++;
+      }
+      if (isMini) {
+        currentGap = baseGapVal * 1.3;
+      } else {
+        currentGap = baseGapVal;
+      }
+      const halfGap = currentGap / 2;
+      const nextX = currentX + blockSize;
+      let nextPathIdx = pathIdx;
+      while (nextPathIdx < path.length - 1 && path[nextPathIdx + 1].x < nextX) {
+        nextPathIdx++;
+      }
+      const np = path[nextPathIdx];
+      const targetFloorY = np.y + halfGap;
+      let stepY = 0;
+      const diff = targetFloorY - currentFloorY;
+      const threshold = 10;
+      if (isMini) {
+        if (diff < -blockSize * 1.5) stepY = -blockSize * 2;
+        else if (diff < -threshold) stepY = -blockSize;
+        else if (diff > blockSize * 1.5) stepY = blockSize * 2;
+        else if (diff > threshold) stepY = blockSize;
+      } else {
+        if (diff < -threshold) stepY = -blockSize;
+        else if (diff > threshold) stepY = blockSize;
+      }
+      if (stepY < 0) {
+        const isSteep = stepY === -blockSize * 2;
+        const slopeType = isSteep ? "steep_triangle" : "triangle";
+        const slopeHeight = Math.abs(stepY);
+        currentFloorY += stepY;
+        const blockY = currentFloorY;
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: 0
+        });
+        this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
+      } else if (stepY > 0) {
+        const isSteep = stepY === blockSize * 2;
+        const slopeType = isSteep ? "steep_triangle" : "triangle";
+        const slopeHeight = Math.abs(stepY);
+        const blockY = currentFloorY;
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: 90
+        });
+        this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
+        currentFloorY += stepY;
+      } else {
+        const blockY = currentFloorY;
+        objects.push({ type: "block", x: currentX, y: blockY, width: blockSize, height: blockSize });
+        this.fillBelow(objects, currentX, blockY + blockSize, blockSize);
+      }
+      const ceilStepY = stepY;
+      if (ceilStepY < 0) {
+        const isSteep = ceilStepY === -blockSize * 2;
+        const slopeType = isSteep ? "steep_triangle" : "triangle";
+        const slopeHeight = Math.abs(ceilStepY);
+        currentCeilY += ceilStepY;
+        const blockY = currentCeilY;
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: 180
+        });
+        this.fillAbove(objects, currentX, blockY, blockSize);
+      } else if (ceilStepY > 0) {
+        const isSteep = ceilStepY === blockSize * 2;
+        const slopeType = isSteep ? "steep_triangle" : "triangle";
+        const slopeHeight = Math.abs(ceilStepY);
+        const blockY = currentCeilY;
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: -90
+        });
+        this.fillAbove(objects, currentX, blockY, blockSize);
+        currentCeilY += ceilStepY;
+      } else {
+        const blockY = currentCeilY - blockSize;
+        objects.push({ type: "block", x: currentX, y: blockY, width: blockSize, height: blockSize });
+        this.fillAbove(objects, currentX, blockY, blockSize);
+      }
+      const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
+      if (stepY === 0 && currentGap > 100 && rand < 0.2) {
+        currentFloorY - currentPoint.y;
+        const spikeH = 40;
+        if (rand < 0.1) {
+          if (currentPoint.y < currentFloorY - spikeH - 20) {
+            objects.push({
+              type: "spike",
+              x: currentX,
+              y: currentFloorY - spikeH,
+              width: blockSize,
+              height: spikeH
+            });
+          } else if (currentPoint.y < currentFloorY - 20 - 20) {
+            objects.push({
+              type: "mini_spike",
+              x: currentX + 10,
+              y: currentFloorY - 20,
+              width: 30,
+              height: 20
+            });
+          }
+        } else {
+          if (currentPoint.y > currentCeilY + spikeH + 20) {
+            objects.push({
+              type: "spike",
+              x: currentX,
+              y: currentCeilY,
+              width: blockSize,
+              height: spikeH,
+              rotation: 180
+            });
+          } else if (currentPoint.y > currentCeilY + 20 + 20) {
+            objects.push({
+              type: "mini_spike",
+              x: currentX + 10,
+              y: currentCeilY,
+              width: 30,
+              height: 20,
+              rotation: 180
+            });
+          }
+        }
+      }
+      if (rand > 0.95 && currentGap > 200) {
+        const mineSize = 30;
+        const midY = (currentFloorY + currentCeilY) / 2;
+        let pY = midY;
+        if (currentPoint.y < midY) {
+          pY = midY + (currentFloorY - midY) * 0.5;
+        } else {
+          pY = midY - (midY - currentCeilY) * 0.5;
+        }
+        if (Math.abs(pY - currentPoint.y) > 80) {
+          objects.push({
+            type: "mine",
+            x: currentX + 10,
+            y: pY - mineSize / 2,
+            width: mineSize,
+            height: mineSize,
+            isHitbox: true
+          });
+        }
+      }
+      while (beatIdx < beatTimes.length && beatTimes[beatIdx] < currentPoint.time) {
+        beatIdx++;
+      }
+      while (beatIdx < beatTimes.length && beatTimes[beatIdx] <= nextPoint.time) {
+        beatTimes[beatIdx];
+        objects.push({
+          type: "orb",
+          x: currentX + 25,
+          // Center of block
+          y: (currentFloorY + currentCeilY) / 2 - 40,
+          // Center of tunnel
+          width: 80,
+          height: 80,
+          isHitbox: false
+        });
+        beatIdx++;
+      }
+    }
+    return objects;
+  }
+  fillBelow(objects, x, startY, size) {
+    const mapBottom = 1e3;
+    const height = mapBottom - startY;
+    if (height > 0) {
+      objects.push({
+        type: "block",
+        x,
+        y: startY,
+        width: size,
+        height,
+        isHitbox: true
+      });
+    }
+  }
+  fillAbove(objects, x, startY, size) {
+    const mapTop = -500;
+    const topY = mapTop;
+    const height = startY - mapTop;
+    if (height > 0) {
+      objects.push({
+        type: "block",
+        x,
+        y: topY,
+        width: size,
+        height,
+        isHitbox: true
+      });
+    }
+  }
+}
+
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -74,7 +329,7 @@ class GameEngine {
       this.mapConfig = { ...this.mapConfig, ...config };
     }
     this.reset();
-    this.initPatterns();
+    this.reset();
   }
   /**
    * 100개의 미리 정의된 패턴 초기화 (난이도 반영)
@@ -500,29 +755,52 @@ class GameEngine {
    * 3. 동선을 따라가다가 동선에서 벗어나면 충돌하도록 장애물 배치
    * 4. AI 경로 검증 불필요 - 동선이 이미 안전하게 설계됨
    */
-  generateMap(beatTimes, sections, duration, fixedSeed, verify = true, offsetAttempt = 0, bpm = 120, measureLength = 2) {
+  generateMap(beatTimes, sections, duration, fixedSeed, verify = true, offsetAttempt = 0, bpm = 120, measureLength = 2, volumeProfile) {
     this.bpm = bpm;
     this.measureLength = measureLength;
     const seed = fixedSeed || beatTimes.length * 777 + Math.floor(duration * 100);
-    this.initPatterns();
     this.obstacles = [];
     this.portals = [];
     this.trackDuration = duration;
-    this.totalLength = duration * this.baseSpeed + 500;
+    this.totalLength = duration * this.baseSpeed + 2e3;
     this.autoplayLog = [];
+    const generator = new MapGenerator();
+    const difficulty = this.mapConfig.difficulty;
+    console.log(`[MapGen] Procedural Generation with seed: ${seed}, Difficulty: ${difficulty}`);
     const rng = this.seededRandom(seed + offsetAttempt);
-    this.generatePathBasedMap(beatTimes, sections, rng);
+    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile);
+    const mapObjects = generator.generateFromPath(this.autoplayLog, difficulty, beatTimes, stateEvents);
+    for (const obj of mapObjects) {
+      if (["gravity_yellow", "gravity_blue", "speed_0.25", "speed_0.5", "speed_1", "speed_2", "speed_3", "speed_4", "mini_pink", "mini_green"].includes(obj.type)) {
+        this.portals.push({
+          x: obj.x,
+          y: obj.y,
+          width: obj.width || 50,
+          height: obj.height || 160,
+          type: obj.type,
+          activated: false
+        });
+      } else {
+        this.obstacles.push({
+          x: obj.x,
+          y: obj.y,
+          width: obj.width || 50,
+          height: obj.height || 50,
+          type: obj.type,
+          angle: obj.rotation || 0
+        });
+      }
+    }
     this.obstacles.sort((a, b) => a.x - b.x);
     this.portals.sort((a, b) => a.x - b.x);
-    this.removeRedundantObstacles();
-    console.log(`[MapGen] Path-based map generated with seed: ${seed}, beats: ${beatTimes.length}, obstacles: ${this.obstacles.length}, portals: ${this.portals.length}`);
+    console.log(`[MapGen] Generated ${this.obstacles.length} obstacles, ${this.portals.length} portals from path`);
   }
   /**
    * 동선 기반 맵 생성
    * 핵심: 비트에 맞춰 클릭/릴리즈를 번갈아가며 동선을 먼저 계산하고,
    * 그 동선에 맞춰 포탈과 장애물을 배치
    */
-  generatePathBasedMap(beatTimes, sections, rng) {
+  generatePathBasedMap(beatTimes, sections, rng, volumeProfile) {
     const diff = this.mapConfig.difficulty;
     this.maxY - this.minY;
     const dt = 1 / 60;
@@ -538,8 +816,23 @@ class GameEngine {
     let currentSpeedType = "speed_1";
     let currentInverted = false;
     let currentMini = false;
+    const initialEvents = [{
+      time: 0.5,
+      // 첫 비트 근처
+      speedType: "speed_1",
+      // 기본값
+      isInverted: false,
+      isMini: false
+    }];
+    if (diff >= 5) {
+      const r = rng();
+      if (r < 0.3) initialEvents[0].speedType = "speed_0.5";
+      else if (r < 0.6) initialEvents[0].speedType = "speed_2";
+    }
+    stateEvents.push(...initialEvents);
+    currentSpeedType = initialEvents[0].speedType;
     for (const measureTime of measureTimes) {
-      if (measureTime < 0.5) continue;
+      if (measureTime < 1) continue;
       const section = sections == null ? void 0 : sections.find((s) => measureTime >= s.startTime && measureTime < s.endTime);
       const intensity = (section == null ? void 0 : section.intensity) || 0.5;
       let newSpeedType;
@@ -556,11 +849,12 @@ class GameEngine {
         else newSpeedType = "speed_3";
       } else {
         const r = rng();
-        if (intensity > 0.85) newSpeedType = "speed_4";
-        else if (r < 0.2) newSpeedType = "speed_0.5";
-        else if (r < 0.35) newSpeedType = "speed_0.25";
-        else if (r < 0.6) newSpeedType = "speed_3";
-        else newSpeedType = "speed_4";
+        if (intensity > 0.8 || r < 0.15) newSpeedType = "speed_3";
+        else if (intensity > 0.9 || r < 0.25) newSpeedType = "speed_4";
+        else if (r < 0.45) newSpeedType = "speed_0.5";
+        else if (r < 0.55) newSpeedType = "speed_2";
+        else if (r < 0.7) newSpeedType = "speed_1";
+        else newSpeedType = currentSpeedType;
       }
       const gravityChance = diff >= 24 ? 0.9 : diff < 8 ? 0.25 : 0.5;
       let newInverted = currentInverted;
@@ -588,25 +882,40 @@ class GameEngine {
     }
     const beatActions = [];
     const sortedBeats = [...beatTimes].filter((t) => t >= 0.3).sort((a, b) => a - b);
-    let minBeatInterval = 0.5;
-    for (let i = 1; i < sortedBeats.length; i++) {
-      const interval = sortedBeats[i] - sortedBeats[i - 1];
-      if (interval > 0.05 && interval < minBeatInterval) {
-        minBeatInterval = interval;
-      }
-    }
+    let isHolding = false;
+    const fastThreshold = 0.25;
     for (let i = 0; i < sortedBeats.length; i++) {
       const beatTime = sortedBeats[i];
-      const nextBeat = i + 1 < sortedBeats.length ? sortedBeats[i + 1] : beatTime + minBeatInterval;
-      const beatDuration = Math.min(nextBeat - beatTime, minBeatInterval * 2);
-      const currentEvent = [...stateEvents].reverse().find((e) => e.time <= beatTime);
-      const dynamicHoldRatio = (currentEvent == null ? void 0 : currentEvent.isMini) ? 0.32 : 0.6;
-      beatActions.push({ time: beatTime, action: "click" });
-      const releaseTime = beatTime + beatDuration * dynamicHoldRatio;
-      if (releaseTime < nextBeat - 0.03) {
-        beatActions.push({ time: releaseTime, action: "release" });
+      const nextBeatTime = i + 1 < sortedBeats.length ? sortedBeats[i + 1] : beatTime + 1;
+      const interval = nextBeatTime - beatTime;
+      if (interval < fastThreshold) {
+        beatActions.push({ time: beatTime, action: isHolding ? "release" : "click" });
+        isHolding = !isHolding;
+      } else {
+        if (isHolding) {
+          beatActions.push({ time: beatTime, action: "click" });
+          beatActions.push({ time: beatTime + interval * 0.5, action: "release" });
+          isHolding = false;
+        } else {
+          beatActions.push({ time: beatTime, action: "click" });
+          beatActions.push({ time: beatTime + interval * 0.5, action: "release" });
+          isHolding = false;
+        }
       }
     }
+    beatActions.sort((a, b) => a.time - b.time);
+    const cleanedActions = [];
+    for (const act of beatActions) {
+      if (cleanedActions.length > 0) {
+        const last = cleanedActions[cleanedActions.length - 1];
+        if (act.time - last.time < 0.01) {
+          cleanedActions.pop();
+        }
+      }
+      cleanedActions.push(act);
+    }
+    beatActions.length = 0;
+    beatActions.push(...cleanedActions);
     beatActions.sort((a, b) => a.time - b.time);
     const dedupedActions = [];
     for (const action of beatActions) {
@@ -651,7 +960,7 @@ class GameEngine {
         vy = simHolding ? -1 : 1;
       }
       simY += amp * vy * dt;
-      const margin = 30;
+      const margin = 70;
       if (simY < this.minY + margin) simY = this.minY + margin;
       if (simY > this.maxY - margin) simY = this.maxY - margin;
       simX += spd * dt;
@@ -685,14 +994,13 @@ class GameEngine {
         this.generatePathAlignedPortals(pathPoint.x, pathPoint.y, portalTypes);
       }
     }
-    this.placeObstaclesForPath(beatActions, stateEvents, rng, diff);
   }
   /**
    * 동선에 맞춰 포탈 배치 (정상 크기, 경로 사이에 배치)
    */
   generatePathAlignedPortals(xPos, pathY, types) {
     const portalWidth = 50;
-    const portalHeight = 80;
+    const portalHeight = 160;
     const horizontalSpacing = 60;
     types.forEach((type, horizontalIndex) => {
       const currentX = xPos + horizontalIndex * (portalWidth + horizontalSpacing);
@@ -705,7 +1013,7 @@ class GameEngine {
         type,
         activated: false
       });
-      const topWallHeight = portalY - this.minY - 15;
+      const topWallHeight = portalY - this.minY - 30;
       if (topWallHeight > 20) {
         this.obstacles.push({
           x: currentX - 5,
@@ -716,7 +1024,7 @@ class GameEngine {
           initialY: this.minY
         });
       }
-      const bottomWallStart = portalY + portalHeight + 15;
+      const bottomWallStart = portalY + portalHeight + 30;
       const bottomWallHeight = this.maxY - bottomWallStart;
       if (bottomWallHeight > 20) {
         this.obstacles.push({
@@ -822,8 +1130,11 @@ class GameEngine {
         this.placeRapidBlocks(x, pathY, safeMargin, 3, rng);
       }
     }
-    console.log(`[MapGen] Placed ${this.obstacles.length} obstacles (Mini sections handled with 60\xB0 tilted blocks)`);
   }
+  // Override or Disable internal obstacle placement in generatePathBasedMap
+  // Actually, generatePathBasedMap is called BY generateMap.
+  // We can just comment out the call to placeObstaclesForPath inside generatePathBasedMap.
+  // But wait, generatePathBasedMap definition is below. Let's find where it calls placeObstaclesForPath.
   /**
    * 블록 벽 배치 (위/아래)
    */
@@ -1307,8 +1618,8 @@ class GameEngine {
       const curr = stack.pop();
       if (curr.x > maxX) {
         maxX = curr.x;
-        if (loops % 500 === 0) yield maxX / this.totalLength;
       }
+      if (loops % 1e3 === 0) yield maxX / this.totalLength;
       if (curr.x >= this.totalLength) {
         bestState = curr;
         break;
@@ -1783,8 +2094,13 @@ class GameEngine {
         return { top: obsY, bottom: hypotenuseY };
       } else {
         const hypotenuseY = obsY + obs.height * t;
-        return { top: hypotenuseY, bottom: obsY + obs.height };
+        return { top: obsY, bottom: hypotenuseY };
       }
+    }
+    if (obs.type === "triangle" || obs.type === "steep_triangle") {
+      const t = (x - obs.x) / obs.width;
+      const hypotenuseY = obsY + obs.height * (1 - t);
+      return { top: hypotenuseY, bottom: obsY + obs.height };
     }
     return { top: obsY, bottom: obsY + obs.height };
   }
@@ -1857,6 +2173,17 @@ class GameEngine {
           { x: effectiveX + effectiveWidth, y: effectiveY }
         ];
       }
+      for (const p of points) {
+        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+      }
+      return false;
+    }
+    if (obs.type === "triangle" || obs.type === "steep_triangle") {
+      const tri = [
+        { x: effectiveX, y: effectiveY + effectiveHeight },
+        { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight },
+        { x: effectiveX + effectiveWidth, y: effectiveY }
+      ];
       for (const p of points) {
         if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
       }
@@ -2015,6 +2342,16 @@ class GameEngine {
         x: cx + p.dx * cos - p.dy * sin,
         y: cy + p.dx * sin + p.dy * cos
       }));
+    }
+    if (obs.type === "triangle" || obs.type === "steep_triangle") {
+      return [
+        { x: obs.x, y: obs.y + obs.height },
+        // BL
+        { x: obs.x + obs.width, y: obs.y + obs.height },
+        // BR
+        { x: obs.x + obs.width, y: obs.y }
+        // TR
+      ];
     }
     return [
       { x: obs.x, y: obs.y },

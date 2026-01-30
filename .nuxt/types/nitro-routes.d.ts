@@ -36,17 +36,29 @@ declare module "nitropack/types" {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/index.get').default>>>>
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/index.post').default>>>>
     }
-    '/api/matchmaking/clear': {
-      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/clear.post').default>>>>
+    '/api/rooms/:id/start': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/start.post').default>>>>
     }
-    '/api/matchmaking/find': {
-      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/find.post').default>>>>
+    '/api/rooms/:id/status': {
+      'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/status.get').default>>>>
     }
-    '/api/matchmaking/next-map': {
-      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/next-map.post').default>>>>
+    '/api/rooms/:id/update': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/update.post').default>>>>
     }
-    '/api/matchmaking/status': {
-      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/matchmaking/status.post').default>>>>
+    '/api/rooms/clear': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/clear.post').default>>>>
+    }
+    '/api/rooms/create': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/create.post').default>>>>
+    }
+    '/api/rooms': {
+      'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/index.get').default>>>>
+    }
+    '/api/rooms/join': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/join.post').default>>>>
+    }
+    '/api/rooms/next-map': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/next-map.post').default>>>>
     }
     '/api/samples': {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/samples.get').default>>>>

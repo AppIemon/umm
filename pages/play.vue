@@ -59,7 +59,28 @@
       </div>
 
       
-      <button class="help-btn" @click="showGuide = true">?</button>
+
+    </div>
+
+    <!-- Smart Gen Mode UI -->
+    <div v-if="step === 'smart_gen'" class="setup-container">
+       <div class="processing-overlay">
+         <div class="loader-content">
+            <div class="wave-loader">✨</div>
+            <h2>SMART GENERATION</h2>
+            <div class="progress-bar">
+               <div class="fill" :style="{ width: smartGenProgress + '%' }"></div>
+            </div>
+            <p class="status-text">{{ smartGenStatus ? smartGenStatus.toUpperCase().replace('_', ' ') : 'PREPARING...' }} ({{ smartGenProgress }}%)</p>
+            
+            <div class="smart-gen-logs">
+               <div v-for="(log, i) in smartGenLogsDisplay" :key="i" class="log-entry">{{ log }}</div>
+            </div>
+
+            <!-- Visualization of the BOT playing? -->
+            <!-- We could render the GameCanvas in background but it might be confusing if simulation is fast. -->
+         </div>
+       </div>
     </div>
 
     <!-- Step 2: Game -->
@@ -138,9 +159,21 @@ definePageMeta({
   layout: 'game'
 });
 
-const step = ref<'upload' | 'play'>('upload');
+const step = ref<'upload' | 'play' | 'smart_gen'>('upload');
 const selectedSong = ref<File | null>(null);
 const { analyzeAudio } = useAudioAnalyzer();
+
+// Smart Gen
+import { SmartMapGenerator } from '@/utils/smart-map-generator';
+const showSmartGenUI = ref(false);
+const smartGenLog = ref<string[]>([]);
+const smartGenProgress = ref(0);
+const smartGenStatus = ref('');
+const smartGenEngine = ref<GameEngine | null>(null);
+
+const smartGenLogsDisplay = computed(() => {
+  return smartGenLog.value.slice(-6); // Show last 6 lines
+});
 
 // Game Data
 const audioBuffer = ref<AudioBuffer | null>(null);
@@ -158,13 +191,14 @@ const route = useRoute();
 
 // Modes
 const showModeSelect = ref(false);
+const hasSavedCurrentMap = ref(false);
 const showMapPreview = ref(false); // Debug Modal State
 const isPractice = ref(false);
 const isTutorial = ref(false);
 const isFirstTime = ref(false);
 
 // Difficulty
-const difficulty = ref(10);
+const difficulty = ref(1);
 
 const difficultyName = computed(() => {
   if (difficulty.value < 8) return 'EASY';
@@ -180,13 +214,11 @@ const getDifficultyColor = (d: number) => {
   return '#ff0000';
 };
 
-// 난이도별 최대 노래 길이 (초)
-// EASY는 짧게, 높은 난이도로 갈수록 더 긴 곡
-const getMaxDuration = (d: number): number => {
-  if (d < 8) return 30;      // EASY: 30초
-  if (d < 16) return 60;     // NORMAL: 60초  
-  if (d < 24) return 90;     // HARD: 90초
-  return Infinity;            // IMPOSSIBLE: 전체 노래
+// 노래 길이에 따른 난이도 보정 (짧은 노래는 더 빡빡하게)
+const getLengthDifficultyBonus = (duration: number): number => {
+  if (duration >= 60) return 0;
+  // 60초 미만인 경우 최대 +5 난이도 보너스 (10초일 때 +5)
+  return Math.max(0, (60 - duration) / 10);
 };
 
 
@@ -198,36 +230,47 @@ const generateTutorialMap = () => {
   // Custom simple obstacles
   const tutorialObstacles: any[] = [];
   const tutorialPortals: any[] = [];
+  const tutorialMessages: { progress: number, text: string }[] = [
+    { progress: 0, text: "HOLD to go UP ↗" },
+    { progress: 5, text: "RELEASE to go DOWN ↘" },
+    { progress: 12, text: "DODGE obstacles!" },
+    { progress: 25, text: "PASS through portals to switch gravity!" },
+    { progress: 45, text: "Use MINI mode for tight spaces" }
+  ];
   
-  // Section 1: Basic Input (0-10s)
-  tutorialObstacles.push({ x: 800, y: 500, width: 60, height: 60, type: 'spike', initialY: 500 }); // Jump over
-  tutorialObstacles.push({ x: 1200, y: 450, width: 40, height: 40, type: 'mini_spike', initialY: 450 });
+  // Section 1: Basic Input (0-15s) - More open space
+  // Just enough space to get used to movement
   
-  // Section 2: Gravity Inversion (15s)
-  // 기둥 형태의 포탈로 변경
-  tutorialPortals.push({ x: 1800, y: 150, width: 64, height: 600, type: 'gravity_yellow', activated: false });
-  tutorialObstacles.push({ x: 2300, y: 150, width: 60, height: 60, type: 'block', initialY: 150 }); 
-  tutorialPortals.push({ x: 2800, y: 150, width: 64, height: 600, type: 'gravity_blue', activated: false });
+  // Section 2: Simple Obstacles (15s+)
+  tutorialObstacles.push({ x: 2500, y: 500, width: 80, height: 80, type: 'spike', initialY: 500 }); // Low
+  tutorialObstacles.push({ x: 3500, y: 150, width: 80, height: 80, type: 'spike', initialY: 150 }); // High
   
-  // Section 3: Speed Change (30s)
-  tutorialPortals.push({ x: 3800, y: 150, width: 64, height: 600, type: 'speed_2', activated: false });
-  tutorialObstacles.push({ x: 4400, y: 360, width: 50, height: 50, type: 'spike_ball', initialY: 360 });
-  tutorialPortals.push({ x: 5000, y: 150, width: 64, height: 600, type: 'speed_1', activated: false });
+  // Section 3: Gravity (30s)
+  tutorialPortals.push({ x: 5000, y: 150, width: 80, height: 430, type: 'gravity_yellow', activated: false });
+  tutorialObstacles.push({ x: 5800, y: 150, width: 80, height: 80, type: 'block', initialY: 150 }); 
+  tutorialPortals.push({ x: 6800, y: 150, width: 80, height: 430, type: 'gravity_blue', activated: false });
+  
+  // Section 4: Mini Mode (45s)
+  tutorialPortals.push({ x: 8500, y: 150, width: 80, height: 430, type: 'mini_pink', activated: false });
+  tutorialObstacles.push({ x: 9500, y: 340, width: 60, height: 40, type: 'block', initialY: 340 });
+  tutorialObstacles.push({ x: 9500, y: 420, width: 60, height: 40, type: 'block', initialY: 420 }); // Tight gap
+  tutorialPortals.push({ x: 10500, y: 150, width: 80, height: 430, type: 'mini_green', activated: false });
 
   return {
     title: 'TUTORIAL_MODE',
     difficulty: 1,
-    seed: 9999, // Fixed seed
+    seed: 9999,
     engineObstacles: tutorialObstacles,
     enginePortals: tutorialPortals,
     autoplayLog: [], 
-    duration: tutorialDuration,
+    duration: 60, // Long enough to learn
     beatTimes: tutorialBeats,
     sections: [],
     bpm: 80,
     measureLength: 3,
     audioData: null,
-    isTutorial: true
+    isTutorial: true,
+    messages: tutorialMessages
   };
 };
 
@@ -309,6 +352,7 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
      return;
   }
 
+  /* handleSongSelect */
   const file = input as File;
   selectedSong.value = file;
   isAnalyzing.value = true;
@@ -318,9 +362,13 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     
-    // 1. Audio Analysis
+    // 1. SONG ANALYSIS
+    analysisProgress.value = { step: 'SONG ANALYSIS', percent: 0 };
     const result = await analyzeAudio(file, difficulty.value, (p) => {
-      analysisProgress.value = p;
+      analysisProgress.value = { 
+        step: 'SONG ANALYSIS', 
+        percent: p.percent 
+      };
       if (p.percent > 5) {
         const elapsed = (Date.now() - startTime.value) / 1000;
         const totalEstimated = elapsed / (p.percent / 100);
@@ -332,40 +380,64 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
     obstacles.value = result.obstacles;
     sections.value = result.sections;
 
-    // 난이도별 노래 길이 제한 적용
-    const maxDuration = getMaxDuration(difficulty.value);
-    const effectiveDuration = Math.min(result.duration, maxDuration);
-    
-    // 제한된 시간 내의 비트/섹션만 사용
-    const filteredBeatTimes = result.obstacles.filter(t => t <= effectiveDuration);
-    const filteredSections = result.sections.filter(s => s.start <= effectiveDuration);
+    // 10초 미만 노래 제한
+    if (result.duration < 10) {
+      alert("10초 이상의 노래만 선택 가능합니다. (현재: " + result.duration.toFixed(1) + "초)");
+      isAnalyzing.value = false;
+      return;
+    }
 
-    // 2. Map Generation & Validation
-    const tempEngine = new GameEngine({ difficulty: difficulty.value, density: 1.0, portalFrequency: 0.15 });
+    // 노래 전체 재생 (Infinity나 다름없음)
+    const effectiveDuration = result.duration;
     
-    // Seed를 고유하게 생성 (시간 + 랜덤)
+    const filteredBeatTimes = result.obstacles;
+    const filteredSections = result.sections;
+
+    // 난이도 보정 (노래가 짧으면 기본 난이도에 보너스 추가)
+    const bonus = getLengthDifficultyBonus(effectiveDuration);
+    const adjustedDifficulty = Math.min(30, difficulty.value + bonus);
+    
+    if (bonus > 0.5) {
+      console.log(`[Difficulty] Short song detected. Adjusted difficulty: ${difficulty.value} -> ${adjustedDifficulty.toFixed(2)}`);
+    }
+
+    // 2. MOVEMENT PATH GENERATION & ADJUSTMENT
+    const tempEngine = new GameEngine({ difficulty: adjustedDifficulty, density: 1.0, portalFrequency: 0.15 });
+    
     const uniqueSeed = Date.now() + Math.floor(Math.random() * 1000000);
     
     let success = false;
     for (let i = 0; ; i++) {
-      const stepMsg = i === 0 ? 'AI가 맵을 분석하고 있습니다...' : `맵 보정 중... (${i + 1}회차)`;
-      analysisProgress.value = { step: stepMsg, percent: 0 };
+      // Step Update
+      const stepName = i === 0 ? 'MOVEMENT PATH GENERATION' : 'MOVEMENT PATH ADJUSTMENT';
+      analysisProgress.value = { step: stepName, percent: (i % 10) * 10 }; // Fake pulse for retry
       
-      // 맵 생성 (제한된 duration과 필터링된 beatTimes 사용)
+      // Delay for visibility on first run
+      if (i === 0) await new Promise(r => setTimeout(r, 600));
+
       tempEngine.generateMap(filteredBeatTimes, filteredSections, effectiveDuration, uniqueSeed + i, false, i, result.bpm, result.measureLength, result.volumeProfile);
       
-      // 비동기 검증 (프로그레스 바 업데이트)
+      // Validation
       success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
         analysisProgress.value.percent = Math.floor(p * 100);
       });
       
       if (success) {
-        analysisProgress.value.step = '맵 저장 중...';
-        validationFailure.value = null; // 성공 시 리셋
+        // 3. MAP GENERATION (Visual Step)
+        analysisProgress.value = { step: 'MAP GENERATION', percent: 100 };
+        await new Promise(r => setTimeout(r, 500));
+
+        // 4. MAP ADJUSTMENT (Visual Step)
+        analysisProgress.value = { step: 'MAP ADJUSTMENT', percent: 100 };
+        await new Promise(r => setTimeout(r, 500));
+
+        // 5. MAP SAVING
+        analysisProgress.value = { step: 'MAP SAVING', percent: 100 };
+        validationFailure.value = null;
         break; 
       }
       
-      // 실패 시 정보 저장 및 시각화
+      // Failure Handling
       if (tempEngine.validationFailureInfo) {
         validationFailure.value = {
           x: Math.floor(tempEngine.validationFailureInfo.x),
@@ -374,11 +446,20 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         };
         nextTick(() => drawFailurePreview());
       }
+      
+      // Explicit yield to event loop to prevent UI freeze during sync generateMap
+      await new Promise(r => setTimeout(r, 10));
 
-      if (i > 5000) break; 
+      if (i > 2500) { 
+          console.warn("Max retries reached.");
+          break; 
+      }
     }
 
     if (success) {
+      // 5. MAP SAVING (Continue)
+      await new Promise(r => setTimeout(r, 500));
+      
       loadedMapData.value = {
         title: file.name.substring(0, 100),
         difficulty: difficulty.value,
@@ -391,16 +472,13 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
         sections: filteredSections,
         bpm: result.bpm,
         measureLength: result.measureLength,
-        audioData: null // We'll fill this if we save to storage
+        audioData: null
       };
 
-      // --- AUTO-SAVE TO SERVER "MY MAPS" ---
       await handleMapReady(loadedMapData.value);
-      
-      // Save to local recent storage (AFTER getting ID)
       saveToRecentStorage(loadedMapData.value);
 
-      analysisProgress.value.step = '준비 완료!';
+      analysisProgress.value.step = 'COMPLETED';
       
     } else {
       throw new Error("지나갈 수 있는 맵을 생성하지 못했습니다. 다시 시도해 주세요.");
@@ -455,7 +533,52 @@ const handleExit = () => {
   }
 };
 
-const hasSavedCurrentMap = ref(false);
+const startSmartGenMode = async (arrayBuffer: ArrayBuffer, mapData: any) => {
+  step.value = 'smart_gen';
+  showSmartGenUI.value = true;
+  smartGenLog.value = [];
+  
+  // Prepare Engine
+  const genEngine = new GameEngine();
+  smartGenEngine.value = genEngine;
+  
+  const generator = new SmartMapGenerator(genEngine);
+  
+  // Log syncing
+  const interval = setInterval(() => {
+    smartGenLog.value = [...generator.log];
+    smartGenProgress.value = generator.progress;
+    smartGenStatus.value = generator.status;
+  }, 100);
+
+  const success = await generator.generate(arrayBuffer, mapData);
+  clearInterval(interval);
+  
+  if (success) {
+     // Save result to loadedMapData
+     loadedMapData.value = {
+        ...mapData,
+        engineObstacles: genEngine.obstacles,
+        enginePortals: genEngine.portals,
+        autoplayLog: genEngine.autoplayLog
+     };
+     
+     // Transition to Play Mode after a delay
+     setTimeout(() => {
+        showSmartGenUI.value = false;
+        step.value = 'play';
+        // Auto-save result back to editor session just in case they go back
+        sessionStorage.setItem('umm_edit_map', JSON.stringify(loadedMapData.value));
+     }, 1500);
+  } else {
+     alert("Generation failed to reach target accuracy.");
+     showSmartGenUI.value = false;
+     step.value = 'upload'; // Go back
+  }
+};
+
+
+
 
 const drawFailurePreview = () => {
   if (!failCanvas.value || !validationFailure.value) return;
@@ -569,10 +692,10 @@ const handleMapReady = async (mapData: any) => {
       body.audioChunks = [];
     }
 
-    const saved = await $fetch('/api/maps', {
+    const saved = await $fetch<any>('/api/maps', {
       method: 'POST',
       body
-    }) as any;
+    });
     
     hasSavedCurrentMap.value = true;
     console.log(`[Database] Map successfully saved. ID: ${saved._id}`);
@@ -659,11 +782,18 @@ const handleMapOnlyStart = async (targetMap: any) => {
   const buffer = audioCtx.createBuffer(1, Math.max(1, audioCtx.sampleRate * (targetMap.duration || 10)), audioCtx.sampleRate);
   audioBuffer.value = buffer;
   
-  // 모드 선택 화면 표시
-  showModeSelect.value = true;
+  // Check for tutorial flag from editor
+  const isTutorialSession = sessionStorage.getItem('umm_is_tutorial') === 'true';
+  if (isTutorialSession) {
+    sessionStorage.removeItem('umm_is_tutorial');
+    selectMode('tutorial');
+  } else {
+    // 모드 선택 화면 표시
+    showModeSelect.value = true;
+  }
 };
 
-const initFromQuery = async () => {
+async function initFromQuery() {
   // Check if guide should be shown (first time user)
   const hasSeenGuide = localStorage.getItem('umm_guide_seen');
   if (!hasSeenGuide) {
@@ -673,46 +803,59 @@ const initFromQuery = async () => {
 
   // 1. Check for map data passed from Maps tab (sessionStorage)
   const sessionMap = sessionStorage.getItem('umm_load_map');
+  const isSmartGenSession = sessionStorage.getItem('umm_smart_gen') === 'true';
+  
   if (sessionMap) {
     try {
       const targetMap = JSON.parse(sessionMap);
-      sessionStorage.removeItem('umm_load_map'); // Use once
       
+      sessionStorage.removeItem('umm_load_map'); 
+      if (isSmartGenSession) sessionStorage.removeItem('umm_smart_gen'); // Consume flag
+
       loadedMapData.value = targetMap;
       obstacles.value = targetMap.beatTimes;
       sections.value = targetMap.sections;
       difficulty.value = targetMap.difficulty;
 
-      if (targetMap.audioData) {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const res = await fetch(targetMap.audioData);
-        const arrayBuffer = await res.arrayBuffer();
-        audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-        showModeSelect.value = true;
-        return;
-      } else if (targetMap.audioUrl) {
-         // audioUrl만 있는 경우 - 오디오 로드 시도
-         console.log("Map session data found with audioUrl. Trying to load...");
+      if (targetMap.audioData || targetMap.audioUrl) {
+         // Load Audio Logic (Shared)
          try {
-           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-           const res = await fetch(targetMap.audioUrl);
-           if (res.ok) {
-             const arrayBuffer = await res.arrayBuffer();
-             audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-             showModeSelect.value = true;
-             return;
-           }
-         } catch (e) {
-           console.warn("Failed to load audioUrl, falling back to silent", e);
-         }
-         // 실패 시 무음 버퍼로 폴백
-         await handleMapOnlyStart(targetMap);
-         return;
-      } else {
-         // audioData도 audioUrl도 없는 경우 - 무음 버퍼로 시작
-         await handleMapOnlyStart(targetMap);
-         return;
+             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+             const audioCtx = new AudioContext();
+             let ab: ArrayBuffer | null = null;
+             
+             if (targetMap.audioData) {
+                 const res = await fetch(targetMap.audioData);
+                 ab = await res.arrayBuffer();
+             } else if (targetMap.audioUrl) {
+                 const res = await fetch(targetMap.audioUrl);
+                 if (res.ok) ab = await res.arrayBuffer();
+             }
+             
+             if (ab) {
+                 audioBuffer.value = await audioCtx.decodeAudioData(ab);
+                 
+                 if (isSmartGenSession) {
+                    startSmartGenMode(ab, targetMap);
+                    return;
+                 } else {
+                    showModeSelect.value = true;
+                    return;
+                 }
+             }
+          } catch (err) {
+            console.error("Audio load error", err);
+          }
       }
+      
+      // Fallback
+      if (isSmartGenSession) {
+          alert("Smart Gen requires audio!");
+          step.value = 'upload';
+      } else {
+          await handleMapOnlyStart(targetMap);
+      }
+      return;
     } catch (e) {
       console.error("Failed to parse session map:", e);
     }
@@ -772,7 +915,8 @@ const initFromQuery = async () => {
          }
 
          if (loadedAudio) {
-             const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+             const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+             const audioCtx = new AudioContext();
              audioBuffer.value = await audioCtx.decodeAudioData(loadedAudio);
              showModeSelect.value = true;
          } else {
@@ -794,7 +938,7 @@ const initFromQuery = async () => {
   } finally {
     isAnalyzing.value = false;
   }
-};
+}
 
 onMounted(initFromQuery);
 
@@ -1211,30 +1355,7 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
   border: 1px solid #333;
 }
 
-.help-btn {
-  position: absolute;
-  top: 2rem;
-  right: 2rem;
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 1.2rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
-.help-btn:hover {
-  border-color: #00ffff;
-  color: #00ffff;
-  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
-  transform: rotate(15deg);
-}
 
 .fail-details {
   color: #666;
@@ -1275,4 +1396,6 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
   color: #00ffff;
   background: rgba(0, 255, 255, 0.1);
 }
+
+@import '@/assets/css/play_smart_gen.css';
 </style>

@@ -156,5 +156,6 @@ mapSchema.index({ likes: -1 })
 mapSchema.index({ createdAt: -1 })
 mapSchema.index({ difficulty: 1 })
 mapSchema.index({ rating: -1 })
+mapSchema.index({ isShared: 1, createdAt: -1 })
 
 export const GameMap = mongoose.models.GameMap || mongoose.model<IMap>('GameMap', mapSchema)

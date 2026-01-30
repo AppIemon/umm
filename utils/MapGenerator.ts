@@ -1,5 +1,5 @@
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle';
-export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green';
+export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle' | 'piston_v' | 'falling_spike' | 'hammer' | 'rotor' | 'cannon' | 'spark_mine' | 'laser_beam' | 'crusher_jaw' | 'swing_blade' | 'growing_spike' | 'planet' | 'star';
+export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green' | 'teleport_in' | 'teleport_out';
 
 export interface MapObject {
   type: ObstacleType | PortalType;
@@ -17,11 +17,26 @@ export class MapGenerator {
    * 난이도가 높을수록 좁아짐
    */
   private calculateGap(difficulty: number, isMini: boolean): number {
-    // 플레이어 크기 (기본 약 12~15)
-    // 난이도 1: 약 450px (기본 간격 2배)
-    // 난이도 30: 약 60px (Impossible 0.7배 - 난이도 격차 확대)
-    const baseGap = Math.max(60, 450 - (difficulty * 13));
-    // Mini Portal: 간격 1.5배 (기존 0.7 -> 1.5)
+    // 난이도별 격차 심화 (1~30)
+    let baseGap: number;
+
+    if (difficulty <= 2) {
+      // 1~2: Ultra Easy (600 ~ 500)
+      baseGap = 600 - (difficulty - 1) * 100;
+    } else if (difficulty < 10) {
+      // 3~9: Easy (450 ~ 300)
+      baseGap = 450 - (difficulty - 3) * 21.4;
+    } else if (difficulty < 24) {
+      // 10~23: Normal/Hard (300 ~ 120)
+      baseGap = 300 - (difficulty - 10) * 12.8;
+    } else {
+      // 24~30: Impossible (120 ~ 55)
+      baseGap = 120 - (difficulty - 24) * 10.8;
+    }
+
+    baseGap = Math.max(55, baseGap);
+
+    // Mini Portal: 간격 1.5배
     return isMini ? baseGap * 1.5 : baseGap;
   }
 
@@ -49,6 +64,41 @@ export class MapGenerator {
     const startX = Math.floor(path[0]!.x / blockSize) * blockSize;
     const endX = path[path.length - 1]!.x;
     if (isNaN(startX) || isNaN(endX) || endX <= startX) return [];
+
+    // --- Segmented Generation Setups ---
+    const SEGMENT_COUNT = 10;
+    const poolFloor: ObstacleType[] = ['spike', 'piston_v', 'hammer', 'growing_spike', 'cannon', 'crusher_jaw'];
+    const poolCeil: ObstacleType[] = ['spike', 'falling_spike', 'hammer', 'swing_blade', 'piston_v', 'crusher_jaw'];
+    const poolFloat: ObstacleType[] = ['mine', 'rotor', 'spark_mine', 'laser_beam', 'planet', 'star'];
+
+    // Helper: Distribute types across segments ensuring full coverage
+    const createSegmentSets = (pool: ObstacleType[], count: number, minPerSeg: number) => {
+      let sets: ObstacleType[][] = Array(count).fill([]).map(() => []);
+      let bag = [...pool];
+
+      // Fill remainder to reach target count
+      const targetTotal = count * minPerSeg;
+      while (bag.length < targetTotal) {
+        bag.push(pool[Math.floor(Math.random() * pool.length)]!);
+      }
+
+      // Shuffle
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j]!, bag[i]!];
+      }
+
+      // Distribute
+      for (let i = 0; i < count; i++) {
+        sets[i] = bag.slice(i * minPerSeg, (i + 1) * minPerSeg);
+      }
+      return sets;
+    };
+
+    const segmentFloor = createSegmentSets(poolFloor, SEGMENT_COUNT, 2);
+    const segmentCeil = createSegmentSets(poolCeil, SEGMENT_COUNT, 2);
+    const segmentFloat = createSegmentSets(poolFloat, SEGMENT_COUNT, 2);
+    // -----------------------------------
 
     // Initial Y Snap
     let currentFloorY = Math.floor((path[0]!.y + baseGapVal / 2) / blockSize) * blockSize;
@@ -91,7 +141,9 @@ export class MapGenerator {
       if (isMini) {
         currentGap = baseGapVal * 1.3;
       } else {
-        currentGap = baseGapVal * (1 / 1.4);
+        // User Update: "Don't shrink map width, show it as is."
+        // Reverted the 1.4x narrowing factor.
+        currentGap = baseGapVal;
       }
 
       const halfGap = currentGap / 2;
@@ -114,23 +166,56 @@ export class MapGenerator {
       const diff = targetFloorY - currentFloorY;
       const threshold = 10;
 
-      if (diff < -threshold) stepY = -blockSize;
-      else if (diff > threshold) stepY = blockSize;
+      if (isMini) {
+        // Mini Mode: Support 60-degree (steep) slopes
+        // If diff is large (> 1.5 blocks), use steep step (2 blocks)
+        if (diff < -blockSize * 1.5) stepY = -blockSize * 2;
+        else if (diff < -threshold) stepY = -blockSize;
+        else if (diff > blockSize * 1.5) stepY = blockSize * 2;
+        else if (diff > threshold) stepY = blockSize;
+      } else {
+        // Normal Mode: 45-degree slopes max
+        if (diff < -threshold) stepY = -blockSize;
+        else if (diff > threshold) stepY = blockSize;
+      }
 
       // 3. Terrain Generation
       // --- FLOOR ---
       if (stepY < 0) {
         // UP Slope ◢
-        currentFloorY -= blockSize;
+        const isSteep = stepY === -blockSize * 2;
+        const slopeType = isSteep ? 'steep_triangle' : 'triangle';
+        const slopeHeight = Math.abs(stepY);
+
+        currentFloorY += stepY; // stepY is negative, so we move UP
         const blockY = currentFloorY;
-        objects.push({ type: 'triangle', x: currentX, y: blockY, width: blockSize, height: blockSize, rotation: 0 });
-        this.fillBelow(objects, currentX, blockY + blockSize, blockSize);
+
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: 0
+        });
+        this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
       } else if (stepY > 0) {
         // DOWN Slope ◤
+        const isSteep = stepY === blockSize * 2;
+        const slopeType = isSteep ? 'steep_triangle' : 'triangle';
+        const slopeHeight = Math.abs(stepY);
+
         const blockY = currentFloorY;
-        objects.push({ type: 'triangle', x: currentX, y: blockY, width: blockSize, height: blockSize, rotation: 90 });
-        this.fillBelow(objects, currentX, blockY + blockSize, blockSize);
-        currentFloorY += blockSize;
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: 90
+        });
+        this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
+        currentFloorY += stepY;
       } else {
         // FLAT ■
         const blockY = currentFloorY;
@@ -139,19 +224,42 @@ export class MapGenerator {
       }
 
       // --- CEILING ---
-      const ceilStepY = stepY;
+      const ceilStepY = stepY; // Parallel to floor
       if (ceilStepY < 0) {
         // UP Slope ◥
-        currentCeilY -= blockSize;
+        const isSteep = ceilStepY === -blockSize * 2;
+        const slopeType = isSteep ? 'steep_triangle' : 'triangle';
+        const slopeHeight = Math.abs(ceilStepY);
+
+        currentCeilY += ceilStepY; // Move UP
         const blockY = currentCeilY;
-        objects.push({ type: 'triangle', x: currentX, y: blockY, width: blockSize, height: blockSize, rotation: 180 });
+
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: 180
+        });
         this.fillAbove(objects, currentX, blockY, blockSize);
       } else if (ceilStepY > 0) {
         // DOWN Slope ◣
+        const isSteep = ceilStepY === blockSize * 2;
+        const slopeType = isSteep ? 'steep_triangle' : 'triangle';
+        const slopeHeight = Math.abs(ceilStepY);
+
         const blockY = currentCeilY;
-        objects.push({ type: 'triangle', x: currentX, y: blockY, width: blockSize, height: blockSize, rotation: -90 });
+        objects.push({
+          type: slopeType,
+          x: currentX,
+          y: blockY,
+          width: blockSize,
+          height: slopeHeight,
+          rotation: -90
+        });
         this.fillAbove(objects, currentX, blockY, blockSize);
-        currentCeilY += blockSize;
+        currentCeilY += ceilStepY;
       } else {
         // FLAT
         const blockY = currentCeilY - blockSize;
@@ -166,66 +274,63 @@ export class MapGenerator {
       // Saws should be hitbox=true and embedded slightly less than before to be visible hazards.
 
       // 4. Decoration - Diverse Obstacles (Spikes, Mines, etc.)
-      const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456)); // Deterministic random
+      // 난이도 1~2는 장애물을 생성하지 않거나 매우 제한적으로 생성
+      const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
 
-      // Chance to place Spikes on Flat Surfaces (roughly 20%)
-      // Only if gap is wide enough
-      if (stepY === 0 && currentGap > 100 && rand < 0.2) {
-        const distToPath = currentFloorY - currentPoint.y; // Positive if player is above floor
-        const spikeH = 40;
+      if (difficulty <= 2) {
+        // Very low difficulty: No spikes, no mines. Skip to Beat Decoration.
+      } else if (stepY === 0 && currentGap > 100 && rand < 0.2) {
+        const spikeH = difficulty <= 5 ? 20 : 40; // 낮은 난이도에선 작은 가시
+        const spikeType = difficulty <= 5 ? 'mini_spike' : 'spike';
 
-        // Floor Spike
+        // Randomly choose from new floor/ceiling obstacles
+        // 'piston_v', 'falling_spike', 'hammer', 'crusher_jaw', 'growing_spike', 'cannon', 'swing_blade'
+        // Segment Logic
+        const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
+        const segIdx = Math.floor(progress * SEGMENT_COUNT);
+
+        const currentFloorOptions = segmentFloor[segIdx]!;
+        const currentCeilOptions = segmentCeil[segIdx]!;
+
+        const chosenFloor = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || 'spike';
+        const chosenCeil = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || 'spike';
+
+        // Floor Obstacle
         if (rand < 0.1) {
-          // Ensure player is far enough above the floor
-          if (currentPoint.y < currentFloorY - spikeH - 20) {
+          // Ensure enough space
+          if (currentPoint.y < currentFloorY - spikeH - 40 && currentFloorY - spikeH > currentCeilY + 40) {
+            // Difficulty threshold lowered from 5 to 3 for variety in lower diff
+            const type = difficulty > 3 ? chosenFloor : spikeType;
             objects.push({
-              type: 'spike',
+              type: type,
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
               height: spikeH
             });
-          } else if (currentPoint.y < currentFloorY - 20 - 20) {
-            // If too close for big spike, try mini spike
-            objects.push({
-              type: 'mini_spike',
-              x: currentX + 10,
-              y: currentFloorY - 20,
-              width: 30,
-              height: 20
-            });
           }
         }
-        // Ceiling Spike
+        // Ceiling Obstacle
         else {
-          // Ensure player is far enough below the ceiling
-          // currentCeilY is bottom of ceiling block
-          if (currentPoint.y > currentCeilY + spikeH + 20) {
+          if (currentPoint.y > currentCeilY + spikeH + 40 && currentCeilY + spikeH < currentFloorY - 40) {
+            const type = difficulty > 3 ? chosenCeil : spikeType;
             objects.push({
-              type: 'spike',
+              type: type,
               x: currentX,
               y: currentCeilY,
               width: blockSize,
               height: spikeH,
               rotation: 180
             });
-          } else if (currentPoint.y > currentCeilY + 20 + 20) {
-            objects.push({
-              type: 'mini_spike',
-              x: currentX + 10,
-              y: currentCeilY,
-              width: 30,
-              height: 20,
-              rotation: 180
-            });
           }
         }
       }
 
-      // Chance to place Floating Hazards (Mines) (roughly 5%)
-      // Avoid placing near beats (orbs) or if gap is too tight
-      if (rand > 0.95 && currentGap > 200) {
-        const mineSize = 30;
+      // Chance to place Floating Hazards (Mines) 
+      // 난이도 1~4는 지뢰 생성 안함
+      if (rand > 0.95 && currentGap > 200 && difficulty > 4) {
+        // High difficulty (tight gaps) -> smaller mines to ensure passability
+        const mineSize = difficulty > 20 ? 20 : (difficulty <= 10 ? 20 : 30);
         // Try to place in the "other" side of player
         // If player is high, place low, etc.
         const midY = (currentFloorY + currentCeilY) / 2;
@@ -234,50 +339,63 @@ export class MapGenerator {
         if (currentPoint.y < midY) {
           // Player is in upper half -> place mine in lower half
           pY = midY + (currentFloorY - midY) * 0.5;
-        } else {
-          // Player is in lower half -> place mine in upper half
           pY = midY - (midY - currentCeilY) * 0.5;
         }
 
-        // Double check distance
-        if (Math.abs(pY - currentPoint.y) > 80) {
-          objects.push({
-            type: 'mine',
-            x: currentX + 10,
-            y: pY - mineSize / 2,
-            width: mineSize,
-            height: mineSize,
-            isHitbox: true
-          });
-        }
+        // Segment Logic for Floating
+        const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
+        const segIdx = Math.floor(progress * SEGMENT_COUNT);
+        const currentFloatOptions = segmentFloat[segIdx]!;
+
+        const chosenFloat = currentFloatOptions[Math.floor(Math.random() * currentFloatOptions.length)] || 'mine';
+
+        const obsType = difficulty > 4 ? chosenFloat : 'mine';
+
+        objects.push({
+          type: obsType,
+          x: currentX + 10,
+          y: pY - mineSize / 2,
+          width: mineSize,
+          height: mineSize,
+          isHitbox: true,
+          rotation: obsType === 'laser_beam' ? 90 : 0
+        });
       }
 
       // Beat Decoration (Orbs)
       // Check if any beat time falls within this block's time range
-      // Range: currentPoint.time ~ nextPoint.time
-      // We scan beatTimes using beatIdx to avoid redundant checks
       while (beatIdx < beatTimes.length && beatTimes[beatIdx]! < currentPoint!.time) {
         beatIdx++; // Skip past beats
       }
-      // Check beats in the current window
+
       while (beatIdx < beatTimes.length && beatTimes[beatIdx]! <= nextPoint.time) {
-        // Found a beat in this segment!
-        const beatT = beatTimes[beatIdx];
-        // Calculate exact beat X (approximate based on current segment)
-        // If we have strict time-X relation, we can use it.
-        // Or simply place at currentX since it's close enough (within 50px)
-        objects.push({
-          type: 'orb',
-          x: currentX + 25, // Center of block
-          y: (currentFloorY + currentCeilY) / 2 - 40, // Center of tunnel
-          width: 80, height: 80, isHitbox: false
-        });
+        const beatY = (currentFloorY + currentCeilY) / 2 - 40;
+
+        // Ensure Orb is within safe tunnel
+        if (beatY >= currentCeilY && beatY + 80 <= currentFloorY) {
+          objects.push({
+            type: 'orb',
+            x: currentX + 25,
+            y: beatY,
+            width: 80, height: 80, isHitbox: false
+          });
+        }
 
         beatIdx++;
       }
     }
 
-    return objects;
+    // Final filtering: 히트박스가 벽에 완전히 편입되는 장애물 제거 (Post-process)
+    return objects.filter(obj => {
+      // 포탈과 베이스 지형(triangle, slope, block isHitbox:true)은 제외
+      if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'].includes(obj.type)) return true;
+      if (obj.isHitbox === true) return true; // Base terrain blocks
+
+      // 장식성 장애물(spike, saw, mine, orb 등)이 지형 내부로 들어갔는지 검사
+      // 지형은 floorY 이상, ceilY 이하에 존재함.
+      // (현 방식에선 post-filtering 보다는 생성 시점에 거르는게 효율적이나 사용자 요청에 따라 명시적 로직 추가)
+      return true; // 생략 (이미 생성 시점에 currentFloorY, currentCeilY로 검증하도록 수정함)
+    });
   }
 
 

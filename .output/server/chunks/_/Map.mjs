@@ -122,6 +122,7 @@ mapSchema.index({ likes: -1 });
 mapSchema.index({ createdAt: -1 });
 mapSchema.index({ difficulty: 1 });
 mapSchema.index({ rating: -1 });
+mapSchema.index({ isShared: 1, createdAt: -1 });
 const GameMap = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
 
 export { GameMap as G };

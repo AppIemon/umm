@@ -2,114 +2,134 @@
   <div class="multi-container">
     <div class="background-anim"></div>
     
-    <!-- Mode Selection Screen -->
-    <div v-if="step === 'MODESELECT'" class="setup-screen glass-panel">
-      <h1 class="glow-text">BATTLE CATEGORY</h1>
-      <div class="mode-grid">
-        <div class="mode-card" @click="startMatchmaking('1m')">
-          <div class="mode-icon">⚡</div>
-          <h3>SPRINT</h3>
-          <p>1 MINUTE MATCH</p>
-        </div>
-        <div class="mode-card" @click="startMatchmaking('3m')">
-          <div class="mode-icon">⚔️</div>
-          <h3>STANDARD</h3>
-          <p>3 MINUTE MATCH</p>
-        </div>
-        <div class="mode-card" @click="startMatchmaking('10m')">
-          <div class="mode-icon">🌌</div>
-          <h3>ENDURANCE</h3>
-          <p>10 MINUTE MATCH</p>
+    <!-- 1. Lobby Screen -->
+    <div v-if="step === 'LOBBY'" class="setup-screen glass-panel lobby-panel">
+      <h1 class="glow-text">MULTIPLAYER LOBBY</h1>
+      
+      <div class="lobby-actions">
+        <button @click="step = 'CREATE'" class="create-btn">CREATE ROOM</button>
+        <button @click="refreshRooms" class="refresh-btn">REFRESH</button>
+      </div>
+
+      <div class="room-list">
+        <div v-if="rooms.length === 0" class="no-rooms">NO ROOMS AVAILABLE</div>
+        <div v-else v-for="room in rooms" :key="room._id" class="room-card" @click="joinRoom(room._id)">
+          <div class="room-info">
+            <h3 class="room-title">{{ room.title }}</h3>
+            <div class="room-meta-row">
+              <span class="room-host">HOST: {{ room.host }}</span>
+              <span class="room-time">TIME: {{ room.duration }}s</span>
+            </div>
+          </div>
+          <div class="room-status-badge">
+            {{ room.currentPlayers }} / {{ room.maxPlayers }}
+          </div>
         </div>
       </div>
+      
       <button @click="exitGame" class="back-btn-simple">BACK TO MENU</button>
     </div>
 
-    <!-- Matchmaking Screen -->
-    <div v-else-if="step === 'MATCHMAKING'" class="setup-screen glass-panel">
-      <div class="matchmaking-box">
-        <h1 class="glow-text">SEARCHING_OPPONENT</h1>
-        <div class="category-badge">{{ selectedCategory }} CLASS</div>
-        <div class="radar">
-          <div class="radar-line"></div>
-          <div class="pings">
-            <div class="ping" style="top:20%; left:30%"></div>
-            <div class="ping" style="top:70%; left:80%"></div>
-          </div>
-        </div>
-        <p class="status-msg">{{ matchStatus }}</p>
-        <button @click="step = 'MODESELECT'" class="cancel-btn">CANCEL</button>
-      </div>
+    <!-- 2. Create Room Screen -->
+    <div v-else-if="step === 'CREATE'" class="setup-screen glass-panel">
+       <h1 class="glow-text">CREATE ROOM</h1>
+       
+       <div class="form-container">
+         <div class="form-group">
+           <label>ROOM TITLE</label>
+           <input v-model="newRoomTitle" class="input-field" placeholder="Enter room name" maxlength="20" />
+         </div>
+         
+         <div class="form-group">
+           <label>MAX PLAYERS: {{ newRoomMaxPlayers }}</label>
+           <input type="range" v-model.number="newRoomMaxPlayers" min="2" max="10" class="range-slider" />
+         </div>
+         
+         <div class="form-group">
+           <label>DURATION (Seconds: 30 ~ 1800)</label>
+           <input 
+             type="number" 
+             v-model.number="newRoomDuration" 
+             class="input-field" 
+             min="30" 
+             max="1800"
+             step="10"
+           />
+           <div class="duration-hint">30s (30sec) ~ 1800s (30min)</div>
+         </div>
+       </div>
+
+       <div class="action-row">
+         <button @click="createRoom" class="confirm-btn">CREATE</button>
+         <button @click="step = 'LOBBY'" class="cancel-btn">CANCEL</button>
+       </div>
     </div>
 
-    <!-- Match Found / Map Selection -->
-    <div v-else-if="step === 'READY'" class="setup-screen glass-panel">
-      <div class="ready-box">
-        <div class="vs-header">
-          <div class="player-info">
-            <div class="avatar">◆</div>
-            <span>{{ user?.username || 'GUEST' }}</span>
-          </div>
-          <div class="vs-badge">VS</div>
-          <div class="player-info">
-            <div class="avatar opponent">◇</div>
-            <span>{{ opponentName }}</span>
-          </div>
-        </div>
-        
-        <div class="selected-map" v-if="selectedMap">
-          <h2 class="map-label">SELECTED_MAP</h2>
-          <h1 class="map-name">{{ selectedMap.title }}</h1>
-          <p class="map-meta">DIFF: {{ selectedMap.difficulty }} | BY: {{ selectedMap.creatorName }}</p>
-        </div>
-
-        <button @click="startGame" class="battle-btn">BATTLE START</button>
+    <!-- 3. Waiting Room Screen -->
+    <div v-else-if="step === 'ROOM'" class="setup-screen glass-panel room-view">
+      <h2 class="room-header-title">{{ currentRoom?.title }}</h2>
+      <div class="room-header-meta">
+         <span>TIME: {{ currentRoom?.duration }}s</span>
+         <span>PLAYERS: {{ currentRoom?.players.length }} / {{ currentRoom?.maxPlayers }}</span>
       </div>
+
+      <div class="player-grid">
+        <div v-for="pl in currentRoom?.players" :key="pl.userId" class="player-card-lg" :class="{host: pl.isHost}">
+          <div class="avatar-lg">◆</div>
+          <div class="player-name">{{ pl.username }}</div>
+          <span v-if="pl.userId === playerId" class="me-badge">YOU</span>
+          <span v-if="pl.isHost" class="host-badge">HOST</span>
+        </div>
+        <!-- Placeholders -->
+        <div v-for="i in (currentRoom ? (currentRoom.maxPlayers - currentRoom.players.length) : 0)" :key="`placeholder-${i}`" class="player-card-lg empty">
+          <div class="avatar-lg empty">+</div>
+          <div class="player-name">EMPTY</div>
+        </div>
+      </div>
+
+      <div v-if="isHost" class="host-controls">
+         <button @click="startRoomGame" class="start-btn" :disabled="!currentRoom || currentRoom.players.length < 1">START GAME</button>
+         <p v-if="currentRoom && currentRoom.players.length < 2" class="hint-text">Waiting for players...</p>
+      </div>
+      <div v-else class="guest-controls">
+         <div class="loading-spinner"></div>
+         <p class="waiting-text">WAITING FOR HOST TO START...</p>
+      </div>
+      
+      <button @click="leaveRoom" class="leave-btn">LEAVE ROOM</button>
     </div>
 
-    <!-- Result Screen -->
-    <div v-else-if="step === 'RESULT'" class="setup-screen glass-panel">
-      <div class="result-box">
-        <h1 class="victory-text" :class="{ loss: winner === 'opponent', draw: winner === 'draw' }">
-          {{ winner === 'player' ? 'VICTORY' : (winner === 'opponent' ? 'DEFEAT' : 'DRAW') }}
-        </h1>
-        <div class="duel-res">
-          <div class="res-item">
-            <span>{{ user?.username || 'YOU' }}</span>
-            <div class="clear-count">{{ playerClearCount }} CLEARS</div>
+    <!-- 4. Result/Play Screen -->
+    <div v-else-if="step === 'PLAY' || step === 'RESULT'" class="ingame-container">
+      <div v-if="step === 'RESULT'" class="result-overlay">
+        <div class="result-box glass-panel">
+          <h1 class="victory-text">{{ didIWin ? 'VICTORY' : 'FINISH' }}</h1>
+          <div class="result-list">
+             <div v-for="(p, idx) in sortedPlayers" :key="p.userId" class="result-row" :class="{ winner: idx===0, me: p.userId === playerId }">
+               <span class="rank">#{{ idx + 1 }}</span>
+               <span class="name">{{ p.username }}</span>
+               <span class="score">{{ p.progress.toFixed(1) }}% ({{ p.clearCount || 0 }} Wins)</span>
+             </div>
           </div>
-          <div class="res-item">
-            <span>{{ opponentName }}</span>
-            <div class="clear-count enemy">{{ opponentClearCount }} CLEARS</div>
-          </div>
+          <button @click="leaveRoom" class="action-btn">EXIT TO LOBBY</button>
         </div>
-        <div class="match-meta" v-if="timeRemaining <= 0">
-          <span class="timeout-badge">TIME OUT RESULT</span>
-        </div>
-        <button @click="step = 'MODESELECT'" class="action-btn">REMATCH</button>
-        <button @click="exitGame" class="action-btn secondary">EXIT</button>
       </div>
-    </div>
-
-    <!-- Game Screen -->
-    <div v-else-if="step === 'PLAY'" class="ingame-container">
+    
       <div class="match-hud">
         <div class="timer-display" :class="{ critical: timeRemaining < 30 }">
           {{ formatTime(timeRemaining) }}
         </div>
-        <div class="clear-counts-hud">
-          <span class="my-clears">YOU: {{ playerClearCount }}</span>
-          <span class="vs-text">VS</span>
-          <span class="enemy-clears">{{ opponentName }}: {{ opponentClearCount }}</span>
-        </div>
         
-        <!-- Opponent Clear Alert -->
-        <transition name="fade">
-          <div v-if="showOpponentClearAlert" class="opponent-clear-alert">
-            🎉 {{ opponentName }}이(가) 레벨을 클리어했습니다!
+        <!-- Leaderboard HUD -->
+        <div class="leaderboard-hud">
+          <div v-for="(p, idx) in top3Players" :key="p.userId" class="lb-item">
+             <span class="lb-rank">#{{ idx + 1 }}</span>
+             <span class="lb-name">{{ p.username }}</span>
+             <span class="lb-score">{{ p.progress.toFixed(0) }}%</span>
           </div>
-        </transition>
+        </div>
       </div>
+
       <GameCanvas
         v-if="audioBuffer"
         :audioBuffer="audioBuffer"
@@ -117,11 +137,10 @@
         :sections="sections"
         :loadMap="selectedMap"
         :multiplayerMode="true"
-        :opponentY="opponentY"
-        :opponentProgress="opponentProgress"
-        @retry="startGame" 
+        :opponentY="bestOpponent?.y || 360"
+        :opponentProgress="bestOpponent?.progress || 0"
         @exit="handleRoundFinish" 
-        @progress-update="updateProgress"
+        @progress-update="updateMyProgress"
       />
     </div>
   </div>
@@ -134,219 +153,52 @@ import { type SongSection } from '@/composables/useAudioAnalyzer';
 import { useAuth } from '@/composables/useAuth';
 
 const router = useRouter();
-const { user, updateRating } = useAuth();
+const { user } = useAuth(); // We don't use updateRating logic for custom rooms yet
 
-// States
-type Step = 'MODESELECT' | 'MATCHMAKING' | 'READY' | 'PLAY' | 'RESULT';
-const step = ref<Step>('MODESELECT');
-const matchStatus = ref('Connecting to server...');
-const opponentName = ref('');
+type Step = 'LOBBY' | 'CREATE' | 'ROOM' | 'PLAY' | 'RESULT';
+const step = ref<Step>('LOBBY');
+
+// Lobby State
+const rooms = ref<any[]>([]);
+const newRoomTitle = ref('New Room');
+const newRoomMaxPlayers = ref(4);
+const newRoomDuration = ref(60);
+
+// Room State
+const currentRoom = ref<any>(null);
+const currentRoomId = ref<string | null>(null);
+const playerId = computed(() => user.value?._id || sessionStorage.getItem('umm_player_id') || ('guest_' + Math.random().toString(36).substr(2,9)));
+const playerUsername = computed(() => user.value?.displayName || user.value?.username || 'Guest');
+const isHost = computed(() => currentRoom.value?.hostId === playerId.value);
+
+// Game State
 const selectedMap = ref<any>(null);
-const selectedCategory = ref('');
-
-const playerProgress = ref(0);
-const opponentProgress = ref(0);
-const playerY = ref(360);
-const opponentY = ref(360);
-const bestPlayerProgress = ref(0);
-const bestOpponentProgress = ref(0);
-const results = ref({ p1: 0, p2: 0 });
-const winner = ref<'player' | 'opponent' | 'draw'>('draw');
-
-// Clear count system (맵 클리어 수로 승패 결정)
-const playerClearCount = ref(0);
-const opponentClearCount = ref(0);
-const showOpponentClearAlert = ref(false);
-const currentMapIndex = ref(0);
-const mapQueue = ref<any[]>([]);
-
 const audioBuffer = ref<AudioBuffer | null>(null);
 const obstacles = ref<number[]>([]);
 const sections = ref<SongSection[]>([]);
+const timeRemaining = ref(0);
+const matchTimer = ref<any>(null);
+const statusInterval = ref<any>(null);
 
-// Match Timer
-const timeRemaining = ref(180);
-let matchTimer: any = null;
+// In-game State
+const myProgress = ref(0);
+const myY = ref(360);
+const allPlayers = ref<any[]>([]); // Synced via poll
 
 onMounted(() => {
-  // Initial state is MODESELECT
+  if (!user.value?._id && !sessionStorage.getItem('umm_player_id')) {
+    sessionStorage.setItem('umm_player_id', playerId.value);
+  }
+  refreshRooms();
 });
 
 onUnmounted(() => {
-  clearInterval(matchTimer);
-  clearInterval(statusInterval);
+  stopPolling();
 });
 
-const matchId = ref<string | null>(null);
-let statusInterval: any = null;
-
-// Unique ID for the current session (to support guests in matchmaking)
-const playerId = computed(() => {
-  if (user.value?._id) return user.value._id;
-  
-  let tid = sessionStorage.getItem('umm_player_id');
-  if (!tid) {
-    tid = 'guest_' + Math.random().toString(36).substring(2, 15);
-    sessionStorage.setItem('umm_player_id', tid);
-  }
-  return tid;
-});
-
-async function startMatchmaking(category: string) {
-  selectedCategory.value = category;
-  step.value = 'MATCHMAKING';
-  matchStatus.value = 'SCANNING FOR COMPETITORS...';
-  
-  try {
-    const response: any = await $fetch('/api/matchmaking/find', {
-      method: 'POST',
-      body: {
-        category: category,
-        rating: user.value?.rating || 1000,
-        userId: playerId.value
-      }
-    });
-
-    matchId.value = response.matchId;
-
-    if (response.status === 'ready') {
-      setupMatch(response);
-    } else {
-      // Start polling for opponent
-      statusInterval = setInterval(async () => {
-        try {
-          const statusRes: any = await $fetch('/api/matchmaking/status', {
-            method: 'POST',
-            body: {
-              matchId: matchId.value,
-              userId: playerId.value
-            }
-          });
-
-          if (statusRes.status === 'ready' || statusRes.status === 'playing') {
-            clearInterval(statusInterval);
-            setupMatch(statusRes);
-          }
-        } catch (pollError) {
-          console.error("Polling error", pollError);
-        }
-      }, 2000);
-    }
-  } catch (e: any) {
-    console.error("Matchmaking failed", e);
-    matchStatus.value = `MATCHMAKING ERROR: ${e.statusMessage || e.message || 'Server Error'}`;
-    setTimeout(() => step.value = 'MODESELECT', 4000);
-    return;
-  }
-}
-
-async function setupMatch(data: any) {
-  selectedMap.value = data.map;
-  opponentName.value = data.opponent?.username || 'GHOST';
-  
-  // Auto-load audio if available
-  matchStatus.value = 'DOWNLOADING BATTLE TRACK...';
-  
-  if (selectedMap.value.audioData || selectedMap.value.audioUrl) {
-     try {
-       let arrayBuffer: ArrayBuffer | null = null;
-
-       if (selectedMap.value.audioData) {
-          const res = await fetch(selectedMap.value.audioData);
-          arrayBuffer = await res.arrayBuffer();
-       } else if (selectedMap.value.audioUrl) {
-          const res = await fetch(selectedMap.value.audioUrl);
-          arrayBuffer = await res.arrayBuffer();
-       }
-
-       if (arrayBuffer) {
-          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
-       }
-     } catch (e) {
-       console.warn("Could not auto-load audio, using silent buffer", e);
-     }
-  }
-
-  matchStatus.value = 'OPPONENT FOUND: SYNCHRONIZING...';
-  await new Promise(r => setTimeout(r, 1000));
-  
-  step.value = 'READY';
-}
-
-async function startGame() {
-  if (!selectedMap.value) return;
-  
-  // Set Timer based on category
-  if (selectedCategory.value === '1m') timeRemaining.value = 60;
-  else if (selectedCategory.value === '3m') timeRemaining.value = 180;
-  else if (selectedCategory.value === '10m') timeRemaining.value = 600;
-
-  obstacles.value = selectedMap.value.beatTimes || [];
-  sections.value = selectedMap.value.sections || [];
-  
-  // Create audio buffer (Try to simulate real audio or use silent if missing)
-  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const bufferLength = Math.max(1, audioCtx.sampleRate * (selectedMap.value.duration || 120));
-  audioBuffer.value = audioCtx.createBuffer(1, bufferLength, audioCtx.sampleRate);
-  
-  step.value = 'PLAY';
-  playerProgress.value = 0;
-  opponentProgress.value = 0;
-  bestPlayerProgress.value = 0;
-  bestOpponentProgress.value = 0;
-
-  // Start Global Match Timer
-  clearInterval(matchTimer);
-  matchTimer = setInterval(() => {
-    timeRemaining.value--;
-    if (timeRemaining.value <= 0) {
-      handleTimeout();
-    }
-  }, 1000);
-
-  // Start Progress Sync Loop
-  clearInterval(statusInterval);
-  statusInterval = setInterval(async () => {
-    try {
-      const res: any = await $fetch('/api/matchmaking/status', {
-        method: 'POST',
-        body: {
-          matchId: matchId.value,
-          userId: playerId.value,
-          progress: playerProgress.value,
-          y: playerY.value
-        }
-      });
-      if (res.opponent) {
-        opponentProgress.value = res.opponent.progress;
-        opponentY.value = res.opponent.y;
-        
-        // 상대방 클리어 감지
-        const newOpponentClears = res.opponent.clearCount || 0;
-        if (newOpponentClears > opponentClearCount.value) {
-          opponentClearCount.value = newOpponentClears;
-          showOpponentClearNotification();
-        }
-      }
-    } catch(e) {}
-  }, 200); // Poll faster during play
-}
-
-// 상대방 클리어 알림 표시
-function showOpponentClearNotification() {
-  showOpponentClearAlert.value = true;
-  setTimeout(() => {
-    showOpponentClearAlert.value = false;
-  }, 3000);
-}
-
-function updateProgress(data: { progress: number, ghostProgress: number, y: number }) {
-  playerProgress.value = data.progress;
-  if (data.progress > bestPlayerProgress.value) {
-    bestPlayerProgress.value = data.progress;
-  }
-  playerY.value = data.y;
+function stopPolling() {
+  if (matchTimer.value) clearInterval(matchTimer.value);
+  if (statusInterval.value) clearInterval(statusInterval.value);
 }
 
 // 플레이어가 맵 클리어 시 호출
@@ -355,10 +207,10 @@ async function handlePlayerClear() {
   
   // 서버에 클리어 알림
   try {
-    await $fetch('/api/matchmaking/clear', {
+    await $fetch('/api/rooms/clear', {
       method: 'POST',
       body: {
-        matchId: matchId.value,
+        roomId: currentRoomId.value,
         userId: playerId.value
       }
     });
@@ -373,10 +225,10 @@ async function loadNextMap() {
   currentMapIndex.value++;
   
   try {
-    const res: any = await $fetch('/api/matchmaking/next-map', {
+    const res: any = await $fetch('/api/rooms/next-map', {
       method: 'POST',
       body: {
-        matchId: matchId.value,
+        roomId: currentRoomId.value,
         userId: playerId.value,
         mapIndex: currentMapIndex.value
       }
@@ -394,379 +246,335 @@ async function loadNextMap() {
   }
 }
 
+// 1. LOBBY
+async function refreshRooms() {
+  try {
+    const res: any = await $fetch('/api/rooms/index');
+    rooms.value = res.rooms;
+  } catch (e) {
+    console.error("Failed to fetch rooms", e);
+  }
+}
+
+async function createRoom() {
+  if (!newRoomTitle.value) return;
+  try {
+    const res: any = await $fetch('/api/rooms/create', {
+      method: 'POST',
+      body: {
+        title: newRoomTitle.value,
+        maxPlayers: newRoomMaxPlayers.value,
+        duration: newRoomDuration.value,
+        userId: playerId.value,
+        username: playerUsername.value
+      }
+    });
+    if (res.success) {
+      currentRoomId.value = res.roomId;
+      step.value = 'ROOM';
+      startRoomPolling();
+    }
+  } catch (e) {
+    alert("Failed to create room");
+  }
+}
+
+async function joinRoom(roomId: string) {
+  try {
+    const res: any = await $fetch('/api/rooms/join', {
+      method: 'POST',
+      body: { roomId, userId: playerId.value, username: playerUsername.value }
+    });
+    if (res.success) {
+      currentRoomId.value = res.roomId;
+      step.value = 'ROOM';
+      startRoomPolling();
+    }
+  } catch (e: any) {
+    alert("Cannot join room: " + (e.statusMessage || "Error"));
+  }
+}
+
+async function leaveRoom() {
+  stopPolling();
+  currentRoomId.value = null;
+  currentRoom.value = null;
+  step.value = 'LOBBY';
+  refreshRooms();
+  // Call leave API if needed
+}
+
+// 2. POLLING (ROOM & GAME)
+function startRoomPolling() {
+  stopPolling();
+  statusInterval.value = setInterval(async () => {
+    if (!currentRoomId.value) return;
+    try {
+      // If playing, we also send our state
+      const body: any = { userId: playerId.value };
+      if (step.value === 'PLAY') {
+         body.progress = myProgress.value;
+         body.y = myY.value;
+      }
+      
+      // We can use the generic status endpoint or specific update endpoint
+      // Update endpoint for state
+      if (step.value === 'PLAY') {
+         await $fetch(`/api/rooms/${currentRoomId.value}/update`, {
+           method: 'POST', body
+         });
+      }
+      
+      // Get status
+      const res: any = await $fetch(`/api/rooms/${currentRoomId.value}/status`, {
+        params: { userId: playerId.value }
+      });
+      
+      currentRoom.value = res.room;
+      allPlayers.value = res.room.players || [];
+      
+      // Check for Game Start
+      if (step.value === 'ROOM' && res.room.status === 'playing') {
+        enterGame(res.room);
+      }
+      
+      // Check for Game Over logic if needed (handled by timer mostly)
+    } catch (e) {
+      console.error("Poll error", e);
+    }
+  }, 1000); // 1s poll in waiting, maybe faster in game?
+}
+
+// 3. START GAME
+async function startRoomGame() {
+  if (!isHost.value || !currentRoomId.value) return;
+  try {
+    await $fetch(`/api/rooms/${currentRoomId.value}/start`, {
+      method: 'POST',
+      body: { userId: playerId.value }
+    });
+  } catch (e) {
+    alert("Failed to start");
+  }
+}
+
+async function enterGame(roomData: any) {
+  // Load Map (If map isn't populated in roomData, fetch it)
+  // Our status API populates map if playing
+  if (!roomData.map) return;
+  
+  selectedMap.value = roomData.map;
+  timeRemaining.value = roomData.duration;
+  
+  // Audio Load
+  audioBuffer.value = null; // Reset
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // Use dummy buffer if no audio url (or system gen map)
+    // System gen maps usually don't have audio uploads yet, so silent buffer
+    const bufferLength = audioCtx.sampleRate * timeRemaining.value;
+    audioBuffer.value = audioCtx.createBuffer(1, bufferLength, audioCtx.sampleRate);
+  } catch (e) {}
+
+  obstacles.value = selectedMap.value.engineObstacles || [];
+  // Need to convert objects if they are raw? GameEngine takes specific format?
+  // GameCanvas expects `obstacles` to be beatTimes array? No, looking at GameCanvas props:
+  // `obstacles: number[]` (BEAT TIMES) OR `loadMap` object?
+  // GameCanvas uses `loadMap` if present. `engine.loadMapData(props.loadMap)`.
+  // So we just pass `selectedMap`.
+  
+  step.value = 'PLAY';
+  
+  // Start local timer
+  matchTimer.value = setInterval(() => {
+    timeRemaining.value--;
+    if (timeRemaining.value <= 0) {
+      finishGame();
+    }
+  }, 1000);
+}
+
+function updateMyProgress(data: any) {
+  myProgress.value = data.progress;
+  myY.value = data.y;
+}
+
 function handleRoundFinish(data: any) {
-  // 플레이어가 클리어했을 때
-  if (data?.outcome === 'complete' || bestPlayerProgress.value >= 100) {
+  // Check if player completed the map
+  if (data?.outcome === 'complete' || myProgress.value >= 100) {
     handlePlayerClear();
   }
-  // 크래시 시에는 그냥 재시도 (죽어도 패배 아님, 맵 클리어 수로 결정)
-}
-
-function handleTimeout() {
-  clearInterval(matchTimer);
-  clearInterval(statusInterval);
-  
-  // 클리어 카운트로 승패 결정
-  let win: 'player' | 'opponent' | 'draw' = 'draw';
-  if (playerClearCount.value > opponentClearCount.value) win = 'player';
-  else if (playerClearCount.value < opponentClearCount.value) win = 'opponent';
-  
-  finalizeMatch(win);
-}
-
-function finalizeMatch(win: 'player' | 'opponent' | 'draw') {
-  clearInterval(matchTimer);
-  clearInterval(statusInterval);
-  winner.value = win;
-  results.value.p1 = playerClearCount.value;
-  results.value.p2 = opponentClearCount.value;
-  
-  // Update Rating
-  if (user.value && !user.value.isGuest && (win === 'player' || win === 'opponent')) {
-    const currentRating = user.value.rating || 1000;
-    const ratingChange = win === 'player' ? 25 : -15;
-    const newRating = Math.max(0, currentRating + ratingChange);
-    
-    updateRating(newRating, {
-      opponent: opponentName.value,
-      winner: win === 'player' ? user.value.username : opponentName.value,
-      myScore: results.value.p1,
-      opponentScore: results.value.p2,
-      date: new Date(),
-      ratingChange: ratingChange
-    });
+  // If crashed (outcome !== complete), we just respawn or wait.
+  // In this mode, GameCanvas might auto-restart or we can just stay.
+  // If we want immediate restart on death:
+  if (data?.outcome !== 'complete') {
+    // Optionally restart immediately
+    // startGame(); // But startGame resets timer? No.
+    // actually step 'PLAY' re-mounts GameCanvas? No.
+    // We can increment key to re-mount or just let GameCanvas handle retry.
+    // GameCanvas has @retry event?
   }
-
-  step.value = 'RESULT';
 }
 
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
+function finishGame() {
+  stopPolling();
+  step.value = 'RESULT';
 }
 
 function exitGame() {
   router.push('/');
 }
-</script>
 
+function formatTime(s: number) {
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+}
+
+const top3Players = computed(() => {
+  // Sort by Clear Count then Progress
+  return [...allPlayers.value].sort((a,b) => b.progress - a.progress).slice(0, 3);
+});
+
+const sortedPlayers = computed(() => {
+  return [...allPlayers.value].sort((a,b) => b.progress - a.progress);
+});
+
+const bestOpponent = computed(() => {
+  // Find the player with highest progress that isn't me
+  return sortedPlayers.value.find(p => p.userId !== playerId.value);
+});
+
+const didIWin = computed(() => {
+  return sortedPlayers.value[0]?.userId === playerId.value;
+});
+
+</script>
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;700;900&display=swap');
 
 .multi-container {
-  width: 100%;
-  height: 100vh;
-  background: #050510;
-  color: white;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-family: 'Outfit', sans-serif;
-  position: relative;
-  overflow: hidden;
+  width: 100%; height: 100vh; background: #050510; color: white;
+  display: flex; justify-content: center; align-items: center;
+  font-family: 'Outfit', sans-serif; position: relative; overflow: hidden;
 }
 
 .background-anim {
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: radial-gradient(circle at 50% 50%, #1a1a3a 0%, #000 100%);
-  z-index: 0;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: radial-gradient(circle at 50% 50%, #1a1a3a 0%, #000 100%); z-index: 0;
 }
 
 .setup-screen {
-  z-index: 10;
-  text-align: center;
-  width: 100%;
-  max-width: 800px;
+  z-index: 10; text-align: center; width: 100%; max-width: 900px;
+  display: flex; flex-direction: column; align-items: center; gap: 2rem;
 }
 
 .glass-panel {
-  background: rgba(20, 20, 30, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 3rem;
-  border-radius: 24px;
-  box-shadow: 0 0 60px rgba(0,0,0,0.6);
+  background: rgba(20, 20, 30, 0.85); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1); padding: 3rem;
+  border-radius: 24px; box-shadow: 0 0 60px rgba(0,0,0,0.6);
 }
 
-.mode-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
-  margin: 3rem 0;
+.glow-text {
+  font-size: 3rem; color: #00ffff; text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+  margin: 0; font-weight: 900;
 }
 
-.mode-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 2rem;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
+/* LOBBY */
+.lobby-panel { width: 90%; height: 80vh; }
+.room-list {
+  width: 100%; flex: 1; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 12px;
+}
+.room-card {
+  background: rgba(255, 255, 255, 0.05); padding: 1.5rem; border-radius: 12px;
+  cursor: pointer; border: 1px solid transparent; text-align: left;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.room-card:hover { 
+  background: rgba(0, 255, 255, 0.1); border-color: #00ffff; 
+}
+.room-title { font-size: 1.2rem; font-weight: bold; margin: 0 0 0.5rem 0; color: #fff; }
+.room-meta-row { font-size: 0.8rem; color: #888; display: flex; gap: 1rem; }
+.room-status-badge { 
+  background: #333; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: bold;
 }
 
-.mode-card:hover {
-  background: rgba(0, 255, 255, 0.1);
-  border-color: #00ffff;
-  transform: translateY(-10px) scale(1.05);
-  box-shadow: 0 10px 40px rgba(0, 255, 255, 0.2);
-}
-
-.mode-icon { font-size: 3rem; }
-.mode-card h3 { font-size: 1.5rem; font-weight: 900; color: #00ffff; margin: 0; }
-.mode-card p { color: #888; font-size: 0.9rem; margin: 0; }
-
-.radar {
-  width: 180px;
-  height: 180px;
-  border: 2px solid #00ffff;
-  border-radius: 50%;
-  margin: 2rem auto;
-  position: relative;
-  overflow: hidden;
-  background: rgba(0, 255, 255, 0.05);
-}
-
-.radar-line {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 90px;
-  height: 2px;
-  background: linear-gradient(90deg, #00ffff, transparent);
-  transform-origin: left center;
-  animation: radarRotate 2s linear infinite;
-}
-
-@keyframes radarRotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.category-badge {
-  display: inline-block;
-  padding: 0.5rem 1rem;
-  background: #00ffff;
-  color: #000;
-  font-weight: 900;
-  border-radius: 4px;
-  margin-top: 1rem;
-}
-
-.match-hud {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 20px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
-}
-
-.timer-display {
-  font-size: 2.5rem;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: #fff;
-  text-shadow: 0 0 20px rgba(255,255,255,0.5);
-}
-
-.timer-display.critical {
-  color: #ff3333;
-  animation: pulse 1s infinite alternate;
-}
-
-@keyframes pulse {
-  from { transform: scale(1); text-shadow: 0 0 10px #ff0000; }
-  to { transform: scale(1.1); text-shadow: 0 0 30px #ff0000; }
-}
-
-.concurrent-progress {
-  width: 80%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.p-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: visible;
-  position: relative;
-}
-
-.p-bar .fill {
-  height: 100%;
-  background: #00ffff;
-  transition: width 0.1s linear;
-}
-
-.p-bar .fill.enemy {
-  background: #ff00ff;
-}
-
-.current-marker {
-  position: absolute;
-  top: -2px;
-  width: 10px;
-  height: 10px;
-  background: #fff;
-  border-radius: 50%;
-  box-shadow: 0 0 10px #fff;
-  transform: translateX(-50%);
-  transition: left 0.1s linear;
-}
-
-.current-marker.enemy {
-  background: #ff00ff;
-  box-shadow: 0 0 10px #ff00ff;
-}
-
-.vs-header {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 3rem;
-  margin-bottom: 2rem;
-}
-
-.player-info {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.avatar {
-  font-size: 3rem; color: #00ffff; width: 80px; height: 80px;
-  border: 2px solid #00ffff; display: flex; justify-content: center;
-  align-items: center; border-radius: 12px; background: rgba(0, 255, 255, 0.1);
-}
-
-.avatar.opponent { color: #ff00ff; border-color: #ff00ff; background: rgba(255, 0, 255, 0.1); }
-
-.vs-badge { font-size: 2.5rem; font-weight: 900; text-shadow: 0 0 20px rgba(255, 255, 255, 0.5); }
-
-.battle-btn {
-  width: 100%; padding: 1.5rem; font-size: 1.8rem; font-weight: 900;
-  background: linear-gradient(135deg, #00ffff, #ff00ff);
-  border: none; color: #000; cursor: pointer; border-radius: 12px;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.battle-btn:hover { transform: scale(1.02); box-shadow: 0 0 30px rgba(0, 255, 255, 0.5); }
-
-.victory-text {
-  font-size: 5rem; font-weight: 900; color: #00ffff;
-  text-shadow: 0 0 50px rgba(0, 255, 255, 0.5); margin-bottom: 2rem;
-}
-.victory-text.loss { color: #ff00ff; text-shadow: 0 0 50px rgba(255, 0, 255, 0.5); }
-.victory-text.draw { color: #ffff00; text-shadow: 0 0 50px rgba(255, 255, 0, 0.5); }
-
-.duel-res { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
-.res-item { display: flex; align-items: center; gap: 1rem; }
-.res-item .prog-bar { flex: 1; height: 10px; background: #222; border-radius: 5px; overflow: hidden; }
-.res-item .prog-bar .fill { height: 100%; background: #00ffff; }
-.res-item .prog-bar .fill.enemy { background: #ff00ff; }
-
-.action-btn {
-  padding: 1rem 2rem; background: #fff; color: #000; border: none;
-  font-weight: 900; cursor: pointer; border-radius: 8px; margin: 0 0.5rem;
-}
-.action-btn.secondary { background: transparent; border: 1px solid #666; color: #fff; }
+.lobby-actions { display: flex; gap: 1rem; width: 100%; justify-content: flex-end; }
+.create-btn { background: #00ffff; color: #000; font-weight: bold; padding: 0.8rem 1.5rem; border-radius: 8px; border: none; cursor: pointer; }
+.refresh-btn { background: transparent; border: 1px solid #666; color: #fff; padding: 0.8rem 1.5rem; border-radius: 8px; cursor: pointer; }
 
 .back-btn-simple {
-  margin-top: 2rem; background: transparent; border: none; color: #666;
-  font-weight: bold; cursor: pointer; text-decoration: underline;
+  margin-top: 1rem;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #aaa;
+  padding: 0.8rem 2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: bold;
 }
-
-.cancel-btn {
-  margin-top: 2rem; background: rgba(255,0,0,0.2); border: 1px solid #ff0000;
-  color: #ff0000; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;
-}
-
-.timeout-badge {
-  color: #ffaa00; font-weight: bold; padding: 0.5rem 1rem;
-  border: 1px solid #ffaa00; border-radius: 4px; border-style: dashed; margin-bottom: 1rem; display: inline-block;
-}
-
-/* Clear Count HUD */
-.clear-counts-hud {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.5rem 1.5rem;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.my-clears {
-  color: #00ffff;
-  font-weight: 900;
-  font-size: 1.2rem;
-}
-
-.enemy-clears {
-  color: #ff00ff;
-  font-weight: 900;
-  font-size: 1.2rem;
-}
-
-.vs-text {
+.back-btn-simple:hover {
+  background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  font-weight: 900;
+  border-color: #fff;
+  transform: translateY(-2px);
 }
 
-/* Opponent Clear Alert */
-.opponent-clear-alert {
-  position: fixed;
-  top: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: linear-gradient(135deg, rgba(255, 0, 255, 0.3), rgba(255, 100, 255, 0.3));
-  border: 2px solid #ff00ff;
-  color: #fff;
-  padding: 1rem 2rem;
-  border-radius: 12px;
-  font-weight: 900;
-  font-size: 1.2rem;
-  animation: slideDown 0.3s ease-out, pulse 0.5s ease-in-out infinite alternate;
-  z-index: 2000;
-}
+/* FORM */
+.form-container { width: 100%; display: flex; flex-direction: column; gap: 1.5rem; max-width: 500px; }
+.form-group { display: flex; flex-direction: column; gap: 0.5rem; text-align: left; }
+.input-field { padding: 1rem; background: rgba(0,0,0,0.5); border: 1px solid #444; color: #fff; border-radius: 8px; font-size: 1.2rem; }
+.duration-opts { display: flex; gap: 1rem; }
+.duration-opts button { flex: 1; padding: 1rem; background: #222; border: 1px solid #444; color: #888; border-radius: 8px; cursor: pointer; }
+.duration-opts button.active { background: #00ffff; color: #000; font-weight: bold; border-color: #00ffff; }
 
-@keyframes slideDown {
-  from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
-  to { transform: translateX(-50%) translateY(0); opacity: 1; }
-}
+.duration-hint { font-size: 0.8rem; color: #888; margin-top: 0.3rem; }
+.action-row { display: flex; gap: 1rem; margin-top: 2rem; }
+.confirm-btn { flex: 2; padding: 1rem; background: linear-gradient(135deg, #00ffff, #0088ff); border: none; font-weight: 900; color: #000; border-radius: 8px; cursor: pointer; font-size: 1.2rem; }
+.cancel-btn { flex: 1; padding: 1rem; background: transparent; border: 1px solid #666; color: #fff; border-radius: 8px; cursor: pointer; }
 
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+/* ROOM VIEW */
+.room-view { width: 90%; height: 80vh; }
+.room-header-title { font-size: 2.5rem; margin: 0; color: #fff; }
+.room-header-meta { display: flex; gap: 2rem; color: #888; font-size: 1.2rem; margin-bottom: 2rem; }
+.player-grid { 
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
+  gap: 1.5rem; width: 100%; margin-bottom: auto; 
 }
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
+.player-card-lg { 
+  background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  position: relative; border: 2px solid transparent;
 }
+.player-card-lg.host { border-color: #ffd700; }
+.player-card-lg.empty { opacity: 0.3; border-style: dashed; }
+.avatar-lg { width: 80px; height: 80px; background: rgba(0,255,255,0.1); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 2rem; color: #00ffff; }
+.host-badge { position: absolute; top: 10px; right: 10px; background: #ffd700; color: #000; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; }
+.me-badge { background: #00ffff; color: #000; padding: 0.2rem 0.8rem; border-radius: 12px; font-weight: bold; font-size: 0.8rem; }
+.start-btn { width: 100%; max-width: 400px; padding: 1.5rem; font-size: 1.5rem; font-weight: 900; background: #00ff00; color: #000; border: none; border-radius: 12px; cursor: pointer; }
+.start-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+.leave-btn { color: #ff4444; background: transparent; border: 1px solid #ff4444; padding: 0.8rem 2rem; border-radius: 8px; cursor: pointer; margin-top: 1rem; }
 
-/* Clear Count in Results */
-.clear-count {
-  font-size: 2rem;
-  font-weight: 900;
-  color: #00ffff;
-  text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-}
+/* PLAY HUD */
+.match-hud { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; display: flex; justify-content: space-between; padding: 20px; pointer-events: none; }
+.timer-display { font-size: 3rem; font-weight: 900; color: #fff; text-shadow: 0 0 10px #000; }
+.leaderboard-hud { background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 12px; text-align: right; }
+.lb-item { display: flex; gap: 1rem; justify-content: flex-end; font-weight: bold; font-size: 1.1rem; }
+.lb-score { color: #00ffff; }
 
-.clear-count.enemy {
-  color: #ff00ff;
-  text-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+.result-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000;
+  background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center;
 }
+.result-box { width: 600px; display: flex; flex-direction: column; align-items: center; gap: 2rem; }
+.result-list { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
+.result-row { display: flex; align-items: center; background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 8px; font-size: 1.2rem; }
+.result-row.winner { border: 2px solid #ffd700; background: rgba(255, 215, 0, 0.1); }
+.result-row.me { background: rgba(0,255,255,0.1); }
+.rank { font-weight: 900; width: 50px; }
+.name { flex: 1; text-align: left; }
+.score { font-weight: bold; }
+
 </style>

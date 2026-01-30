@@ -385,12 +385,12 @@ const _routes = [
     name: "play",
     path: "/play",
     meta: __nuxt_page_meta || {},
-    component: () => import('./play-CGejbZz0.mjs')
+    component: () => import('./play-e1zv_0Ig.mjs')
   },
   {
     name: "guide",
     path: "/guide",
-    component: () => import('./guide-Bk5eSvht.mjs')
+    component: () => import('./guide-5BKIKwCd.mjs')
   },
   {
     name: "index",
@@ -405,7 +405,7 @@ const _routes = [
   {
     name: "editor",
     path: "/editor",
-    component: () => import('./editor-Bmq84gE8.mjs')
+    component: () => import('./editor-BEi6zD9b.mjs')
   },
   {
     name: "mypage",
@@ -425,7 +425,7 @@ const _routes = [
   {
     name: "multiplayer",
     path: "/multiplayer",
-    component: () => import('./multiplayer-CHEas566.mjs')
+    component: () => import('./multiplayer-Cn6uOkpF.mjs')
   }
 ];
 const _wrapInTransition = (props, children) => {
@@ -755,8 +755,8 @@ const plugins = [
   components_plugin_4kY4pyzJIYX99vmMAAIorFf3CnAaptHitJgf7JxiED8
 ];
 const layouts = {
-  default: defineAsyncComponent(() => import('./default-C8LBcLXQ.mjs').then((m) => m.default || m)),
-  game: defineAsyncComponent(() => import('./game-B37BVK1R.mjs').then((m) => m.default || m))
+  default: defineAsyncComponent(() => import('./default-StgJMAOu.mjs').then((m) => m.default || m)),
+  game: defineAsyncComponent(() => import('./game-CvSZ2mdS.mjs').then((m) => m.default || m))
 };
 const LayoutLoader = defineComponent({
   name: "LayoutLoader",
@@ -1067,7 +1067,7 @@ const useAuth = () => {
         }
       });
       user.value = userData;
-      router.push("/");
+      router.push("/guide");
     } catch (error) {
       alert(error.statusMessage || "Registration failed");
     }

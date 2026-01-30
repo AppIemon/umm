@@ -13,11 +13,18 @@
       </div>
       <div class="center">
         <div class="transport-controls">
-          <button @click="testMap" class="control-btn test">
-            <span class="icon">▶</span> TEST
+          <button @click="testMap" class="control-btn test" :disabled="isTesting">
+            <span class="icon">▶</span> {{ isTesting ? 'TESTING...' : 'TEST' }}
           </button>
-          <button @click="saveMap" class="control-btn save">
-            <span class="icon">💾</span> SAVE
+          <button @click="togglePreview" class="control-btn tutorial" :class="{ active: isPreviewing }">
+            <span class="icon">🎓</span> {{ isPreviewing ? 'STOP' : 'TUTORIAL' }}
+          </button>
+          <button @click="saveMap" class="control-btn save" :disabled="isSaving">
+            <span class="icon">💾</span> {{ isSaving ? 'SAVING...' : 'SAVE' }}
+          </button>
+
+          <button @click="showHitboxes = !showHitboxes" class="control-btn" :class="{ active: showHitboxes }">
+            <span class="icon">⛶</span> HITBOX
           </button>
           <button @click="router.push('/maps')" class="control-btn exit">EXIT</button>
         </div>
@@ -99,14 +106,18 @@
             </div>
           </div>
           
-          <div class="prop-group" v-if="'type' in selectedObjects[0]">
+          <div class="prop-group">
             <label>ROTATION (DEG)</label>
             <div class="rotation-controls">
-              <button @click="rotateSelected(-45)" class="rot-btn">↺ -45°</button>
-              <button @click="rotateSelected(45)" class="rot-btn">45° ↻</button>
+              <button @click="rotateSelected(-45)" title="Rotate -45" class="rot-btn">↺</button>
+              <button @click="rotateSelected(45)" title="Rotate 45" class="rot-btn">↻</button>
+              <button @click="rotateSelected(90)" title="Rotate 90" class="rot-btn">90°</button>
+              <button @click="rotateSelected(180)" title="Rotate 180" class="rot-btn">180°</button>
             </div>
-            <input type="number" v-model.number="selectedObjects[0].angle" />
-            <input type="range" min="0" max="360" v-model.number="selectedObjects[0].angle" />
+            <div class="input-pair">
+              <input type="number" v-model.number="selectedObjects[0].angle" />
+              <input type="range" min="0" max="360" v-model.number="selectedObjects[0].angle" />
+            </div>
           </div>
 
           <div class="prop-group" v-if="'movement' in selectedObjects[0]">
@@ -126,6 +137,29 @@
              </div>
           </div>
 
+          <template v-if="['planet', 'star'].includes(selectedObjects[0].type)">
+              <label>ORBIT COUNT ({{ensureCustomData(selectedObjects[0]).orbitCount || (selectedObjects[0].type==='star'?0:2)}})</label>
+              <input type="number" v-model.number="ensureCustomData(selectedObjects[0]).orbitCount" placeholder="0 or 2" />
+              <label>ORBIT SPEED</label>
+              <input type="number" step="0.1" v-model.number="ensureCustomData(selectedObjects[0]).orbitSpeed" placeholder="Speed" />
+              <label>ORBIT DISTANCE</label>
+              <input type="number" v-model.number="ensureCustomData(selectedObjects[0]).orbitDistance" placeholder="Distance" />
+              
+              <div v-if="selectedObjects[0].type === 'star'" class="hint-text">
+                 Drag a Planet onto this Star to attach it!
+              </div>
+
+              <!-- Show attached children info -->
+              <div v-if="selectedObjects[0].children && selectedObjects[0].children.length > 0" class="children-list">
+                 <label>ATTACHED PLANETS: {{ selectedObjects[0].children.length }}</label>
+                 <div v-for="(child, idx) in selectedObjects[0].children" :key="idx" class="child-item">
+                    <span>Planet {{ idx + 1 }}</span>
+                    <!-- Could add mini config here, but selecting child directly is hard since they are attached. 
+                         For now, users configure planets BEFORE dragging them. -->
+                 </div>
+              </div>
+           </template>
+
           <button @click="deleteSelected" class="delete-btn">DELETE OBJECT</button>
         </div>
         
@@ -143,8 +177,7 @@
 
         <div class="global-settings prop-group">
            <h3>LEVEL CONFIG</h3>
-           <label>TOTAL DURATION (S)</label>
-           <input type="number" v-model.number="mapData.duration" @change="updateTotalLength" />
+
            <label>DIFFICULTY</label>
            <input type="number" v-model.number="mapData.difficulty" />
         </div>
@@ -166,6 +199,27 @@
            </div>
         </div>
       </aside>
+    </div>
+
+    <!-- Smart Gen Modal -->
+    <div v-if="showSmartGenModal" class="modal-overlay">
+      <div class="modal-box glass-panel">
+        <h2>SMART MAP GENERATION</h2>
+        <div class="progress-section">
+          <div class="progress-bar">
+            <div class="fill" :style="{ width: smartGenProgress + '%' }"></div>
+          </div>
+          <span class="status-text">{{ getStatusText(smartGenStatus) }} ({{ (smartGenProgress).toFixed(0) }}%)</span>
+        </div>
+        
+        <div class="log-console">
+          <div v-for="(line, i) in smartGenLog" :key="i" class="log-line">{{ line }}</div>
+        </div>
+        
+        <div class="modal-actions">
+          <button @click="showSmartGenModal = false" :disabled="isGenerating && smartGenProgress < 100" class="control-btn exit">CLOSE</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -200,12 +254,13 @@ const cameraX = ref(0);
 const zoom = ref(1.0);
 const selectedObjects = ref<any[]>([]);
 const selectedPaletteType = ref<string>('spike');
+const showHitboxes = ref(true);
 const workspaceRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const audioInputRef = ref<HTMLInputElement | null>(null);
 
-const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb', 'slope'];
-const portalTypes: PortalType[] = ['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'];
+const obstacleTypes: ObstacleType[] = ['spike', 'block', 'saw', 'mini_spike', 'laser', 'spike_ball', 'v_laser', 'mine', 'orb', 'slope', 'triangle', 'steep_triangle', 'piston_v', 'falling_spike', 'hammer', 'rotor', 'cannon', 'spark_mine', 'laser_beam', 'crusher_jaw', 'swing_blade', 'growing_spike', 'planet', 'star'];
+const portalTypes: PortalType[] = ['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green', 'teleport_in', 'teleport_out'];
 
 const getSymbol = (type: string) => engine.getPortalSymbol(type as any) || '■';
 const getPortalSymbol = (type: string) => engine.getPortalSymbol(type as any);
@@ -215,9 +270,80 @@ const history = ref<string[]>([]);
 const historyIdx = ref(-1);
 const clipboard = ref<any[]>([]);
 const isShiftPressed = ref(false);
-
+const isPreviewing = ref(false);
+const previewTime = ref(0);
+const previewX = ref(200);
+const previewY = ref(360);
+const previewTrail = ref<{x: number, y: number}[]>([]);
+let lastPreviewFrameTime = 0;
+let previewAudioSource: AudioBufferSourceNode | null = null;
+let previewAudioBuffer: AudioBuffer | null = null;
+let previewAudioCtx: AudioContext | null = null;
 const isSelectionBoxActive = ref(false);
 const selectionBox = ref({ x1: 0, y1: 0, x2: 0, y2: 0 });
+
+// Smart Generation
+import { SmartMapGenerator } from '@/utils/smart-map-generator';
+const showSmartGenModal = ref(false);
+const smartGenLog = ref<string[]>([]);
+const smartGenProgress = ref(0);
+const smartGenStatus = ref('');
+const isGenerating = ref(false);
+const isTesting = ref(false);
+const isSaving = ref(false);
+
+const getStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    'idle': 'IDLE',
+    'analyzing_song': 'SONG ANALYSIS',
+    'generating_path': 'MOVEMENT PATH GENERATION',
+    'adjusting_path': 'MOVEMENT PATH ADJUSTMENT',
+    'generating_map': 'MAP GENERATION',
+    'adjusting_map': 'MAP ADJUSTMENT',
+    'saving_map': 'MAP SAVING',
+    'completed': 'COMPLETED',
+    'failed': 'FAILED'
+  };
+  return map[status] || status.toUpperCase().replace('_', ' ');
+};
+
+const openSmartGen = async () => {
+  if (!mapData.value.audioData) {
+    alert("Please upload audio first!");
+    return;
+  }
+  showSmartGenModal.value = true;
+  isGenerating.value = true;
+  smartGenLog.value = [];
+  
+  const gen = new SmartMapGenerator(engine);
+  // Hook up logs
+  const interval = setInterval(() => {
+    smartGenLog.value = [...gen.log];
+    smartGenProgress.value = gen.progress;
+    smartGenStatus.value = gen.status;
+  }, 100);
+
+  // Convert Base64 Audio to ArrayBuffer
+  const res = await fetch(mapData.value.audioData);
+  const buffer = await res.arrayBuffer();
+
+  const success = await gen.generate(buffer, mapData.value);
+  
+  clearInterval(interval);
+  isGenerating.value = false;
+  
+  if (success) {
+    // Apply changes
+    mapData.value.engineObstacles = [...engine.obstacles];
+    mapData.value.enginePortals = [...engine.portals];
+    mapData.value.autoplayLog = [...engine.autoplayLog];
+    
+    // Auto-save ? Or just let user save.
+    smartGenLog.value.push("Map updated in editor. Click SAVE to persist.");
+    saveState();
+  }
+};
 
 const saveState = () => {
   const state = JSON.stringify(mapData.value);
@@ -402,6 +528,8 @@ const onWorkspaceMouseMove = (e: MouseEvent) => {
         obj.x = nx;
         obj.y = ny;
         if ('initialY' in obj) obj.initialY = ny;
+
+
       }
     });
   }
@@ -429,7 +557,48 @@ const onWorkspaceMouseUp = () => {
     ];
     selectedObjects.value = inBox;
     isSelectionBoxActive.value = false;
-  } else if (isDraggingObject || isResizing) {
+  } else if (isDraggingObject) {
+    // Drag-to-Attach Logic
+    if (selectedObjects.value.length === 1) {
+      const draggedObj = selectedObjects.value[0];
+      
+      // Check if dragged object is a Planet
+      if (draggedObj.type === 'planet') {
+        // Find if dropping onto a Star
+        // Simple collision check with center point
+        const cx = draggedObj.x + draggedObj.width / 2;
+        const cy = draggedObj.y + draggedObj.height / 2;
+        
+        let targetStar: any = null;
+        for (const obs of mapData.value.engineObstacles) {
+           if (obs === draggedObj) continue;
+           if (obs.type === 'star') {
+              if (cx >= obs.x && cx <= obs.x + obs.width && cy >= obs.y && cy <= obs.y + obs.height) {
+                 targetStar = obs;
+                 break;
+              }
+           }
+        }
+
+        if (targetStar) {
+           // Attach to Star
+           console.log("Attaching Planet to Star");
+           if (!targetStar.children) targetStar.children = [];
+           // Remove from main list
+           mapData.value.engineObstacles = mapData.value.engineObstacles.filter((o: any) => o !== draggedObj);
+           // Add to children
+           targetStar.children.push(draggedObj);
+           draggedObj.parentId = 'attached'; // Mark as attached
+           // Reset offset relative to parent? Or just keep data?
+           // For now, let's just add it. The rendering logic needs to know it's a child.
+           // Actually, the rendering/collision logic expects children to be abstract params OR objects.
+           // Our game-engine logic previously assumed `orbitCount`.
+           // We need to update game-engine to use `children` if present.
+        }
+      }
+    }
+    saveState();
+  } else if (isResizing) {
     saveState();
   }
   isDragging = false;
@@ -484,6 +653,27 @@ const addObject = (x: number, y: number) => {
   }
 };
 
+const ensureCustomData = (obj: any) => {
+  if (!obj.customData) {
+    obj.customData = {};
+  }
+  return obj.customData;
+};
+
+const setMovementType = (type: string) => {
+  if (selectedObjects.value.length !== 1) return;
+  const obj = selectedObjects.value[0];
+  if (!obj.movement) obj.movement = { type: 'none', range: 0, speed: 0, phase: 0 };
+  
+  if (type === 'none') {
+    obj.movement.type = 'none';
+  } else {
+    obj.movement.type = type;
+    if (obj.movement.range === 0) obj.movement.range = 100;
+    if (obj.movement.speed === 0) obj.movement.speed = 1.0;
+  }
+};
+
 const deleteSelected = () => {
   if (selectedObjects.value.length === 0) return;
   mapData.value.engineObstacles = mapData.value.engineObstacles.filter((o: any) => !selectedObjects.value.includes(o));
@@ -495,6 +685,47 @@ const deleteSelected = () => {
 const updateTotalLength = () => {
   totalLength.value = mapData.value.duration * 350 + 500;
 };
+
+// Automaticaly adjust finish line (duration) based on obstacles
+const updateMapDurationIndices = () => {
+   let maxX = 0;
+   const obs = mapData.value.engineObstacles || [];
+   const prt = mapData.value.enginePortals || [];
+   
+   for (let i = 0; i < obs.length; i++) {
+      const right = obs[i].x + obs[i].width;
+      if (right > maxX) maxX = right;
+   }
+   for (let i = 0; i < prt.length; i++) {
+      const right = prt[i].x + prt[i].width;
+      if (right > maxX) maxX = right;
+   }
+   
+   // Buffer: ~4-5 seconds (1500px)
+   // Minimum: 20 seconds
+   const buffer = 1500;
+   const targetLength = Math.max(2000, maxX + buffer);
+   
+   // Calculate duration (duration * 350 + 500 = totalLength)
+   // duration = (totalLength - 500) / 350
+   const newDuration = Math.max(10, Math.ceil((targetLength - 500) / 350));
+   
+   if (mapData.value.duration !== newDuration) {
+      mapData.value.duration = newDuration;
+      updateTotalLength();
+   }
+};
+
+watch(
+  [
+    () => mapData.value.engineObstacles,
+    () => mapData.value.enginePortals
+  ],
+  () => {
+    updateMapDurationIndices();
+  },
+  { deep: true }
+);
 
 const triggerAudioInput = () => audioInputRef.value?.click();
 
@@ -509,12 +740,33 @@ const handleAudioUpload = (e: Event) => {
     if (!mapData.value.title || mapData.value.title === 'NEW UNTITLED MAP') {
        mapData.value.title = file.name.split('.')[0];
     }
-    alert("Audio file loaded and embedded!");
+    
   };
   reader.readAsDataURL(file);
 };
 
-const testMap = async () => {
+const togglePreview = async () => {
+  if (isPreviewing.value) {
+    isPreviewing.value = false;
+    stopPreviewAudio();
+    return;
+  }
+
+  // Load audio buffer if not already loaded
+  if (!previewAudioCtx && typeof window !== 'undefined') {
+     previewAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+
+  if (mapData.value.audioData && !previewAudioBuffer && previewAudioCtx) {
+    try {
+      const res = await fetch(mapData.value.audioData);
+      const arrayBuffer = await res.arrayBuffer();
+      previewAudioBuffer = await previewAudioCtx.decodeAudioData(arrayBuffer);
+    } catch (err) {
+      console.error("Failed to decode preview audio", err);
+    }
+  }
+
   // Generate autoplay for safety if possible
   const tempEngine = new GameEngine();
   tempEngine.obstacles = [...mapData.value.engineObstacles];
@@ -525,19 +777,80 @@ const testMap = async () => {
   mapData.value.autoplayLog = tempEngine.autoplayLog;
   
   if (!success) {
-     if (!confirm("AI cannot finish this map! Play anyway?")) return;
+     if (!confirm("AI cannot find a clear path! Preview anyway?")) return;
   }
   
-  // Save current editor state so we can return to it
-  sessionStorage.setItem('umm_edit_map', JSON.stringify(mapData.value));
-  sessionStorage.setItem('umm_is_test', 'true');
+  isPreviewing.value = true;
+  previewTime.value = 0;
+  previewTrail.value = [];
+  cameraX.value = 0;
+  startPreviewAudio();
+};
 
-  // Navigate to play with this data
-  sessionStorage.setItem('umm_load_map', JSON.stringify(mapData.value));
-  router.push('/play');
+const startPreviewAudio = () => {
+  if (!previewAudioBuffer || !previewAudioCtx) return;
+  stopPreviewAudio();
+  
+  previewAudioSource = previewAudioCtx.createBufferSource();
+  previewAudioSource.buffer = previewAudioBuffer;
+  previewAudioSource.connect(previewAudioCtx.destination);
+  previewAudioSource.start(0);
+};
+
+const stopPreviewAudio = () => {
+  if (previewAudioSource) {
+    try { previewAudioSource.stop(); } catch(e) {}
+    previewAudioSource = null;
+  }
+};
+
+const testMap = async () => {
+  if (isTesting.value) return;
+  isTesting.value = true;
+  console.log("Starting map test simulation...");
+
+  try {
+    // Generate autoplay for safety if possible
+    const tempEngine = new GameEngine();
+    tempEngine.obstacles = [...mapData.value.engineObstacles];
+    tempEngine.portals = [...mapData.value.enginePortals];
+    tempEngine.totalLength = totalLength.value;
+    
+    console.log("Computing autoplay log...");
+    // Give UI a chance to update before heavy sync work (if any)
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const success = await tempEngine.computeAutoplayLogAsync(200, 360, (p) => {
+        // Optional: show progress?
+    });
+    mapData.value.autoplayLog = tempEngine.autoplayLog;
+    console.log("Autoplay computation result:", success);
+    
+    if (!success) {
+       if (!confirm("AI cannot finish this map! Play anyway?")) {
+         isTesting.value = false;
+         return;
+       }
+    }
+    
+    // Save current editor state so we can return to it
+    sessionStorage.setItem('umm_edit_map', JSON.stringify(mapData.value));
+    sessionStorage.setItem('umm_is_test', 'true');
+  
+    // Navigate to play with this data
+    sessionStorage.setItem('umm_load_map', JSON.stringify(mapData.value));
+    router.push('/play');
+  } catch (e: any) {
+    console.error("Test map error:", e);
+    alert("An error occurred during test preparation: " + e.message);
+    isTesting.value = false;
+  }
 };
 
 const saveMap = async () => {
+  if (isSaving.value) return;
+  isSaving.value = true;
+
   try {
     const isNew = !mapData.value._id;
     const url = isNew ? '/api/maps' : `/api/maps/${mapData.value._id}`;
@@ -578,7 +891,11 @@ const saveMap = async () => {
     }
   } catch (e: any) {
     console.error('Save error:', e);
-    alert(`Failed to save map: ${e.message || 'Unknown error'}`);
+    // Show more detailed error from server if available
+    const msg = e.response?._data?.statusMessage || e.message || 'Unknown error';
+    alert(`Failed to save map: ${msg}`);
+  } finally {
+    isSaving.value = false;
   }
 };
 
@@ -628,6 +945,24 @@ const draw = () => {
   ctx.fillText('CEILING BOUNDARY', cameraX.value + 10, 130);
   ctx.fillText('FLOOR BOUNDARY', cameraX.value + 10, 575);
 
+  // 1. Draw Paths / Background elements first
+  // Draw Intended Path (Autoplay Log)
+  if (mapData.value.autoplayLog && mapData.value.autoplayLog.length > 1) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 0, 255, 0.4)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([10, 5]);
+    ctx.beginPath();
+    ctx.moveTo(mapData.value.autoplayLog[0].x, mapData.value.autoplayLog[0].y);
+    for (let i = 1; i < mapData.value.autoplayLog.length; i++) {
+      ctx.lineTo(mapData.value.autoplayLog[i].x, mapData.value.autoplayLog[i].y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+  }
+
   // Draw Portals (Same as In-game)
   mapData.value.enginePortals.forEach((p: Portal) => {
     const color = engine.getPortalColor(p.type);
@@ -665,6 +1000,14 @@ const draw = () => {
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 3;
       ctx.strokeRect(p.x - 5, p.y - 5, p.width + 10, p.height + 10);
+    }
+
+    if (showHitboxes.value) {
+      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(p.x, p.y, p.width, p.height);
+      ctx.setLineDash([]);
     }
   });
 
@@ -718,7 +1061,160 @@ const draw = () => {
       ctx.fillRect(drawX, drawY, obs.width, obs.height);
       ctx.fillStyle = '#555';
       ctx.fillRect(drawX + 2, drawY + 2, obs.width - 4, obs.height - 4);
-    } else if (obs.type === 'slope') {
+    } else if (obs.type === 'mine') {
+       ctx.fillStyle = '#222';
+       ctx.strokeStyle = '#ff3333';
+       
+       // Pulsation Visual (Editor: use time for preview)
+       let sizeScale = 1.0;
+       if (obs.customData?.pulseSpeed) {
+          const speed = obs.customData.pulseSpeed || 2;
+          const amount = obs.customData.pulseAmount || 0.2;
+          sizeScale = 1 + Math.sin(time * speed) * amount;
+       }
+
+       const radius = (obs.width / 2) * sizeScale;
+       const cx = drawX + obs.width / 2;
+       const cy = drawY + obs.height / 2;
+
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+       ctx.fill();
+       ctx.stroke();
+
+       // Spikes
+       const spikeCount = 8;
+       ctx.beginPath();
+       for(let k=0; k<spikeCount; k++) {
+         const angle = (Math.PI * 2 * k) / spikeCount;
+         const rIn = radius;
+         const rOut = radius + 6;
+         ctx.moveTo(cx + Math.cos(angle)*rIn, cy + Math.sin(angle)*rIn);
+         ctx.lineTo(cx + Math.cos(angle)*rOut, cy + Math.sin(angle)*rOut);
+       }
+       ctx.stroke();
+    }
+    else if (obs.type === 'planet') {
+       const cx = drawX + obs.width / 2;
+       const cy = drawY + obs.height / 2;
+       const radius = obs.width / 2;
+
+       const grad = ctx.createRadialGradient(cx, cy - radius*0.3, radius*0.1, cx, cy, radius);
+       grad.addColorStop(0, '#4488ff');
+       grad.addColorStop(1, '#002266');
+       ctx.fillStyle = grad;
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius, 0, Math.PI*2);
+       ctx.fill();
+
+       const count = obs.customData?.orbitCount ?? 2;
+       const speed = obs.customData?.orbitSpeed ?? 1.0;
+       const dist = obs.customData?.orbitDistance ?? (obs.width * 0.8);
+      
+       for (let i = 0; i < count; i++) {
+         const theta = time * speed + (i * ((Math.PI * 2) / count));
+         const mx = cx + Math.cos(theta) * dist;
+         const my = cy + Math.sin(theta) * dist;
+         
+         ctx.fillStyle = '#88ccff';
+         ctx.beginPath();
+         ctx.arc(mx, my, 8, 0, Math.PI*2);
+         ctx.fill();
+       }
+    }
+    else if (obs.type === 'star') {
+       const cx = drawX + obs.width / 2;
+       const cy = drawY + obs.height / 2;
+       const radius = obs.width / 2;
+
+       const pulse = 1 + Math.sin(time * 5) * 0.05;
+       const grad = ctx.createRadialGradient(cx, cy, radius*0.2, cx, cy, radius * pulse);
+       grad.addColorStop(0, '#ffff88');
+       grad.addColorStop(0.5, '#ffaa00');
+       grad.addColorStop(1, 'rgba(255, 68, 0, 0)');
+       ctx.fillStyle = grad;
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius * 1.2 * pulse, 0, Math.PI*2);
+       ctx.fill();
+       
+       ctx.fillStyle = '#fff';
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius * 0.6, 0, Math.PI*2);
+       ctx.fill();
+
+       const hasChildren = obs.children && obs.children.length > 0;
+       
+       if (hasChildren) {
+         const children = obs.children!;
+         const speed = obs.customData?.orbitSpeed ?? 1.0;
+         
+         children.forEach((child: any, i: number) => {
+            const theta = time * speed + (i * ((Math.PI * 2) / children.length));
+            const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
+
+            const px = cx + Math.cos(theta) * dist;
+            const py = cy + Math.sin(theta) * dist;
+            
+            ctx.fillStyle = '#00ff88';
+            ctx.beginPath();
+            ctx.arc(px, py, 14, 0, Math.PI*2);
+            ctx.fill();
+
+            if (child.type === 'planet') {
+                const moonCount = child.customData?.orbitCount ?? 2;
+                const moonSpeed = child.customData?.orbitSpeed ?? 2.0;
+                const moonDist = child.customData?.orbitDistance ?? (child.width * 0.8);
+
+                for (let j = 0; j < moonCount; j++) {
+                  const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
+                  const mx = px + Math.cos(mTheta) * moonDist;
+                  const my = py + Math.sin(mTheta) * moonDist;
+                  
+                  ctx.fillStyle = '#fff';
+                  ctx.beginPath();
+                  ctx.arc(mx, my, 4, 0, Math.PI*2);
+                  ctx.fill();
+                }
+            }
+         });
+       } else {
+           const count = obs.customData?.orbitCount ?? 3;
+           if (count > 0) {
+               const speed = obs.customData?.orbitSpeed ?? 1.0;
+               const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
+
+               for (let i = 0; i < count; i++) {
+                 const theta = time * speed + (i * ((Math.PI * 2) / count));
+                 const px = cx + Math.cos(theta) * dist;
+                 const py = cy + Math.sin(theta) * dist;
+                 
+                 ctx.fillStyle = '#00ff88';
+                 ctx.beginPath();
+                 ctx.arc(px, py, 14, 0, Math.PI*2);
+                 ctx.fill();
+               }
+           }
+       }
+    }
+    else if (['piston_v', 'hammer', 'rotor', 'cannon', 'spark_mine', 'laser_beam', 'crusher_jaw', 'swing_blade', 'falling_spike', 'growing_spike'].includes(obs.type)) {
+       // Generic new obstacle handler for editor preview
+       // Ideally copy exact drawing logic from GameCanvas, but for now simple distinct shapes
+       ctx.fillStyle = '#ff8800'; 
+       if (obs.type === 'hammer') {
+          ctx.fillRect(drawX, drawY, obs.width, obs.height * 0.3); // Handle
+          ctx.fillRect(drawX - 10, drawY, obs.width + 20, obs.height * 0.4); // Head
+       } else if (obs.type === 'rotor') {
+          ctx.beginPath(); ctx.arc(drawX + obs.width/2, drawY + obs.height/2, obs.width/2, 0, Math.PI*2); ctx.stroke();
+          ctx.moveTo(drawX, drawY); ctx.lineTo(drawX + obs.width, drawY + obs.height); ctx.stroke();
+          ctx.moveTo(drawX + obs.width, drawY); ctx.lineTo(drawX, drawY + obs.height); ctx.stroke();
+       } else {
+          // Fallback distinct block
+          ctx.strokeStyle = '#ff8800';
+          ctx.strokeRect(drawX, drawY, obs.width, obs.height);
+          ctx.fillText(obs.type, drawX, drawY + 10);
+       }
+    }
+    else if (obs.type === 'slope') {
       // 코리도 형성 삼각형
       ctx.fillStyle = '#222';
       ctx.shadowBlur = 15;
@@ -743,41 +1239,61 @@ const draw = () => {
     } else if (obs.type === 'saw') {
       const cx = drawX + obs.width / 2;
       const cy = drawY + obs.height / 2;
-      const radius = obs.width / 2;
+      
+      ctx.save();
+      ctx.translate(cx, cy);
+      // Support non-uniform scaling (Ellipse)
+      ctx.scale(obs.width / 2, obs.height / 2);
+
       ctx.fillStyle = '#ffaa00';
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = 40 / Math.max(obs.width, obs.height) * 10; // Adjust shadow for scale
       ctx.shadowColor = '#ffaa00';
-      ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
+      
+      // Draw Body (Unit Circle -> Ellipse)
+      ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill();
+      
+      // Draw Teeth
       ctx.fillStyle = '#ff6600';
       const teeth = 10;
       const rotation = time * 8;
+      
       for (let i = 0; i < teeth; i++) {
         const angle = (Math.PI * 2 * i / teeth) + rotation;
         ctx.beginPath();
-        if (obs.movement?.type === 'rotate') {
-             // If manual rotation movement is on, combine? Or just use rotation.
-        }
-        ctx.arc(cx + Math.cos(angle) * radius * 0.75, cy + Math.sin(angle) * radius * 0.75, radius * 0.15, 0, Math.PI * 2);
+        // Teeth on the edge of unit circle
+        const tx = Math.cos(angle) * 0.75;
+        const ty = Math.sin(angle) * 0.75;
+        const tr = 0.15;
+        ctx.arc(tx, ty, tr, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.restore();
+
     } else if (obs.type === 'spike_ball') {
       const cx = drawX + obs.width / 2;
       const cy = drawY + obs.height / 2;
-      const radius = obs.width / 2;
       const rotation = time * 3;
+      
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(obs.width / 2, obs.height / 2);
+
       ctx.fillStyle = '#444';
       for (let i = 0; i < 8; i++) {
         const angle = (Math.PI * 2 * i / 8) + rotation;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(angle - 0.2) * radius * 0.8, cy + Math.sin(angle - 0.2) * radius * 0.8);
-        ctx.lineTo(cx + Math.cos(angle) * radius * 1.2, cy + Math.sin(angle) * radius * 1.2);
-        ctx.lineTo(cx + Math.cos(angle + 0.2) * radius * 0.8, cy + Math.sin(angle + 0.2) * radius * 0.8);
+        ctx.moveTo(Math.cos(angle - 0.2) * 0.8, Math.sin(angle - 0.2) * 0.8);
+        ctx.lineTo(Math.cos(angle) * 1.2, Math.sin(angle) * 1.2);
+        ctx.lineTo(Math.cos(angle + 0.2) * 0.8, Math.sin(angle + 0.2) * 0.8);
         ctx.fill();
       }
-      const grad = ctx.createRadialGradient(cx - radius * 0.3, cy - radius * 0.3, radius * 0.1, cx, cy, radius);
+      
+      const grad = ctx.createRadialGradient(-0.3, -0.3, 0.1, 0, 0, 1);
       grad.addColorStop(0, '#888'); grad.addColorStop(1, '#222');
       ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(cx, cy, radius * 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
     } else if (obs.type === 'laser' || obs.type === 'v_laser') {
       const isV = obs.type === 'v_laser';
       const glow = Math.sin(time * 15) * 5 + 10;
@@ -794,22 +1310,47 @@ const draw = () => {
       ctx.stroke();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.shadowBlur = 0; ctx.stroke();
     } else if (obs.type === 'mine') {
-       const cx = drawX + obs.width/2; const cy = drawY + obs.height/2; const radius = obs.width/2;
+       const cx = drawX + obs.width/2; const cy = drawY + obs.height/2;
+       
+       ctx.save();
+       ctx.translate(cx, cy);
+       ctx.scale(obs.width / 2, obs.height / 2);
+
        const pulse = Math.sin(time * 10) * 0.1 + 0.9;
-       ctx.fillStyle = '#ff3333'; ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000';
+       ctx.fillStyle = '#ff3333'; 
+       // Adjusted shadow and scale
+       ctx.shadowBlur = 10 / Math.max(1, (obs.width+obs.height)/100); 
+       ctx.shadowColor = '#ff0000';
+       
        ctx.beginPath();
        for(let i=0; i<6; i++){
          const a = (Math.PI/3)*i + time*2;
-         ctx.lineTo(cx + Math.cos(a)*radius*pulse, cy + Math.sin(a)*radius*pulse);
+         ctx.lineTo(Math.cos(a)*pulse, Math.sin(a)*pulse);
        }
        ctx.closePath(); ctx.fill();
+       ctx.restore();
+
     } else if (obs.type === 'orb') {
-       const cx = drawX + obs.width/2; const cy = drawY + obs.height/2; const radius = (obs.width/2) * (Math.sin(time*5)*0.1+1);
-       const grad = ctx.createRadialGradient(cx, cy, radius*0.1, cx, cy, radius);
+       const cx = drawX + obs.width/2; const cy = drawY + obs.height/2;
+       ctx.save();
+       ctx.translate(cx, cy);
+       ctx.scale(obs.width/2, obs.height/2);
+
+       const radius = (Math.sin(time*5)*0.1+1); // Base radius is 1.0 logic
+       const grad = ctx.createRadialGradient(0, 0, radius*0.1, 0, 0, radius);
        grad.addColorStop(0, '#fff'); grad.addColorStop(0.4, '#aa44ff'); grad.addColorStop(1, 'rgba(68,0,204,0)');
        ctx.fillStyle = grad; ctx.globalCompositeOperation = 'lighter';
-       ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2); ctx.fill();
+       ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI*2); ctx.fill();
        ctx.globalCompositeOperation = 'source-over';
+       ctx.restore();
+    }
+
+    if (showHitboxes.value) {
+      ctx.strokeStyle = '#00ff00';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(drawX, drawY, obs.width, obs.height);
+      ctx.setLineDash([]);
     }
 
     ctx.restore();
@@ -862,6 +1403,91 @@ const draw = () => {
     ctx.strokeRect(x, y, w_box, h_box);
   }
 
+  // Draw Preview Player
+  if (isPreviewing.value) {
+    // 1. Draw Preview Trail
+    if (previewTrail.value.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(previewTrail.value[0].x, previewTrail.value[0].y);
+      for (let i = 1; i < previewTrail.value.length; i++) {
+        ctx.lineTo(previewTrail.value[i].x, previewTrail.value[i].y);
+      }
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)';
+      ctx.lineWidth = 14 / zoom.value;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const log = mapData.value.autoplayLog;
+    if (log && log.length > 0) {
+      // Calculate delta time
+      const now = performance.now() / 1000;
+      if (!lastPreviewFrameTime) lastPreviewFrameTime = now;
+      const dt = now - lastPreviewFrameTime;
+      lastPreviewFrameTime = now;
+
+      // Advance preview time strictly at 1.0x
+      previewTime.value += dt;
+      
+      // Calculate where player SHOULD be based on time
+      const targetX = 200 + previewTime.value * 350; 
+      
+      // Find current position in autoplay log efficiently
+      let currentPoint = log[0];
+      // Autoplay log is sorted by X. We can find the segment.
+      for (let i = 0; i < log.length; i++) {
+        if (log[i].x >= targetX) {
+          if (i > 0) {
+            const p1 = log[i-1];
+            const p2 = log[i];
+            const t = (targetX - p1.x) / (p2.x - p1.x);
+            currentPoint = {
+              x: targetX,
+              y: p1.y + (p2.y - p1.y) * t,
+              holding: p1.holding
+            };
+          } else {
+            currentPoint = log[i];
+          }
+          break;
+        }
+        currentPoint = log[log.length - 1];
+      }
+      
+      previewX.value = currentPoint.x;
+      previewY.value = currentPoint.y;
+      
+      // Update trail
+      previewTrail.value.push({ x: previewX.value, y: previewY.value });
+      if (previewTrail.value.length > 500) previewTrail.value.shift();
+
+      // Auto-update camera (smooth transition)
+      cameraX.value = Math.max(0, previewX.value - 200);
+
+      // Draw Player
+      ctx.save();
+      ctx.fillStyle = currentPoint.holding ? '#ff00ff' : '#00ffff';
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = ctx.fillStyle as string;
+      ctx.beginPath();
+      ctx.arc(previewX.value, previewY.value, 18 / zoom.value, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      
+      // Stop at end
+      if (previewX.value >= totalLength.value) {
+        isPreviewing.value = false;
+        lastPreviewFrameTime = 0;
+        stopPreviewAudio();
+      }
+    }
+  } else {
+    lastPreviewFrameTime = 0;
+  }
+
   ctx.restore();
   animationId = requestAnimationFrame(draw);
 };
@@ -886,7 +1512,14 @@ onMounted(() => {
     updateTotalLength();
   }
   
-  saveState(); // Initial state
+  // Initial state
+  saveState(); 
+
+  // Init AudioContext on client-side only
+  if (typeof window !== 'undefined' && !previewAudioCtx) {
+     previewAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+
   draw();
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -924,9 +1557,13 @@ onMounted(() => {
       } else if (e.key === 'y') {
         redo();
       }
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (selectedObjects.value.length > 0) {
         deleteSelected();
+      }
+    } else if (e.key.toLowerCase() === 'r') {
+      if (selectedObjects.value.length > 0) {
+        rotateSelected(45);
       }
     }
   };
@@ -942,6 +1579,7 @@ onMounted(() => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
     cancelAnimationFrame(animationId);
+    stopPreviewAudio();
   });
 });
 </script>
@@ -974,6 +1612,7 @@ onMounted(() => {
   align-items: center;
   padding: 0 2rem;
   z-index: 10;
+  flex-shrink: 0;
 }
 
 .title { font-size: 1.5rem; font-weight: 900; color: #00ffff; margin: 0; }
@@ -1000,10 +1639,13 @@ onMounted(() => {
   cursor: pointer;
   border: none;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .control-btn.test { background: #00ffaa; color: #000; }
+.control-btn.tutorial { background: #ff00ff; color: #fff; }
 .control-btn.save { background: #4d94ff; color: #fff; }
+.control-btn.active { background: #00ffff; color: #000; box-shadow: 0 0 10px #00ffff; }
 .control-btn.exit { background: transparent; border: 1px solid #444; color: #888; }
 
 .main-layout {
@@ -1020,6 +1662,7 @@ onMounted(() => {
   flex-direction: column;
   padding: 1.5rem;
   overflow-y: auto;
+  min-width: 0;
 }
 
 .object-list {
@@ -1058,12 +1701,15 @@ onMounted(() => {
   border: 2px solid rgba(0, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .editor-canvas {
   flex: 1;
   width: 100%;
+  height: 100%;
   cursor: crosshair;
+  touch-action: none;
 }
 
 .grid-info {
@@ -1080,6 +1726,7 @@ onMounted(() => {
   padding: 0 20px;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .timeline-slider {
@@ -1112,6 +1759,8 @@ input, select {
   color: white;
   padding: 8px;
   border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .input-pair {
@@ -1203,4 +1852,75 @@ input, select {
   font-style: italic;
   font-size: 0.9rem;
 }
+
+/* --- Mobile Responsiveness --- */
+@media (max-width: 1024px) {
+  .editor-page {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .editor-header {
+    height: auto;
+    padding: 0.5rem 1rem;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  
+  .editor-header .left {
+    width: 100%;
+    margin-bottom: 5px;
+  }
+  
+  .editor-header .center {
+    width: 100%;
+    overflow-x: auto;
+  }
+  
+  .transport-controls {
+    justify-content: flex-start;
+  }
+
+  .main-layout {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    gap: 10px;
+  }
+  
+  .workspace {
+    order: 1;
+    min-height: 50vh;
+    flex-shrink: 0;
+  }
+  
+  .left-sidebar {
+    order: 2;
+    height: auto;
+    max-height: 250px;
+  }
+  
+  .right-sidebar {
+    order: 3;
+    height: auto;
+    margin-bottom: 50px; /* Space for content */
+  }
+
+  .object-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .palette-item {
+    flex: 1 1 calc(33.33% - 8px);
+    min-width: 100px;
+  }
+  
+  .input-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@import '@/assets/css/smart_gen_ui.css';
 </style>

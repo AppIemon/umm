@@ -5,8 +5,8 @@
 
 import { MapGenerator, type MapObject } from './MapGenerator';
 
-export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle';
-export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green';
+export type ObstacleType = 'spike' | 'block' | 'saw' | 'mini_spike' | 'laser' | 'spike_ball' | 'v_laser' | 'mine' | 'orb' | 'slope' | 'triangle' | 'steep_triangle' | 'piston_v' | 'falling_spike' | 'hammer' | 'rotor' | 'cannon' | 'spark_mine' | 'laser_beam' | 'crusher_jaw' | 'swing_blade' | 'growing_spike' | 'planet' | 'star';
+export type PortalType = 'gravity_yellow' | 'gravity_blue' | 'speed_0.25' | 'speed_0.5' | 'speed_1' | 'speed_2' | 'speed_3' | 'speed_4' | 'mini_pink' | 'mini_green' | 'teleport_in' | 'teleport_out';
 
 export interface ObstacleMovement {
   type: 'updown' | 'rotate';
@@ -25,6 +25,17 @@ export interface Obstacle {
   movement?: ObstacleMovement;
   initialY?: number; // 움직임의 기준점
   moveY?: { range: number; speed: number }; // 수직 이동 설정
+
+  // Advanced Obstacle Properties
+  customData?: {
+    orbitCount?: number;     // Number of moons (for standalone planet)
+    orbitSpeed?: number;     // Orbit speed
+    orbitDistance?: number;  // Orbit distance
+    pulseSpeed?: number;     // Pulsation speed (for mines)
+    pulseAmount?: number;    // Pulsation size variance
+  };
+  children?: Obstacle[];     // Attached objects (e.g. Planets attached to Star)
+  parentId?: string;         // Helper to track attachment in editor
 }
 
 export interface Portal {
@@ -35,6 +46,18 @@ export interface Portal {
   type: PortalType;
   angle?: number;
   activated: boolean;
+  linkId?: number; // For teleport portals
+}
+
+export interface Boss {
+  active: boolean;
+  x: number;
+  y: number;
+  health: number;
+  maxHealth: number;
+  state: 'idle' | 'attack_laser' | 'attack_projectile' | 'stunned';
+  attackTimer: number;
+  projectiles: { x: number; y: number; vx: number; vy: number; type: 'missile' | 'beam' }[];
 }
 
 // 패턴 정의: 상대적 위치와 요구되는 플레이어 Y 위치
@@ -138,7 +161,26 @@ export class GameEngine {
 
   // AI state persistence
   aiStateTimer: number = 0; // 현재 입력을 유지한 시간 (초)
+  aiStateTimer: number = 0; // 현재 입력을 유지한 시간 (초)
   aiPredictedPath: { x: number; y: number }[] = [];
+
+  beatTimes: number[] = []; // Store beat times for effect synchronization
+
+  // Boss System
+  boss: Boss = {
+    active: false,
+    x: 0,
+    y: 0,
+    health: 100,
+    maxHealth: 100,
+    state: 'idle',
+    attackTimer: 0,
+    projectiles: []
+  };
+
+  // Measure Highlights
+  lastMeasureIndex: number = -1;
+  isMeasureHighlight: boolean = false;
 
   constructor(config?: Partial<MapConfig>) {
     if (config) {
@@ -661,6 +703,7 @@ export class GameEngine {
     // Use MapGenerator for procedural generation
     this.obstacles = [];
     this.portals = [];
+    this.beatTimes = beatTimes || []; // Store beat times
     this.trackDuration = duration;
     this.totalLength = duration * this.baseSpeed + 2000;
     this.autoplayLog = [];
@@ -673,11 +716,12 @@ export class GameEngine {
     const rng = this.seededRandom(seed + offsetAttempt);
 
     // 1. Generate path (autoplayLog) based on beats (Simulation)
-    // generatePathBasedMap creates autoplayLog internally
-    this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile);
+    // generatePathBasedMap creates autoplayLog internally and returns state events
+    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile);
 
     // 2. Generate Terrain & Obstacles along the path
-    const mapObjects = generator.generateFromPath(this.autoplayLog, difficulty, beatTimes);
+    // Pass stateEvents so MapGenerator knows when mini mode is active
+    const mapObjects = generator.generateFromPath(this.autoplayLog, difficulty, beatTimes, stateEvents);
 
     // 3. Convert MapObjects to Obstacles
     for (const obj of mapObjects) {
@@ -685,9 +729,9 @@ export class GameEngine {
       if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'].includes(obj.type)) {
         this.portals.push({
           x: obj.x,
-          y: obj.y,
+          y: this.minY,
           width: obj.width || 50,
-          height: obj.height || 160,
+          height: this.maxY - this.minY,
           type: obj.type as PortalType,
           activated: false
         });
@@ -714,7 +758,7 @@ export class GameEngine {
    * 핵심: 비트에 맞춰 클릭/릴리즈를 번갈아가며 동선을 먼저 계산하고,
    * 그 동선에 맞춰 포탈과 장애물을 배치
    */
-  private generatePathBasedMap(beatTimes: number[], sections: any[], rng: () => number, volumeProfile?: number[]) {
+  private generatePathBasedMap(beatTimes: number[], sections: any[], rng: () => number, volumeProfile?: number[]): StateEvent[] {
     const diff = this.mapConfig.difficulty;
     const playH = this.maxY - this.minY;
     const dt = 1 / 60; // 60fps 시뮬레이션
@@ -745,10 +789,11 @@ export class GameEngine {
     }];
 
     // 강제로 초기 속도 다양화 (난이도에 따라)
-    if (diff >= 5) {
+    const initialEvent = initialEvents[0];
+    if (diff >= 5 && initialEvent) {
       const r = rng();
-      if (r < 0.3) initialEvents[0].speedType = 'speed_0.5';
-      else if (r < 0.6) initialEvents[0].speedType = 'speed_2';
+      if (r < 0.3) initialEvent.speedType = 'speed_0.5';
+      else if (r < 0.6) initialEvent.speedType = 'speed_2';
     }
 
     stateEvents.push(...initialEvents);
@@ -765,25 +810,33 @@ export class GameEngine {
       // 배속 포탈 결정 (난이도 기반)
       let newSpeedType: PortalType;
       if (diff < 8) {
-        if (intensity < 0.4) newSpeedType = 'speed_0.5';
-        else if (intensity < 0.7) newSpeedType = 'speed_1';
+        // Easy: 80% speed_1, others rarely
+        const r = rng();
+        if (r < 0.8) newSpeedType = 'speed_1';
+        else if (r < 0.9) newSpeedType = 'speed_0.5';
         else newSpeedType = 'speed_2';
       } else if (diff < 16) {
-        if (intensity < 0.6) newSpeedType = 'speed_1';
+        // Normal: Mostly 1 and 2, rare 0.5
+        const r = rng();
+        if (r < 0.1) newSpeedType = 'speed_0.5';
+        else if (r < 0.6) newSpeedType = 'speed_1';
         else newSpeedType = 'speed_2';
       } else if (diff < 24) {
-        if (intensity < 0.3) newSpeedType = 'speed_0.5';
-        else if (intensity < 0.65) newSpeedType = 'speed_2';
+        // Hard: Varied speeds (0.5, 1, 2, 3)
+        const r = rng();
+        if (r < 0.15) newSpeedType = 'speed_0.5';
+        else if (r < 0.4) newSpeedType = 'speed_1';
+        else if (r < 0.8) newSpeedType = 'speed_2';
         else newSpeedType = 'speed_3';
       } else {
+        // Impossible: Aggressive shifts (0.25, 0.5, 2, 3, 4)
         const r = rng();
-        // 확률 대폭 조정: 다양한 속도가 나오도록
-        if (intensity > 0.8 || r < 0.15) newSpeedType = 'speed_3';
-        else if (intensity > 0.9 || r < 0.25) newSpeedType = 'speed_4';
-        else if (r < 0.45) newSpeedType = 'speed_0.5';
-        else if (r < 0.55) newSpeedType = 'speed_2';
-        else if (r < 0.70) newSpeedType = 'speed_1'; // 정상 속도 복귀 확률
-        else newSpeedType = currentSpeedType; // 유지
+        if (r < 0.1) newSpeedType = 'speed_0.25';
+        else if (r < 0.25) newSpeedType = 'speed_0.5';
+        else if (r < 0.4) newSpeedType = 'speed_1';
+        else if (r < 0.5) newSpeedType = 'speed_2';
+        else if (r < 0.8) newSpeedType = 'speed_3';
+        else newSpeedType = 'speed_4';
       }
 
       // 중력 반전 결정
@@ -793,13 +846,20 @@ export class GameEngine {
         newInverted = rng() > 0.5;
       }
 
-      // 미니 결정
+      // 미니 결정 (비율 대폭 축소: 진입은 어렵게, 탈출은 쉽게)
       let newMini: boolean = currentMini;
-      if (diff >= 2) {
-        const miniChance = diff >= 24 ? 0.4 : 0.2;
-        if (rng() < miniChance) {
-          newMini = !currentMini;
+      if (diff >= 5) { // 5 난이도 미만은 미니 안나오게
+        if (!currentMini) {
+          // Normal -> Mini: Rare
+          const miniEntryChance = diff >= 24 ? 0.08 : 0.04;
+          if (rng() < miniEntryChance) newMini = true;
+        } else {
+          // Mini -> Normal: Common (Short duration)
+          const miniExitChance = 0.6; // 60% chance to exit mini per measure
+          if (rng() < miniExitChance) newMini = false;
         }
+      } else {
+        newMini = false; // Force normal for low difficulty
       }
 
       // 상태 변화가 있을 때만 이벤트 기록
@@ -846,91 +906,38 @@ export class GameEngine {
       const beatTime = sortedBeats[i]!;
       const nextBeatTime = (i + 1 < sortedBeats.length) ? sortedBeats[i + 1]! : (beatTime + 1.0);
       const interval = nextBeatTime - beatTime;
-      const isFast = interval < fastThreshold;
 
-      // Update Trend Logic
-      if (volumeProfile) {
-        // [Volume Based Trend]
-        // 0.1s resolution (index = time * 10)
-        const idxCurrent = Math.floor(beatTime * 10);
-        // Look back slightly (0.5s) to get trend slope
-        const idxPrev = Math.max(0, idxCurrent - 5);
-
-        const volCurrent = volumeProfile[idxCurrent] || 0;
-        const volPrev = volumeProfile[idxPrev] || 0;
-        const slope = volCurrent - volPrev;
-
-        // Threshold optimized for normalized volume (0~1)
-        if (slope > 0.05) trend = 'up';         // Volume Rising -> Go Up
-        else if (slope < -0.05) trend = 'down'; // Volume Falling -> Go Down
-        else trend = 'flat';                    // Steady Volume -> Stay Flat (or follow inertia?)
-
-        // If volume is very low, prefer flat/down (chill)
-        if (volCurrent < 0.1) trend = 'flat';
-
+      // User Feedback: "Click and Release should be set exactly."
+      // IF Fast Beat: Just Toggle
+      if (interval < fastThreshold) {
+        beatActions.push({ time: beatTime, action: isHolding ? 'release' : 'click' });
+        isHolding = !isHolding;
       } else {
-        // [Random Fallback]
-        trendTimer++;
-        if (trendTimer > 4 + rng() * 4) {
-          const r = rng();
-          if (r < 0.3) trend = 'flat';
-          else if (r < 0.65) trend = 'up';
-          else trend = 'down';
-          trendTimer = 0;
-        }
-      }
+        // Normal Beat:
+        // IF Holding: Release at beat (Logic: End of hold is the beat?) -> User wants "Click" at beat usually
+        // Let's assume Beat = Click (Lead Sound).
+        // So we Click at Beat.
+        // And Release somewhere in between (e.g. 50% or 75% duration).
 
-      // Check Bounds Logic (Estimated) - Force trend change if too high/low
-      // This is a rough estimate since we don't assume precise Y here, but we use 'trend' to guide the ratio.
-      // (Actual Y is simulated later, but we need intention here).
-      // Let's assume a "Virtual Y" based on trend history or just rely on randomness + bounds check in simulation?
-      // Actually, relying on simulation 'later' doesn't help 'input generation' 'now'.
-      // We can only bias the inputs. 
-
-      // Apply Trend Bias to Ratio
-      let holdRatio = 0.5; // Default Flat
-      if (trend === 'up') holdRatio = 0.7; // Hold longer -> Go Up
-      if (trend === 'down') holdRatio = 0.3; // Hold shorter -> Go Down
-
-      // Slightly randomize ratio for organic feel
-      holdRatio += (rng() - 0.5) * 0.1;
-
-      if (isFast) {
-        // [Logic A] Fast Stream: Toggle State
-        // Input acts as a vertex in the path.
+        // Wait, if we are already holding, we must release first to click again.
         if (isHolding) {
-          beatActions.push({ time: beatTime, action: 'release' });
-          isHolding = false;
-        } else {
+          // Release slightly before the beat? Or at the beat?
+          // If we release at beat, we can't click at beat immediately without 0 duration.
+          // So, release at (beat - small margin) or (lastBeat + duration).
+
+          // Simple pulse: 
+          // If not holding: Click at beat.
+          // Then Release at beat + interval * 0.5
           beatActions.push({ time: beatTime, action: 'click' });
-          isHolding = true;
-        }
-      } else {
-        // [Logic B] Normal/Slow: "Pulse" / "Hill" with Trend Bias
-        if (isHolding) {
-          beatActions.push({ time: beatTime - 0.05, action: 'release' });
+          beatActions.push({ time: beatTime + interval * 0.5, action: 'release' });
+          isHolding = false; // We released.
+        } else {
+          // Not holding. Click at beat.
+          beatActions.push({ time: beatTime, action: 'click' });
+          // Release later
+          beatActions.push({ time: beatTime + interval * 0.5, action: 'release' });
           isHolding = false;
         }
-
-        // Execute Pulse
-        beatActions.push({ time: beatTime, action: 'click' });
-
-        // Calculate Release Time based on Trend Ratio
-        // Max limit is still important to ensure gap before next beat.
-        const maxDuration = interval - 0.1; // Leave 0.1s gap at least
-        let duration = interval * holdRatio;
-
-        // Clamp duration
-        if (duration < 0.05) duration = 0.05;
-        if (duration > maxDuration) duration = maxDuration;
-
-        // Ensure minimum pulse for "clicky" feel even in Down trend
-        if (duration < 0.1) duration = 0.1;
-
-        const releaseTime = beatTime + duration;
-        beatActions.push({ time: releaseTime, action: 'release' });
-
-        isHolding = false;
       }
     }
 
@@ -940,7 +947,7 @@ export class GameEngine {
     for (const act of beatActions) {
       if (cleanedActions.length > 0) {
         const last = cleanedActions[cleanedActions.length - 1];
-        if (act.time - last.time < 0.01) {
+        if (act.time - last!.time < 0.01) {
           cleanedActions.pop();
         }
       }
@@ -1010,7 +1017,7 @@ export class GameEngine {
       simY += amp * vy * dt;
 
       // 천장/바닥 경계 처리 (여유 마진 포함)
-      const margin = 30;
+      const margin = 70; // Increased from 30 to 70 to prevent sticking
       if (simY < this.minY + margin) simY = this.minY + margin;
       if (simY > this.maxY - margin) simY = this.maxY - margin;
 
@@ -1061,15 +1068,16 @@ export class GameEngine {
 
     // 5단계: 동선 강제를 위한 장애물 배치 (MapGenerator로 대체)
     // this.placeObstaclesForPath(beatActions, stateEvents, rng, diff);
+    return stateEvents;
   }
 
   /**
    * 동선에 맞춰 포탈 배치 (정상 크기, 경로 사이에 배치)
    */
   private generatePathAlignedPortals(xPos: number, pathY: number, types: PortalType[]) {
-    const portalWidth = 50;
-    const portalHeight = 160; // 2배 높이로 증가 (기본 80 -> 160)
-    const horizontalSpacing = 60;
+    const portalWidth = 64;
+    const portalHeight = 240; // Increased to 240 for better forcing
+    const horizontalSpacing = 80;
 
     types.forEach((type, horizontalIndex) => {
       const currentX = xPos + horizontalIndex * (portalWidth + horizontalSpacing);
@@ -1079,19 +1087,22 @@ export class GameEngine {
 
       this.portals.push({
         x: currentX,
-        y: portalY,
+        y: this.minY,
         width: portalWidth,
-        height: portalHeight,
+        height: this.maxY - this.minY,
         type: type,
         activated: false
       });
 
+      // 난이도 1~2는 강제 블록 벽 생성 안함
+      if (this.mapConfig.difficulty <= 2) return;
+
       // 포탈 위아래에 블록 벽 배치 (강제 통과)
-      const wallThickness = 60;
-      const gapSize = portalHeight + 30; // 통과 가능한 간격
+      const wallThickness = 70;
+      const gapSize = portalHeight + 40; // Larger gap for larger portal
 
       // 위쪽 벽
-      const topWallHeight = portalY - this.minY - 30; // Margin doubled 15 -> 30
+      const topWallHeight = portalY - this.minY - 20;
       if (topWallHeight > 20) {
         this.obstacles.push({
           x: currentX - 5,
@@ -1104,7 +1115,7 @@ export class GameEngine {
       }
 
       // 아래쪽 벽
-      const bottomWallStart = portalY + portalHeight + 30; // Margin doubled 15 -> 30
+      const bottomWallStart = portalY + portalHeight + 20;
       const bottomWallHeight = this.maxY - bottomWallStart;
       if (bottomWallHeight > 20) {
         this.obstacles.push({
@@ -1123,17 +1134,32 @@ export class GameEngine {
    * 장애물이 동선과 충돌하는지 검사
    * @returns true if safe (no collision), false if collides with path
    */
+  /**
+   * 장애물이 동선과 충돌하는지 검사 (Binary Search Optimized)
+   * @returns true if safe (no collision), false if collides with path
+   */
   private isObstacleSafe(obsX: number, obsY: number, obsW: number, obsH: number, margin: number = 0): boolean {
     const playerSize = this.basePlayerSize + margin;
+    const checkMinX = obsX - playerSize;
+    const checkMaxX = obsX + obsW + playerSize;
+
+    // Binary Search for start index
+    let l = 0, r = this.autoplayLog.length;
+    while (l < r) {
+      const mid = (l + r) >>> 1;
+      if (this.autoplayLog[mid]!.x < checkMinX) l = mid + 1;
+      else r = mid;
+    }
+    const startIndex = l;
 
     // 해당 X 범위 내의 동선 포인트들 확인
-    for (const point of this.autoplayLog) {
-      // 장애물의 X 범위와 동선의 X가 겹치는지 확인
-      if (point.x >= obsX - playerSize && point.x <= obsX + obsW + playerSize) {
-        // Y 범위 충돌 확인
-        if (point.y >= obsY - playerSize && point.y <= obsY + obsH + playerSize) {
-          return false; // 충돌!
-        }
+    for (let i = startIndex; i < this.autoplayLog.length; i++) {
+      const point = this.autoplayLog[i]!;
+      if (point.x > checkMaxX) break; // X 범위 벗어나면 중단 (Sorted)
+
+      // Y 범위 충돌 확인
+      if (point.y >= obsY - playerSize && point.y <= obsY + obsH + playerSize) {
+        return false; // 충돌!
       }
     }
     return true; // 안전
@@ -1699,6 +1725,17 @@ export class GameEngine {
     const sortedObs = [...this.obstacles].sort((a, b) => a.x - b.x);
     const sortedPortals = [...this.portals].sort((a, b) => a.x - b.x);
 
+    // Binary search helper for obstacles
+    const findStartIndex = (minX: number): number => {
+      let l = 0, r = sortedObs.length;
+      while (l < r) {
+        const mid = (l + r) >>> 1;
+        if (sortedObs[mid]!.x < minX) l = mid + 1;
+        else r = mid;
+      }
+      return l;
+    };
+
     interface SearchState {
       x: number; y: number; time: number; g: boolean; sm: number; m: boolean; wa: number;
       h: boolean; pIdx: number; lastSwitchTime: number; prev: SearchState | null;
@@ -1720,7 +1757,10 @@ export class GameEngine {
     const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 0): boolean => {
       // 바닥/천장 충돌 체크 (실제 게임과 동일하게 마진 없음)
       if (ty < this.minY + sz || ty > this.maxY - sz) return true;
-      for (let i = 0; i < sortedObs.length; i++) {
+
+      const startI = findStartIndex(tx - 1000); // 1000px lookback is safe for max obstacle width
+
+      for (let i = startI; i < sortedObs.length; i++) {
         const o = sortedObs[i]!;
         if (o.x + o.width < tx - 50) continue;
         if (o.x > tx + 100) break;
@@ -1770,8 +1810,8 @@ export class GameEngine {
         const vy = sg ? (testH ? 1 : -1) : (testH ? -1 : 1);
         sy += amp * vy * dt;
 
-        // 생존 확인: 안전 마진 3px 적용 (아슬아슬한 경로 방지)
-        if (checkColl(sx, sy, sz, sTime, 3)) return false;
+        // 생존 확인: 안전 마진 1px 적용 (더 정밀한 경로 탐색 허용)
+        if (checkColl(sx, sy, sz, sTime, 1)) return false;
       }
       return true;
     };
@@ -1807,6 +1847,19 @@ export class GameEngine {
           if (p.type.startsWith('speed_')) nSM = this.getSpeedMultiplierFromType(p.type as PortalType);
           if (p.type === 'mini_pink') nM = true;
           if (p.type === 'mini_green') nM = false;
+          if (p.type === 'teleport_in') {
+            // AI Simulation: Teleport
+            const target = this.portals.find(tp => tp.type === 'teleport_out' && (p.linkId ? tp.linkId === p.linkId : tp.x > p.x));
+            if (target) {
+              curr.x = target.x + target.width + 20;
+              curr.y = target.y + target.height / 2;
+              // Re-find portals at new location
+              npIdx = sortedPortals.findIndex(sp => sp.x >= curr.x);
+              if (npIdx === -1) npIdx = sortedPortals.length;
+              // Stop processing portals at old location
+              break;
+            }
+          }
           // 속도나 미니 상태가 변하면 각도 재계산
           nWA = this.getEffectiveAngle(nM, nSM);
         }
@@ -1891,7 +1944,7 @@ export class GameEngine {
           { top: this.maxY, bottom: Infinity }   // 바닥 아래
         ];
 
-        for (let oi = 0; oi < sortedObs.length; oi++) {
+        for (let oi = findStartIndex(nX - 1000); oi < sortedObs.length; oi++) {
           const o = sortedObs[oi]!;
           if (o.x + o.width < nX) continue;
           if (o.x > nX) break;
@@ -2134,8 +2187,22 @@ export class GameEngine {
     // 오토플레이 모드에서는 AI 시뮬레이션 시간(simTime)을 사용하여 이동 오브젝트 동기화
     const effectiveTime = simTime !== null ? simTime : currentTime;
     this.updateMovingObstacles(effectiveTime);
+    this.updateBoss(dt, effectiveTime); // Boss update
     this.checkPortalCollisions();
     this.checkCollisions(effectiveTime);
+
+    // Beat Highlight logic
+    if (this.beatTimes.length > 0) {
+      // Find current beat index
+      const currentBeatIdx = this.beatTimes.findIndex(t => t >= currentTime);
+      if (currentBeatIdx !== -1 && currentBeatIdx !== this.lastMeasureIndex) {
+        if (Math.abs(this.beatTimes[currentBeatIdx] - currentTime) < 0.1) {
+          this.isMeasureHighlight = true;
+          this.lastMeasureIndex = currentBeatIdx;
+          setTimeout(() => this.isMeasureHighlight = false, 150);
+        }
+      }
+    }
 
     if (this.playerX >= this.totalLength) {
       this.isPlaying = false;
@@ -2148,11 +2215,34 @@ export class GameEngine {
       if (portal.x + portal.width < this.playerX - 50) continue;
       if (portal.x > this.playerX + 100) break;
 
-      if (this.playerX + this.playerSize > portal.x &&
-        this.playerX - this.playerSize < portal.x + portal.width &&
-        this.playerY + this.playerSize > portal.y &&
-        this.playerY - this.playerSize < portal.y + portal.height) {
+      const pSize = this.playerSize;
+      const points = [
+        { x: this.playerX - pSize, y: this.playerY - pSize },
+        { x: this.playerX + pSize, y: this.playerY - pSize },
+        { x: this.playerX - pSize, y: this.playerY + pSize },
+        { x: this.playerX + pSize, y: this.playerY + pSize },
+        { x: this.playerX, y: this.playerY }
+      ];
 
+      const isRotated = portal.angle && portal.angle !== 0;
+      if (isRotated) {
+        const cx = portal.x + portal.width / 2;
+        const cy = portal.y + portal.height / 2;
+        const rad = -portal.angle! * Math.PI / 180;
+        points.forEach(p => {
+          const dx = p.x - cx;
+          const dy = p.y - cy;
+          p.x = cx + dx * Math.cos(rad) - dy * Math.sin(rad);
+          p.y = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
+        });
+      }
+
+      const isColliding = points.some(p =>
+        p.x >= portal.x && p.x <= portal.x + portal.width &&
+        p.y >= portal.y && p.y <= portal.y + portal.height
+      );
+
+      if (isColliding) {
         portal.activated = true;
         this.activatePortal(portal.type);
         this.spawnPortalParticles(portal);
@@ -2182,6 +2272,67 @@ export class GameEngine {
         this.playerSize = this.basePlayerSize;
         this.waveAngle = 45;
         break;
+      case 'teleport_in':
+        // Find linked output portal
+        // If linkId is present, find match. If not, find the nearest 'teleport_out' ahead.
+        const currentPortal = this.portals.find(p => p.type === 'teleport_in' && p.activated && Math.abs(p.x - this.playerX) < 100);
+        if (currentPortal) {
+          let target = null;
+          if (currentPortal.linkId) {
+            target = this.portals.find(p => p.type === 'teleport_out' && p.linkId === currentPortal.linkId);
+          } else {
+            target = this.portals.find(p => p.type === 'teleport_out' && p.x > this.playerX);
+          }
+
+          if (target) {
+            this.playerX = target.x + target.width + 20;
+            this.playerY = target.y + target.height / 2;
+            this.cameraX = this.playerX - 280; // Instant camera catchup
+            this.trail = []; // Clear trail to avoid visual glitch lines
+            this.spawnPortalParticles(target);
+          }
+        }
+        break;
+      case 'teleport_out':
+        // Do nothing on entry, it's an exit
+        break;
+    }
+  }
+
+  private updateBoss(dt: number, time: number) {
+    if (!this.boss.active) return;
+
+    // Simple state machine
+    this.boss.attackTimer += dt;
+
+    // Boss floats on the right of the screen
+    this.boss.x = this.cameraX + 1000;
+    this.boss.y = 360 + Math.sin(time * 0.5) * 100;
+
+    // Projectile update
+    for (let i = this.boss.projectiles.length - 1; i >= 0; i--) {
+      const p = this.boss.projectiles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      // Collision check for projectiles
+      const dist = Math.hypot(p.x - this.playerX, p.y - this.playerY);
+      if (dist < 20 + this.playerSize) {
+        this.die("보스 공격에 당했습니다!");
+      }
+
+      if (p.x < this.cameraX - 100) this.boss.projectiles.splice(i, 1);
+    }
+
+    // Attack logic
+    if (this.boss.attackTimer > 3.0) {
+      // Fire
+      this.boss.projectiles.push({
+        x: this.boss.x, y: this.boss.y,
+        vx: -600, vy: (this.playerY - this.boss.y) * 2,
+        type: 'missile'
+      });
+      this.boss.attackTimer = 0;
     }
   }
 
@@ -2212,7 +2363,9 @@ export class GameEngine {
       case 'speed_3': return '#ff44ff';
       case 'speed_4': return '#ff4444';
       case 'mini_pink': return '#ff66cc';  // 분홍색 뿨족뿨족
-      case 'mini_green': return '#66ff66';  // 초록색 뿨족뿨족
+      case 'mini_green': return '#66ff66';
+      case 'teleport_in': return '#00ffff';
+      case 'teleport_out': return '#ff00ff';
       default: return '#ffffff';
     }
   }
@@ -2227,8 +2380,10 @@ export class GameEngine {
       case 'speed_2': return '>>';
       case 'speed_3': return '>>>';
       case 'speed_4': return '>>>>';
-      case 'mini_pink': return '◆';  // 작은 다이아몬드
-      case 'mini_green': return '◇';  // 빈 다이아몬드
+      case 'mini_pink': return '◆';
+      case 'mini_green': return '◇';
+      case 'teleport_in': return 'IN';
+      case 'teleport_out': return 'OUT';
       default: return '?';
     }
   }
@@ -2326,19 +2481,35 @@ export class GameEngine {
 
     if (obs.type === 'slope') {
       // 새로운 코리도 삼각형 형태에 맞춤
-      // angle > 0: (x, y+h) -> (x+w, y) -> (x, y) 왼쪽 하단 직각
-      // angle < 0: (x+w, y+h) -> (x, y) -> (x+w, y) 오른쪽 하단 직각
+      // angle > 0: (x, y+h) -> (x+w, y) -> (x, y) 왼쪽 하단 직각 (위쪽 슬로프 ◤)
+      // angle < 0: (x+w, y+h) -> (x, y) -> (x+w, y) 오른쪽 하단 직각 (아래쪽 슬로프 ◥)
       const t = (x - obs.x) / obs.width;
 
       if (obsAngle > 0) {
         // 왼쪽 하단 직각: 빗변은 (x, y+h) -> (x+w, y)
+        // Solid range is above diagonal
         const hypotenuseY = obsY + obs.height * (1 - t);
         return { top: obsY, bottom: hypotenuseY };
       } else {
-        // 오른쪽 하단 직각: 빗변은 (x+w, y+h) -> (x, y)
+        // 오른쪽 하단 직각: 빗변은 (x+w, y+h) -> (x, y) (TL to BR)
+        // Solid range is above diagonal (Top-Right part matches rendering ◥)
         const hypotenuseY = obsY + obs.height * t;
-        return { top: hypotenuseY, bottom: obsY + obs.height };
+        return { top: obsY, bottom: hypotenuseY };
       }
+    }
+
+    if (obs.type === 'triangle' || obs.type === 'steep_triangle') {
+      // 바닥 경사면 ◢ (Right angle at Bottom-Right)
+      // (x, y+h) -> (x+w, y+h) -> (x+w, y)
+      // Solid range is below diagonal (TL to BR line is diagonal? No)
+      // Vertices: BL(x, y+h), BR(x+w, y+h), TR(x+w, y).
+      // Diagonal is BL to TR.
+      // x connects to hypotenuse: hypotenuse goes from (x, y+h) to (x+w, y).
+      const t = (x - obs.x) / obs.width;
+      // At t=0 (x), y = y+h. At t=1 (x+w), y = y.
+      const hypotenuseY = obsY + obs.height * (1 - t);
+      // Solid part is BELOW hypotenuse (between hypotenuse and bottom)
+      return { top: hypotenuseY, bottom: obsY + obs.height };
     }
 
     return { top: obsY, bottom: obsY + obs.height };
@@ -2371,9 +2542,24 @@ export class GameEngine {
       obsAngle = state.angle;
     }
 
+    // --- Advanced Obstacle Logic (Pulsation & Orbits) ---
+    // Effective size calculation for pulsation
+    let effectiveWidth = obs.width;
+    let effectiveHeight = obs.height;
+
+    // Apply Pulsation (Mines)
+    if (obs.type === 'mine' && obs.customData?.pulseSpeed) {
+      const time = simTime || performance.now() / 1000;
+      const speed = obs.customData.pulseSpeed || 2;
+      const amount = obs.customData.pulseAmount || 0.2; // 20% variance
+      const pulse = 1 + Math.sin(time * speed) * amount;
+      effectiveWidth *= pulse;
+      effectiveHeight *= pulse;
+    }
+
     const minHitboxSize = 10;
-    const effectiveWidth = Math.max(obs.width, minHitboxSize);
-    const effectiveHeight = Math.max(obs.height, minHitboxSize);
+    effectiveWidth = Math.max(effectiveWidth, minHitboxSize);
+    effectiveHeight = Math.max(effectiveHeight, minHitboxSize);
     const effectiveX = obs.x - (effectiveWidth - obs.width) / 2;
     const effectiveY = obsY - (effectiveHeight - obs.height) / 2;
 
@@ -2387,6 +2573,102 @@ export class GameEngine {
       { x: px + pSize, y: py + pSize },
       { x: px, y: py }
     ];
+
+    // --- Orbit Collision Check (Planet & Star) ---
+    if (obs.type === 'planet' || obs.type === 'star') {
+      const time = simTime || performance.now() / 1000;
+      const cx = obs.x + obs.width / 2;
+      const cy = obsY + obs.height / 2;
+
+      // 1. Check Main Body (Circle Collision)
+      // Check standard circle collision against player points
+      // Simplify: Distance(playerCenter, bodyCenter) < (bodyRadius + playerRadius)
+      const bodyRadius = effectiveWidth / 2; // Assuming circular
+      const distSq = (px - cx) ** 2 + (py - cy) ** 2;
+      if (distSq < (bodyRadius + pSize - 5) ** 2) return true; // -5 for leniency
+
+      // 2. Check Orbiting Moons/Planets
+      const hasChildren = obs.children && obs.children.length > 0;
+
+      if (hasChildren) {
+        // Use attached children as orbiting bodies
+        const children = obs.children!;
+        const speed = obs.customData?.orbitSpeed ?? 1.0;
+
+        children.forEach((child, i) => {
+          // Calculate Child Position (Planet orbiting Star)
+          // Each child is distributed or has its own phase?
+          // For simplicity, distribute them evenly or use their initial drag position?
+          // Let's standard distribute them for now to ensure working orbits
+          const theta = time * speed + (i * ((Math.PI * 2) / children.length));
+          const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
+
+          const px = cx + Math.cos(theta) * dist;
+          const py = cy + Math.sin(theta) * dist;
+
+          // Check collision with Child (Planet)
+          const childSize = child.width / 2; // Radius
+          const pDistSq = (px - px) ** 2 + (py - py) ** 2; // Wait, px/py conflict with player px/py
+          // Let's rename player px/py to playerX/playerY for clarity locally, or just use context vars
+          const distToChildSq = (points[4].x - px) ** 2 + (points[4].y - py) ** 2; // points[4] is center
+          if (distToChildSq < (childSize + pSize - 2) ** 2) return true;
+
+          // Check Child's Moons (Moon orbiting Planet)
+          if (child.type === 'planet') {
+            const moonCount = child.customData?.orbitCount ?? 2;
+            const moonSpeed = child.customData?.orbitSpeed ?? 2.0;
+            const moonDist = child.customData?.orbitDistance ?? (child.width * 0.8);
+
+            for (let j = 0; j < moonCount; j++) {
+              const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
+              const mx = px + Math.cos(mTheta) * moonDist;
+              const my = py + Math.sin(mTheta) * moonDist;
+
+              const distToMoonSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
+              if (distToMoonSq < (8 + pSize - 2) ** 2) return true;
+            }
+          }
+        });
+
+      } else {
+        // Fallback: Abstract Orbit generation (Old Logic)
+        const count = obs.customData?.orbitCount ?? (obs.type === 'star' ? 0 : 2); // Default 0 for star now if manual
+        if (count === 0 && obs.type === 'star') {
+          // No orbiters
+        } else {
+          const speed = obs.customData?.orbitSpeed ?? 1.0;
+          const dist = obs.customData?.orbitDistance ?? (obs.width * 0.8);
+
+          for (let i = 0; i < count; i++) {
+            const theta = time * speed + (i * ((Math.PI * 2) / count));
+            const mx = cx + Math.cos(theta) * dist;
+            const my = cy + Math.sin(theta) * dist;
+
+            // Moon size: Planet's moon is small, Star's planet is medium
+            const moonRadius = obs.type === 'star' ? 20 : 10;
+
+            // Moon collision
+            const mDistSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
+            if (mDistSq < (moonRadius + pSize - 2) ** 2) return true;
+
+            // Nested Orbit (Old Legacy logic, kept if needed but children logic supersedes)
+            if (obs.type === 'star' && obs.customData?.nestedOrbit) {
+              const subMoonCount = 2;
+              const subDist = 25;
+              const subSpeed = speed * 2.5;
+              for (let j = 0; j < subMoonCount; j++) {
+                const subTheta = time * subSpeed + (j * ((Math.PI * 2) / subMoonCount));
+                const smx = mx + Math.cos(subTheta) * subDist;
+                const smy = my + Math.sin(subTheta) * subDist;
+                const smDistSq = (points[4].x - smx) ** 2 + (points[4].y - smy) ** 2;
+                if (smDistSq < (8 + pSize - 2) ** 2) return true;
+              }
+            }
+          }
+        }
+      }
+      return false; // If passed all orbit checks
+    }
 
     // 전역 회전 지원: 플레이어 점들을 장애물 중심 기준으로 역회전 시킴
     if (isRotated) {
@@ -2440,7 +2722,21 @@ export class GameEngine {
       return false;
     }
 
-    // 4. 가시 (Sike)
+    // 4. Triangle (Floor Slope ◢)
+    if (obs.type === 'triangle' || obs.type === 'steep_triangle') {
+      // Vertices: BL(x, y+h), BR(x+w, y+h), TR(x+w, y)
+      const tri = [
+        { x: effectiveX, y: effectiveY + effectiveHeight },
+        { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight },
+        { x: effectiveX + effectiveWidth, y: effectiveY }
+      ];
+      for (const p of points) {
+        if (this.isPointInTriangle(p.x, p.y, tri[0]!.x, tri[0]!.y, tri[1]!.x, tri[1]!.y, tri[2]!.x, tri[2]!.y)) return true;
+      }
+      return false;
+    }
+
+    // 5. 가시 (Spike)
     if (obs.type === 'spike' || obs.type === 'mini_spike') {
       const isBottom = effectiveY > 300;
       const tri = isBottom ? [
@@ -2478,10 +2774,58 @@ export class GameEngine {
       const cy = effectiveY + effectiveHeight / 2;
       return points.some(p => p.x >= effectiveX && p.x <= effectiveX + effectiveWidth && p.y >= cy - h && p.y <= cy + h);
     }
-    if (obs.type === 'v_laser') {
+    if (obs.type === 'v_laser' || obs.type === 'laser_beam') {
       const w = effectiveWidth * 0.4;
       const cx = effectiveX + effectiveWidth / 2;
       return points.some(p => p.y >= effectiveY && p.y <= effectiveY + effectiveHeight && p.x >= cx - w && p.x <= cx + w);
+    }
+
+    // New Obstacles Collision
+    if (obs.type === 'hammer') {
+      // Hammer head + handle? simpler: just circle at the end
+      const cx = effectiveX + effectiveWidth / 2;
+      const cy = effectiveY + effectiveHeight / 2;
+      // Assuming it's a circle hazard for now
+      return points.some(p => (p.x - cx) ** 2 + (p.y - cy) ** 2 < (effectiveWidth / 2) ** 2);
+    }
+    if (obs.type === 'falling_spike') {
+      // Like spike but moving. checkObstacleCollision handles movement via getObstacleStateAt called at start
+      // So shapes match 'spike' logic if type string was checked.
+      // Reuse spike logic:
+      const tri = [
+        { x: effectiveX, y: effectiveY },
+        { x: effectiveX + effectiveWidth / 2, y: effectiveY + effectiveHeight },
+        { x: effectiveX + effectiveWidth, y: effectiveY }
+      ];
+      for (const p of points) {
+        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+      }
+      return false;
+    }
+    if (['rotor', 'cannon', 'spark_mine', 'crusher_jaw', 'swing_blade'].includes(obs.type)) {
+      // Generally circle or rect based hazards
+      const cx = effectiveX + effectiveWidth / 2;
+      const cy = effectiveY + effectiveHeight / 2;
+      const radius = (effectiveWidth / 2) * 0.8;
+      for (const p of points) {
+        if ((p.x - cx) ** 2 + (p.y - cy) ** 2 < radius ** 2) return true;
+      }
+      return false;
+    }
+    if (obs.type === 'piston_v') {
+      return isInsideAABB; // Rectangular crush
+    }
+    if (obs.type === 'growing_spike') {
+      // Treat as spike
+      const tri = [
+        { x: effectiveX, y: effectiveY + effectiveHeight },
+        { x: effectiveX + effectiveWidth / 2, y: effectiveY },
+        { x: effectiveX + effectiveWidth, y: effectiveY + effectiveHeight }
+      ];
+      for (const p of points) {
+        if (this.isPointInTriangle(p.x, p.y, tri[0].x, tri[0].y, tri[1].x, tri[1].y, tri[2].x, tri[2].y)) return true;
+      }
+      return false;
     }
 
     return false;
@@ -2604,6 +2948,14 @@ export class GameEngine {
         x: cx + p.dx * cos - p.dy * sin,
         y: cy + p.dx * sin + p.dy * cos
       }));
+    }
+
+    if (obs.type === 'triangle' || obs.type === 'steep_triangle') {
+      return [
+        { x: obs.x, y: obs.y + obs.height }, // BL
+        { x: obs.x + obs.width, y: obs.y + obs.height }, // BR
+        { x: obs.x + obs.width, y: obs.y } // TR
+      ];
     }
 
     return [

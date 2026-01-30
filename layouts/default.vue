@@ -1,5 +1,6 @@
 <template>
   <div class="layout-container">
+    <LandscapeOverlay />
     <NavBar />
     <div class="content-area">
       <slot />
@@ -28,6 +29,7 @@ body, html {
   margin-left: 250px; /* Navbar width */
   position: relative;
   min-height: 100vh;
+  transition: margin-left 0.3s;
 }
 
 /* Scrollbar */
@@ -42,5 +44,22 @@ body, html {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #00ff88;
+}
+
+@media (max-width: 1024px) {
+  .content-area {
+    margin-left: 70px; /* Collapsed navbar width */
+  }
+}
+
+@media (max-width: 768px) {
+  .content-area {
+    margin-left: 70px; /* Keep space for icon bar or 0 if we hide it completely */
+    margin-bottom: 60px;
+  }
+  
+  .layout-container {
+    flex-direction: column;
+  }
 }
 </style>

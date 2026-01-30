@@ -32,7 +32,7 @@ const index_get = defineEventHandler(async (event) => {
   const authUser = userCookie ? JSON.parse(userCookie) : null;
   const userId = (authUser == null ? void 0 : authUser._id) || (authUser == null ? void 0 : authUser.id);
   try {
-    const maps = await GameMap.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50);
+    const maps = await GameMap.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50).allowDiskUse(true);
     if (userId) {
       const mapIds = maps.map((m) => m._id);
       const userScores = await Score.find({

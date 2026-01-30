@@ -1,0 +1,27 @@
+.smart-gen-logs {
+  margin-top: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #333;
+  width: 100%;
+  max-width: 400px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #aaa;
+  text-align: left;
+}
+
+.log-entry {
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-detail {
+  margin-top: 10px;
+  font-weight: bold;
+  color: #00ffff;
+  letter-spacing: 1px;
+}

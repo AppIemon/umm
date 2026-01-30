@@ -71,6 +71,7 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
   z-index: 1000;
   box-shadow: 2px 0 20px rgba(0, 0, 0, 0.5);
   font-family: 'Outfit', sans-serif;
+  transition: width 0.3s ease;
 }
 
 .brand {
@@ -115,6 +116,7 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
   position: relative;
   overflow: hidden;
   border-radius: 8px;
+  white-space: nowrap;
 }
 
 .nav-item:hover, .nav-item.router-link-active {
@@ -139,6 +141,8 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
 .nav-item .icon {
   margin-right: 1rem;
   font-size: 1.2rem;
+  min-width: 24px;
+  text-align: center;
 }
 
 .nav-item.disabled {
@@ -156,6 +160,7 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
   margin-top: auto;
   padding-top: 2rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
 }
 
 .user-info {
@@ -169,6 +174,9 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
   margin-bottom: 1rem;
   text-transform: uppercase;
   font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .logout-btn {
@@ -203,6 +211,7 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
   text-transform: uppercase;
   transition: all 0.2s;
   border-radius: 4px;
+  white-space: nowrap;
 }
 
 .auth-btn.login {
@@ -225,5 +234,49 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
 .auth-btn.register:hover {
   background: white;
   color: black;
+}
+
+@media (max-width: 1024px) {
+  .cyber-nav {
+    width: 70px;
+    padding: 1rem 0.5rem;
+  }
+  
+  .brand {
+    padding: 0;
+    margin-bottom: 1rem;
+  }
+  
+  .nav-logo {
+    width: 40px;
+  }
+  
+  .nav-item {
+    justify-content: center;
+    padding: 0.8rem;
+  }
+  
+  .nav-item .icon {
+    margin-right: 0;
+  }
+  
+  .label, .username, .logout-btn, .auth-btn {
+    display: none;
+  }
+  
+  .nav-item:hover, .nav-item.router-link-active {
+    transform: none;
+  }
+  
+  /* Show icons for auth instead? Or just hide panel */
+  .auth-btns {
+     display: none; /* Hide login/register on collapsed for now, or use icon */
+  }
+  
+  /* Maybe show a simple login icon if guest? */
+  .user-panel {
+     padding-top: 1rem;
+     border-top: none;
+  }
 }
 </style>

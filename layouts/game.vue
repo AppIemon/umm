@@ -1,5 +1,6 @@
 <template>
   <div class="game-layout">
+    <LandscapeOverlay />
     <slot />
   </div>
 </template>

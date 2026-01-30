@@ -162,9 +162,9 @@ interface SampleTrack {
 }
 
 const sampleTracks = ref<SampleTrack[]>([
-  { id: '1', name: "God Chang-seop (신창섭) '바로 리부트 정상화' MV", genre: 'K-Pop', duration: '3:30', url: '/audio/samples/God Chang-seop (신창섭) \'바로 리부트 정상화\' MV.mp3' },
-  { id: '2', name: 'I Love You', genre: 'Pop', duration: '5:56', url: '/audio/samples/I Love You.mp3' },
-  { id: '3', name: 'Nyan Cat! [Official]', genre: 'Electronic', duration: '5:25', url: '/audio/samples/Nyan Cat! [Official].mp3' },
+  { id: '1', name: "God Chang-seop (신창섭) '바로 리부트 정상화' MV", genre: 'K-Pop', duration: '3:36', url: '/audio/samples/God Chang-seop (신창섭) \'바로 리부트 정상화\' MV.mp3' },
+  { id: '2', name: 'I Love You', genre: 'Pop', duration: '3:41', url: '/audio/samples/I Love You.mp3' },
+  { id: '3', name: 'Nyan Cat! [Official]', genre: 'Electronic', duration: '3:37', url: '/audio/samples/Nyan Cat! [Official].mp3' },
 ]);
 
 

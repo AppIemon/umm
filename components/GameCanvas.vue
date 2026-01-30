@@ -120,8 +120,13 @@
         </div>
 
         <div class="controls-hint" v-if="!countdown && !gameOver && !victory && !isComputingPath">
-          <span>클릭/스페이스 유지 = 위로 | 해제 = 아래로</span>
-          <span v-if="practiceMode"> | [C] 체크포인트 | [X] 최근 삭제</span>
+          <div v-if="tutorialMode && activeTutorialMessage" class="tutorial-message-bubble">
+            {{ activeTutorialMessage }}
+          </div>
+          <div v-else>
+            <span>클릭/스페이스 유지 = 위로 | 해제 = 아래로</span>
+            <span v-if="practiceMode"> | [C] 체크포인트 | [X] 최근 삭제</span>
+          </div>
         </div>
       </div>
     </div>
@@ -302,6 +307,15 @@ const checkpoints = ref<any[]>([]); // Snapshot stacks
 let clickDownBuffer: AudioBuffer | null = null;
 let clickUpBuffer: AudioBuffer | null = null;
 let lastAiHolding = false;
+
+const activeTutorialMessage = computed(() => {
+  if (!props.loadMap?.messages) return null;
+  const currentProgress = progress.value;
+  // Find the last message that is less than or equal to current progress
+  const msgs = props.loadMap.messages.filter((m: any) => m.progress <= currentProgress);
+  if (msgs.length === 0) return null;
+  return msgs[msgs.length - 1].text;
+});
 
 let animationId: number;
 let lastFrameTime = 0;
@@ -1298,6 +1312,297 @@ const draw = () => {
       ctx.fill();
       ctx.globalCompositeOperation = 'source-over'; // Reset
     }
+    // NEW OBSTACLES RENDERING
+    else if (obs.type === 'hammer') {
+       const cx = obs.x + obs.width / 2;
+       const cy = obs.y + obs.height / 2;
+       // Handle
+       ctx.strokeStyle = '#888';
+       ctx.linewidth = 4;
+       ctx.beginPath();
+       ctx.moveTo(cx, cy);
+       ctx.lineTo(cx, cy + 40); // Simple static handle visual
+       ctx.stroke();
+       // Head
+       ctx.fillStyle = '#aaa';
+       ctx.beginPath();
+       ctx.arc(cx, cy, obs.width/2, 0, Math.PI*2);
+       ctx.fill();
+    }
+    else if (['rotor', 'saw', 'spark_mine'].includes(obs.type)) {
+       // Shared rotating visuals
+       const cx = obs.x + obs.width/2;
+       const cy = obs.y + obs.height/2;
+       const radius = obs.width/2;
+       
+       if (obs.type === 'rotor') {
+         ctx.fillStyle = '#ddd';
+         const bladeCount = 4;
+         const rot = (obs.angle || 0) * Math.PI / 180;
+         for(let k=0; k<bladeCount; k++) {
+            const theta = rot + (Math.PI*2*k)/bladeCount;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, radius, theta - 0.2, theta + 0.2);
+            ctx.fill();
+         }
+       } else if (obs.type === 'spark_mine') {
+         ctx.fillStyle = '#ffaa00';
+         ctx.beginPath();
+         const spikes = 12;
+         const rot = (obs.angle || 0) * Math.PI / 180;
+         for(let k=0; k<spikes*2; k++) {
+            const r = (k%2===0 ? radius : radius*0.4);
+            const theta = rot + (Math.PI*k)/spikes;
+            ctx.lineTo(cx + Math.cos(theta)*r, cy + Math.sin(theta)*r);
+         }
+         ctx.fill();
+       }
+    }
+    else if (obs.type === 'laser_beam') {
+       // Intense beam
+       const cy = obs.y + obs.height/2;
+       ctx.strokeStyle = '#00ffff';
+       ctx.lineWidth = obs.height;
+       ctx.shadowColor = '#00ffff';
+       ctx.shadowBlur = 20;
+       ctx.beginPath();
+       ctx.moveTo(obs.x, cy);
+       ctx.lineTo(obs.x + obs.width, cy);
+       ctx.stroke();
+       ctx.shadowBlur = 0;
+       
+       ctx.strokeStyle = '#fff';
+       ctx.lineWidth = obs.height * 0.3;
+       ctx.stroke();
+    }
+    else if (obs.type === 'piston_v') {
+       ctx.fillStyle = '#555';
+       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+       // Piston rod
+       ctx.fillStyle = '#888';
+       ctx.fillRect(obs.x + obs.width*0.3, obs.y, obs.width*0.4, obs.height);
+       // Head
+       ctx.fillStyle = '#333';
+       if (obs.y < 360) ctx.fillRect(obs.x, obs.y + obs.height - 20, obs.width, 20);
+       else ctx.fillRect(obs.x, obs.y, obs.width, 20);
+    }
+    else if (obs.type === 'cannon') {
+       ctx.fillStyle = '#444';
+       ctx.beginPath();
+       ctx.arc(obs.x + obs.width/2, obs.y + obs.height/2, obs.width/2, 0, Math.PI*2);
+       ctx.fill();
+       ctx.fillStyle = '#000';
+       ctx.beginPath();
+       ctx.arc(obs.x + obs.width/2, obs.y + obs.height/2, obs.width/3, 0, Math.PI*2);
+       ctx.fill();
+    }
+    else if (['falling_spike', 'growing_spike', 'crusher_jaw'].includes(obs.type)) {
+       // Sharp spikey visuals
+       ctx.fillStyle = '#ff4444';
+       ctx.beginPath();
+       const cx = obs.x + obs.width/2;
+       if (obs.type === 'falling_spike') {
+         // Pointing down (usually) or varies by rotation
+         // If generic, draw a spike
+         ctx.moveTo(obs.x, obs.y);
+         ctx.lineTo(obs.x + obs.width, obs.y);
+         ctx.lineTo(cx, obs.y + obs.height);
+       } else {
+         // Pointing up
+         ctx.moveTo(obs.x, obs.y + obs.height);
+         ctx.lineTo(obs.x + obs.width, obs.y + obs.height);
+         ctx.lineTo(cx, obs.y);
+       }
+       ctx.fill();
+    }
+    else if (obs.type === 'swing_blade') {
+       const cx = obs.x + obs.width/2;
+       const cy = obs.y; // Pivot at top
+       ctx.strokeStyle = '#eee';
+       ctx.lineWidth = 2;
+       ctx.beginPath();
+       ctx.moveTo(cx, cy);
+       ctx.lineTo(cx, cy + obs.height);
+       ctx.stroke();
+       
+       // Blade disc
+       ctx.fillStyle = '#ccc';
+       ctx.beginPath();
+       ctx.arc(cx, cy + obs.height, obs.width/2, 0, Math.PI*2);
+       ctx.fill();
+    }
+    else if (obs.type === 'mine') {
+       ctx.fillStyle = '#222';
+       ctx.strokeStyle = '#ff3333';
+       
+       // Pulsation Visual
+       let sizeScale = 1.0;
+       if (obs.customData?.pulseSpeed) {
+          const time = currentTrackTime.value;
+          const speed = obs.customData.pulseSpeed || 2;
+          const amount = obs.customData.pulseAmount || 0.2;
+          sizeScale = 1 + Math.sin(time * speed) * amount;
+       }
+
+       const radius = (obs.width / 2) * sizeScale;
+       const cx = obs.x + obs.width / 2;
+       const cy = obs.y + obs.height / 2;
+
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+       ctx.fill();
+       ctx.stroke();
+
+       // Spikes
+       const spikeCount = 8;
+       ctx.beginPath();
+       for(let k=0; k<spikeCount; k++) {
+         const angle = (Math.PI * 2 * k) / spikeCount;
+         const rIn = radius;
+         const rOut = radius + 6;
+         ctx.moveTo(cx + Math.cos(angle)*rIn, cy + Math.sin(angle)*rIn);
+         ctx.lineTo(cx + Math.cos(angle)*rOut, cy + Math.sin(angle)*rOut);
+       }
+       ctx.stroke();
+    }
+    else if (obs.type === 'planet') {
+       const cx = obs.x + obs.width / 2;
+       const cy = obs.y + obs.height / 2;
+       const radius = obs.width / 2;
+
+       // Planet Body
+       const grad = ctx.createRadialGradient(cx, cy - radius*0.3, radius*0.1, cx, cy, radius);
+       grad.addColorStop(0, '#4488ff');
+       grad.addColorStop(1, '#002266');
+       ctx.fillStyle = grad;
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius, 0, Math.PI*2);
+       ctx.fill();
+
+       // Moons
+       const time = currentTrackTime.value;
+       const count = obs.customData?.orbitCount ?? 2;
+       const speed = obs.customData?.orbitSpeed ?? 1.0;
+       const dist = obs.customData?.orbitDistance ?? (obs.width * 0.8);
+      
+       for (let i = 0; i < count; i++) {
+         const theta = time * speed + (i * ((Math.PI * 2) / count));
+         const mx = cx + Math.cos(theta) * dist;
+         const my = cy + Math.sin(theta) * dist;
+         
+         ctx.fillStyle = '#88ccff';
+         ctx.beginPath();
+         ctx.arc(mx, my, 8, 0, Math.PI*2);
+         ctx.fill();
+       }
+    }
+    else if (obs.type === 'star') {
+       const cx = obs.x + obs.width / 2;
+       const cy = obs.y + obs.height / 2;
+       const radius = obs.width / 2;
+       const time = currentTrackTime.value;
+
+       // Star Body (Glowing)
+       const pulse = 1 + Math.sin(time * 5) * 0.05;
+       const grad = ctx.createRadialGradient(cx, cy, radius*0.2, cx, cy, radius * pulse);
+       grad.addColorStop(0, '#ffff88');
+       grad.addColorStop(0.5, '#ffaa00');
+       grad.addColorStop(1, 'rgba(255, 68, 0, 0)');
+       ctx.fillStyle = grad;
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius * 1.2 * pulse, 0, Math.PI*2);
+       ctx.fill();
+       
+       // Core
+       ctx.fillStyle = '#fff';
+       ctx.beginPath();
+       ctx.arc(cx, cy, radius * 0.6, 0, Math.PI*2);
+       ctx.fill();
+
+       // Orbiting Planets
+       const hasChildren = obs.children && obs.children.length > 0;
+       
+       if (hasChildren) {
+         const children = obs.children!;
+         const speed = obs.customData?.orbitSpeed ?? 1.0;
+         
+         children.forEach((child, i) => {
+            const theta = time * speed + (i * ((Math.PI * 2) / children.length));
+            const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
+
+            const px = cx + Math.cos(theta) * dist;
+            const py = cy + Math.sin(theta) * dist;
+            
+            // Planet (Draggable Child)
+            ctx.fillStyle = '#00ff88';
+            ctx.beginPath();
+            ctx.arc(px, py, 14, 0, Math.PI*2);
+            ctx.fill();
+
+            // Nested Moons (if child planet has them)
+            if (child.type === 'planet') {
+                const moonCount = child.customData?.orbitCount ?? 2;
+                const moonSpeed = child.customData?.orbitSpeed ?? 2.0;
+                const moonDist = child.customData?.orbitDistance ?? (child.width * 0.8);
+
+                for (let j = 0; j < moonCount; j++) {
+                  const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
+                  const mx = px + Math.cos(mTheta) * moonDist;
+                  const my = py + Math.sin(mTheta) * moonDist;
+                  
+                  ctx.fillStyle = '#fff';
+                  ctx.beginPath();
+                  ctx.arc(mx, my, 4, 0, Math.PI*2);
+                  ctx.fill();
+                }
+            }
+         });
+       } else {
+         // Fallback legacy (Abstract Orbit)
+         const count = obs.customData?.orbitCount ?? (obs.type === 'star' ? 0 : 3); // Default 0 for star
+         if (count > 0) {
+            const speed = obs.customData?.orbitSpeed ?? 1.0;
+            const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
+
+            for (let i = 0; i < count; i++) {
+              const theta = time * speed + (i * ((Math.PI * 2) / count));
+              const px = cx + Math.cos(theta) * dist;
+              const py = cy + Math.sin(theta) * dist;
+              
+              ctx.fillStyle = '#00ff88';
+              ctx.beginPath();
+              ctx.arc(px, py, 14, 0, Math.PI*2);
+              ctx.fill();
+            
+              // Legacy nested logic if any
+               if (obs.type === 'star' && obs.customData?.nestedOrbit) {
+                  const subMoonCount = 2;
+                  const subDist = 25;
+                  const subSpeed = speed * 2.5;
+                  for(let j=0; j<subMoonCount; j++) {
+                     const subTheta = time * subSpeed + (j * ((Math.PI * 2) / subMoonCount));
+                     const smx = px + Math.cos(subTheta) * subDist;
+                     const smy = py + Math.sin(subTheta) * subDist;
+                     
+                     ctx.fillStyle = '#fff';
+                     ctx.beginPath();
+                     ctx.arc(smx, smy, 4, 0, Math.PI*2);
+                     ctx.fill();
+                  }
+               }
+            }
+         }
+       }
+    }
+    else {
+       // Fallback
+       ctx.fillStyle = '#ff00ff';
+       ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+       ctx.fillStyle = '#fff';
+       ctx.font = '10px Arial';
+       ctx.fillText('?', obs.x + obs.width/2 - 3, obs.y + obs.height/2 + 3);
+    }
 
     
     ctx.restore();
@@ -1393,6 +1698,51 @@ const draw = () => {
   });
   ctx.globalAlpha = 1;
   
+  ctx.globalAlpha = 1;
+
+  // Draw Boss & Projectiles
+  if (engine.value.boss.active) {
+     const boss = engine.value.boss;
+     // Boss Body
+     ctx.save();
+     ctx.translate(boss.x, boss.y);
+     
+     // Glow
+     ctx.shadowBlur = 40;
+     ctx.shadowColor = '#ff0000';
+     
+     // Main shape (Octagon-ish)
+     ctx.fillStyle = '#440000';
+     ctx.beginPath();
+     const size = 60;
+     for(let i=0; i<8; i++) {
+        const theta = (Math.PI*2*i)/8;
+        ctx.lineTo(Math.cos(theta)*size, Math.sin(theta)*size);
+     }
+     ctx.fill();
+     
+     // Eye
+     ctx.fillStyle = '#ff0000';
+     ctx.beginPath();
+     ctx.arc(0, 0, 20, 0, Math.PI*2);
+     ctx.fill();
+     
+     ctx.restore();
+     
+     // Projectiles
+     boss.projectiles.forEach(p => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffaa00';
+        ctx.beginPath();
+        ctx.arc(0, 0, 15, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+     });
+  }
+
   // Draw checkpoints
   if (props.practiceMode) {
     checkpoints.value.forEach((cp, idx) => {
@@ -1487,17 +1837,66 @@ const draw = () => {
       // 이동/회전 오브젝트의 경우 실시간 상태 가져오기
       const state = engine.value.getObstacleStateAt(obs, currentTrackTime.value);
       const obsY = state.y;
-      const obsAngle = state.angle;
+      const obsAngle = state.angle || 0;
       
       ctx.save();
       
-      if (obsAngle !== 0) {
-        // 회전된 히트박스
-        ctx.translate(obs.x + obs.width / 2, obsY + obs.height / 2);
-        ctx.rotate(obsAngle * Math.PI / 180);
-        ctx.strokeRect(-obs.width / 2, -obs.height / 2, obs.width, obs.height);
+      // Apply transform to center
+      ctx.translate(obs.x + obs.width / 2, obsY + obs.height / 2);
+      if (obsAngle !== 0) ctx.rotate(obsAngle * Math.PI / 180);
+
+      const hw = obs.width / 2;
+      const hh = obs.height / 2;
+      
+      if (obs.type === 'slope') {
+         ctx.beginPath();
+         if (obsAngle > 0) {
+            // TL triangle ◤
+            ctx.moveTo(-hw, hh); // BL
+            ctx.lineTo(hw, -hh); // TR
+            ctx.lineTo(-hw, -hh); // TL
+         } else {
+            // TR triangle ◥
+            ctx.moveTo(hw, hh); // BR
+            ctx.lineTo(-hw, -hh); // TL
+            ctx.lineTo(hw, -hh); // TR
+         }
+         ctx.closePath();
+         ctx.stroke();
+      } else if (obs.type === 'triangle' || obs.type === 'steep_triangle') {
+         // ◢
+         ctx.beginPath();
+         ctx.moveTo(-hw, hh); // BL
+         ctx.lineTo(hw, hh); // BR
+         ctx.lineTo(hw, -hh); // TR
+         ctx.closePath();
+         ctx.stroke();
+      } else if (obs.type === 'spike' || obs.type === 'mini_spike') {
+         const isBottom = obs.y > 360; // Center is 360 usually
+         ctx.beginPath();
+         if (isBottom) {
+            // Up pointing: BL -> TC -> BR
+            ctx.moveTo(-hw, hh);
+            ctx.lineTo(0, -hh);
+            ctx.lineTo(hw, hh);
+         } else {
+            // Down pointing: TL -> BC -> TR
+            ctx.moveTo(-hw, -hh);
+            ctx.lineTo(0, hh);
+            ctx.lineTo(hw, -hh);
+         }
+         ctx.closePath();
+         ctx.stroke();
+      } else if (obs.type === 'saw' || obs.type === 'spike_ball' || obs.type === 'mine' || obs.type === 'orb') {
+         ctx.beginPath();
+         ctx.arc(0, 0, hw, 0, Math.PI * 2);
+         ctx.stroke();
+      } else if (obs.type === 'laser' || obs.type === 'v_laser') {
+          // Keep as rect for lasers for now
+          ctx.strokeRect(-hw, -hh, obs.width, obs.height);
       } else {
-        ctx.strokeRect(obs.x, obsY, obs.width, obs.height);
+         // Default Rect
+         ctx.strokeRect(-hw, -hh, obs.width, obs.height);
       }
       
       ctx.restore();
@@ -1517,6 +1916,14 @@ const draw = () => {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
+  }
+  // Beat Highlight Overlay
+  if (engine.value.isMeasureHighlight) {
+     ctx.save();
+     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)'; // Subtle white flash
+     ctx.globalCompositeOperation = 'screen';
+     ctx.fillRect(0, 0, w, h);
+     ctx.restore();
   }
 };
 
@@ -1794,6 +2201,26 @@ canvas {
   color: rgba(255, 255, 255, 0.4);
   font-size: 0.85rem;
   font-family: 'Outfit', sans-serif;
+  text-align: center;
+}
+
+.tutorial-message-bubble {
+  background: rgba(255, 0, 255, 0.2);
+  border: 2px solid #ff00ff;
+  color: #fff;
+  padding: 10px 30px;
+  border-radius: 50px;
+  font-size: 1.5rem;
+  font-weight: 900;
+  text-shadow: 0 0 10px #ff00ff;
+  box-shadow: 0 0 30px rgba(255, 0, 255, 0.4);
+  animation: messagePulse 1s infinite alternate;
+  white-space: nowrap;
+}
+
+@keyframes messagePulse {
+  from { transform: scale(1); box-shadow: 0 0 20px rgba(255, 0, 255, 0.4); }
+  to { transform: scale(1.05); box-shadow: 0 0 40px rgba(255, 0, 255, 0.6); }
 }
 
 .overlay {
