@@ -11,8 +11,8 @@ export interface IRoom extends Document {
   musicUrl?: string
   musicTitle?: string
 
-  map: Types.ObjectId
-  mapQueue: Types.ObjectId[]
+  map: any
+  mapQueue: any[]
 
   players: {
     userId: string
@@ -21,6 +21,7 @@ export interface IRoom extends Document {
     isReady: boolean
     progress: number
     y: number
+    clearCount: number
     lastSeen: Date
   }[]
   messages: {
@@ -45,12 +46,8 @@ const roomSchema = new mongoose.Schema<IRoom>({
   musicUrl: { type: String, default: null },
   musicTitle: { type: String, default: null },
 
-  map: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'GameMap',
-    required: false // May not be assigned initially
-  },
-  mapQueue: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GameMap' }],
+  map: { type: mongoose.Schema.Types.Mixed, default: null },
+  mapQueue: { type: [mongoose.Schema.Types.Mixed], default: [] },
 
   players: [{
     userId: { type: String, required: true },
@@ -59,6 +56,7 @@ const roomSchema = new mongoose.Schema<IRoom>({
     isReady: { type: Boolean, default: false },
     progress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
+    clearCount: { type: Number, default: 0 },
     lastSeen: { type: Date, default: Date.now }
   }],
   messages: [{

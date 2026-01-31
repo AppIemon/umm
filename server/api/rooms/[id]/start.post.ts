@@ -1,5 +1,4 @@
 import { Room } from '~/server/models/Room'
-import { GameMap } from '~/server/models/Map'
 import mongoose from 'mongoose'
 
 const roundNum = (num: number, precision: number = 1) => {
@@ -41,73 +40,40 @@ export default defineEventHandler(async (event) => {
 
   try {
     const { GameEngine } = await import('~/utils/game-engine')
-    const engine = new GameEngine({ difficulty: room.difficulty || 5 })
+    const engine = new GameEngine({ difficulty: room.difficulty || 10 })
 
     const seed = Math.floor(Math.random() * 1000000)
-
-    // Ensure creatorId is a valid ObjectId
-    const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId)
-    const creatorId = hostIsRegistered ? new mongoose.Types.ObjectId(room.hostId) : new mongoose.Types.ObjectId("000000000000000000000000")
-
     const hostPlayer = room.players.find((p: any) => p.isHost)
+    const maxDuration = room.duration || 120
+    const rounds: any[] = []
 
-    const maxDuration = room.duration || 60
-    const rounds = []
+    console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating inline rounds...`)
 
     // Incremental duration rounds: 10, 20, 30... maxDuration
-    let startD = 10;
-
-    console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating rounds...`)
-
-    for (let d = startD; d <= maxDuration; d += 10) {
+    for (let d = 10; d <= maxDuration; d += 10) {
       engine.generateMap([], [], d, seed, false)
 
-      const newMap = await GameMap.create({
+      // We no longer save to GameMap collection to avoid database bloat.
+      // Maps are stored inline within the Room document.
+      const mapData = {
+        _id: new mongoose.Types.ObjectId(), // Virtual ID for tracking
         title: `ROOM_${room.title}_ROUND_${d / 10}`,
-        difficulty: room.difficulty || 5,
+        difficulty: room.difficulty || 10,
         seed,
-        creator: creatorId,
-        creatorName: hostPlayer?.username || 'SYSTEM',
-        beatTimes: [],
-        sections: [],
         engineObstacles: optimizeObstacles(engine.obstacles),
         enginePortals: optimizeObstacles(engine.portals),
-        autoplayLog: [],
-        audioUrl: room.musicUrl || null,
         duration: d,
-        isShared: false,
-        isVerified: true
-      })
-      rounds.push(newMap._id)
-
-      if (rounds.length >= 200) break;
-    }
-
-    if (rounds.length === 0) {
-      engine.generateMap([], [], maxDuration, seed, false)
-      const newMap = await GameMap.create({
-        title: `ROOM_${room.title}_ROUND_1`,
-        difficulty: room.difficulty || 5,
-        seed,
-        creator: creatorId,
-        creatorName: hostPlayer?.username || 'SYSTEM',
-        beatTimes: [],
-        sections: [],
-        engineObstacles: optimizeObstacles(engine.obstacles),
-        enginePortals: optimizeObstacles(engine.portals),
-        autoplayLog: [],
         audioUrl: room.musicUrl || null,
-        duration: maxDuration,
-        isShared: false,
-        isVerified: true
-      })
-      rounds.push(newMap._id)
+        isVerified: true,
+        createdAt: new Date()
+      }
+      rounds.push(mapData)
+      if (rounds.length >= 100) break;
     }
 
-    // ATOMIC UPDATE to avoid VersionError (No matching document found)
-    // This happens because concurrent polling updates player status while map gen is running
+    // ATOMIC UPDATE
     const updatedRoom = await Room.findOneAndUpdate(
-      { _id: roomId, status: 'waiting' }, // Ensure we only start if still waiting
+      { _id: roomId, status: 'waiting' },
       {
         $set: {
           map: rounds[0],
@@ -122,15 +88,14 @@ export default defineEventHandler(async (event) => {
     )
 
     if (!updatedRoom) {
-      // If it failed, check if it was already started or lost
       const checkAgain = await Room.findById(roomId)
-      if (checkAgain?.status === 'playing') return { success: true, mapId: checkAgain.map }
+      if (checkAgain?.status === 'playing') return { success: true }
       throw new Error('Room state changed or room was deleted during map generation')
     }
 
-    console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} rounds.`)
+    console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} inline rounds.`)
 
-    return { success: true, mapId: rounds[0] }
+    return { success: true }
   } catch (err: any) {
     console.error('[StartGame] Fatal error:', err)
     throw createError({

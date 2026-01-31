@@ -22,5 +22,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Room or Player not found' })
   }
 
+  console.log(`[Clear] Player ${userId} win recorded in room ${id}`)
   return { success: true }
 })

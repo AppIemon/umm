@@ -253,6 +253,12 @@ function stopPolling() {
 async function handlePlayerClear() {
   playerClearCount.value++;
   
+  // Update local state for immediate feedback
+  const me = allPlayers.value.find(p => p.userId === playerId.value);
+  if (me) {
+    me.clearCount = (me.clearCount || 0) + 1;
+  }
+  
   // 서버에 클리어 알림
   try {
     await $fetch('/api/rooms/clear', {
@@ -506,7 +512,17 @@ function handleRoundFinish(data: any) {
   }
 }
 
-function finishGame() {
+async function finishGame() {
+  // Do one last poll to get final scores
+  try {
+    const res: any = await $fetch(`/api/rooms/${currentRoomId.value}/status`, {
+      params: { userId: playerId.value }
+    });
+    if (res.room) {
+      allPlayers.value = res.room.players || [];
+    }
+  } catch (e) {}
+  
   stopPolling();
   step.value = 'RESULT';
 }
@@ -521,11 +537,21 @@ function formatTime(s: number) {
 
 const top3Players = computed(() => {
   // Sort by Clear Count then Progress
-  return [...allPlayers.value].sort((a,b) => b.progress - a.progress).slice(0, 3);
+  return [...allPlayers.value].sort((a,b) => {
+    if ((b.clearCount || 0) !== (a.clearCount || 0)) {
+      return (b.clearCount || 0) - (a.clearCount || 0);
+    }
+    return b.progress - a.progress;
+  }).slice(0, 3);
 });
 
 const sortedPlayers = computed(() => {
-  return [...allPlayers.value].sort((a,b) => b.progress - a.progress);
+  return [...allPlayers.value].sort((a,b) => {
+    if ((b.clearCount || 0) !== (a.clearCount || 0)) {
+      return (b.clearCount || 0) - (a.clearCount || 0);
+    }
+    return b.progress - a.progress;
+  });
 });
 
 const bestOpponent = computed(() => {

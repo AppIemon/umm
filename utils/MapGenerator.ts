@@ -43,7 +43,7 @@ export class MapGenerator {
       baseGap = 180 - (difficulty - 24) * 15;
     }
 
-    baseGap = Math.max(60, baseGap); // Minimum gap reduced from 90 to 60 for higher difficulty
+    baseGap = Math.max(50, baseGap); // Minimum gap even tighter (50px)
 
     // Mini Portal: 간격 1.5배 (유지)
     return isMini ? baseGap * 1.5 : baseGap;
@@ -332,15 +332,17 @@ export class MapGenerator {
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
 
       // 4. Decoration - Diverse Obstacles (Spikes, Mines, etc.)
-      // User Update: Enable obstacle variety for all difficulties, scale by difficulty
-      // Obstacle frequency based on difficulty (increases as difficulty rises)
-      const hazardThreshold = 0.15 + (difficulty / 30) * 0.25; // 0.15 ~ 0.4
+      // Obstacle frequency: even more aggressive scaling
+      const hazardThreshold = 0.2 + (difficulty / 30) * 0.35; // 0.2 ~ 0.55
       if (stepY === 0 && currentGap > 100 && rand < hazardThreshold) {
         // Dynamic Size based on Difficulty
-        // 1-5: Small (20), 6-10: Medium (30), 11+: Large (40)
         let spikeH = 40;
         if (difficulty <= 5) spikeH = 20;
         else if (difficulty <= 10) spikeH = 30;
+
+        // Increase difficulty scaling for size
+        if (difficulty > 15) spikeH = 45;
+        if (difficulty > 25) spikeH = 50;
 
         // Randomly choose from new floor/ceiling obstacles
         // Segment Logic
@@ -373,11 +375,21 @@ export class MapGenerator {
         }
         // Ceiling Obstacle
         else {
-          if (currentPoint.y > currentCeilY + spikeH + 40 && currentCeilY + spikeH < currentFloorY - 40) {
+          let adjustedCeilY = currentCeilY;
+          // USER REQUEST: "Don't place falling spikes too high"
+          // If falling_spike, ensure it's not more than 250px above the player
+          if (ceilType === 'falling_spike') {
+            const dist = currentPoint.y - currentCeilY;
+            if (dist > 250) {
+              adjustedCeilY = currentPoint.y - 250;
+            }
+          }
+
+          if (currentPoint.y > adjustedCeilY + spikeH + 40 && adjustedCeilY + spikeH < currentFloorY - 40) {
             objects.push({
               type: ceilType,
               x: currentX,
-              y: currentCeilY,
+              y: adjustedCeilY,
               width: blockSize,
               height: spikeH,
               rotation: 180,

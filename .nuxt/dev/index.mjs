@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3f07b-PIJ1huN9AdATFl3HlaR3T3I0KiA\"",
-    "mtime": "2026-01-31T03:25:43.871Z",
-    "size": 258171,
+    "etag": "\"3edc6-fsHrA3nwvmS7rUjMEp3WpJ3D71g\"",
+    "mtime": "2026-01-31T03:37:53.476Z",
+    "size": 257478,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f20c8-Jtu2ojnC9g/DI6KZZMB6C0s2T8M\"",
-    "mtime": "2026-01-31T03:25:43.873Z",
-    "size": 991432,
+    "etag": "\"f1629-SGYFBVJkWId0XbEmKlV2TC7kDjI\"",
+    "mtime": "2026-01-31T03:37:53.478Z",
+    "size": 988713,
     "path": "index.mjs.map"
   }
 };
@@ -3402,13 +3402,8 @@ const roomSchema = new mongoose.Schema({
   difficulty: { type: Number, required: true, default: 5 },
   musicUrl: { type: String, default: null },
   musicTitle: { type: String, default: null },
-  map: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "GameMap",
-    required: false
-    // May not be assigned initially
-  },
-  mapQueue: [{ type: mongoose.Schema.Types.ObjectId, ref: "GameMap" }],
+  map: { type: mongoose.Schema.Types.Mixed, default: null },
+  mapQueue: { type: [mongoose.Schema.Types.Mixed], default: [] },
   players: [{
     userId: { type: String, required: true },
     username: { type: String, required: true },
@@ -3416,6 +3411,7 @@ const roomSchema = new mongoose.Schema({
     isReady: { type: Boolean, default: false },
     progress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
+    clearCount: { type: Number, default: 0 },
     lastSeen: { type: Date, default: Date.now }
   }],
   messages: [{
@@ -3546,59 +3542,32 @@ const start_post = defineEventHandler(async (event) => {
   }
   try {
     const { GameEngine } = await Promise.resolve().then(function () { return gameEngine; });
-    const engine = new GameEngine({ difficulty: room.difficulty || 5 });
+    const engine = new GameEngine({ difficulty: room.difficulty || 10 });
     const seed = Math.floor(Math.random() * 1e6);
-    const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId);
-    const creatorId = hostIsRegistered ? new mongoose.Types.ObjectId(room.hostId) : new mongoose.Types.ObjectId("000000000000000000000000");
     const hostPlayer = room.players.find((p) => p.isHost);
-    const maxDuration = room.duration || 60;
+    const maxDuration = room.duration || 120;
     const rounds = [];
-    let startD = 10;
-    console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating rounds...`);
-    for (let d = startD; d <= maxDuration; d += 10) {
+    console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating inline rounds...`);
+    for (let d = 10; d <= maxDuration; d += 10) {
       engine.generateMap([], [], d, seed, false);
-      const newMap = await GameMap.create({
+      const mapData = {
+        _id: new mongoose.Types.ObjectId(),
+        // Virtual ID for tracking
         title: `ROOM_${room.title}_ROUND_${d / 10}`,
-        difficulty: room.difficulty || 5,
+        difficulty: room.difficulty || 10,
         seed,
-        creator: creatorId,
-        creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
-        beatTimes: [],
-        sections: [],
         engineObstacles: optimizeObstacles$1(engine.obstacles),
         enginePortals: optimizeObstacles$1(engine.portals),
-        autoplayLog: [],
-        audioUrl: room.musicUrl || null,
         duration: d,
-        isShared: false,
-        isVerified: true
-      });
-      rounds.push(newMap._id);
-      if (rounds.length >= 200) break;
-    }
-    if (rounds.length === 0) {
-      engine.generateMap([], [], maxDuration, seed, false);
-      const newMap = await GameMap.create({
-        title: `ROOM_${room.title}_ROUND_1`,
-        difficulty: room.difficulty || 5,
-        seed,
-        creator: creatorId,
-        creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
-        beatTimes: [],
-        sections: [],
-        engineObstacles: optimizeObstacles$1(engine.obstacles),
-        enginePortals: optimizeObstacles$1(engine.portals),
-        autoplayLog: [],
         audioUrl: room.musicUrl || null,
-        duration: maxDuration,
-        isShared: false,
-        isVerified: true
-      });
-      rounds.push(newMap._id);
+        isVerified: true,
+        createdAt: /* @__PURE__ */ new Date()
+      };
+      rounds.push(mapData);
+      if (rounds.length >= 100) break;
     }
     const updatedRoom = await Room.findOneAndUpdate(
       { _id: roomId, status: "waiting" },
-      // Ensure we only start if still waiting
       {
         $set: {
           map: rounds[0],
@@ -3613,11 +3582,11 @@ const start_post = defineEventHandler(async (event) => {
     );
     if (!updatedRoom) {
       const checkAgain = await Room.findById(roomId);
-      if ((checkAgain == null ? void 0 : checkAgain.status) === "playing") return { success: true, mapId: checkAgain.map };
+      if ((checkAgain == null ? void 0 : checkAgain.status) === "playing") return { success: true };
       throw new Error("Room state changed or room was deleted during map generation");
     }
-    console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} rounds.`);
-    return { success: true, mapId: rounds[0] };
+    console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} inline rounds.`);
+    return { success: true };
   } catch (err) {
     console.error("[StartGame] Fatal error:", err);
     throw createError({
@@ -3643,7 +3612,7 @@ const status_get = defineEventHandler(async (event) => {
       { $set: { "players.$.lastSeen": /* @__PURE__ */ new Date() } }
     ).exec().catch(console.error);
   }
-  const room = await Room.findById(roomId).populate("map");
+  const room = await Room.findById(roomId);
   if (!room) {
     throw createError({ statusCode: 404, statusMessage: "Room not found" });
   }
@@ -3663,11 +3632,10 @@ const status_get = defineEventHandler(async (event) => {
     }));
   };
   let optimizedMap = room.map;
-  if (optimizedMap && optimizedMap.engineObstacles) {
-    const mObj = optimizedMap.toObject ? optimizedMap.toObject() : optimizedMap;
-    mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
-    mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
-    optimizedMap = mObj;
+  if (optimizedMap && optimizedMap.engineObstacles && !optimizedMap._alreadyOptimized) {
+    optimizedMap.engineObstacles = optimizeObstacles(optimizedMap.engineObstacles);
+    optimizedMap.enginePortals = optimizeObstacles(optimizedMap.enginePortals);
+    optimizedMap._alreadyOptimized = true;
   }
   return {
     room: {
@@ -3730,6 +3698,7 @@ const clear_post = defineEventHandler(async (event) => {
   if (result.matchedCount === 0) {
     throw createError({ statusCode: 404, statusMessage: "Room or Player not found" });
   }
+  console.log(`[Clear] Player ${userId} win recorded in room ${id}`);
   return { success: true };
 });
 
@@ -3845,21 +3814,6 @@ const join_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePropert
   default: join_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
-const roundNum = (num, precision = 1) => {
-  if (typeof num !== "number" || isNaN(num)) return 0;
-  const factor = Math.pow(10, precision);
-  return Math.round(num * factor) / factor;
-};
-const optimizeObstacles = (obs) => {
-  if (!Array.isArray(obs)) return [];
-  return obs.map((o) => ({
-    ...o,
-    x: roundNum(o.x),
-    y: roundNum(o.y),
-    width: roundNum(o.width),
-    height: roundNum(o.height)
-  }));
-};
 const nextMap_post = defineEventHandler(async (event) => {
   var _a;
   const body = await readBody(event);
@@ -3869,31 +3823,12 @@ const nextMap_post = defineEventHandler(async (event) => {
   }
   const room = await Room.findById(roomId);
   if (!room) throw createError({ statusCode: 404, statusMessage: "Room not found" });
-  if (mapIndex >= (((_a = room.mapQueue) == null ? void 0 : _a.length) || 0)) {
-    const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true });
-    if (verifiedCount > 0) {
-      const skip = Math.floor(Math.random() * verifiedCount);
-      const newMap = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip);
-      if (newMap) {
-        await Room.updateOne(
-          { _id: roomId },
-          { $push: { mapQueue: newMap._id } }
-        );
-        const mObj = newMap.toObject();
-        mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
-        mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
-        return { map: mObj, mapIndex };
-      }
-    }
-    return { map: null, mapIndex };
+  if (mapIndex < (((_a = room.mapQueue) == null ? void 0 : _a.length) || 0)) {
+    const map = room.mapQueue[mapIndex];
+    return { map, mapIndex };
   }
-  const existingMapId = room.mapQueue[mapIndex];
-  const existingMap = await GameMap.findById(existingMapId);
-  if (existingMap) {
-    const mObj = existingMap.toObject();
-    mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
-    mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
-    return { map: mObj, mapIndex };
+  if (room.mapQueue && room.mapQueue.length > 0) {
+    return { map: room.mapQueue[room.mapQueue.length - 1], mapIndex: room.mapQueue.length - 1 };
   }
   return { map: null, mapIndex };
 });
@@ -4413,7 +4348,7 @@ class MapGenerator {
     } else {
       baseGap = 180 - (difficulty - 24) * 15;
     }
-    baseGap = Math.max(60, baseGap);
+    baseGap = Math.max(50, baseGap);
     return isMini ? baseGap * 1.5 : baseGap;
   }
   /**
@@ -4600,11 +4535,13 @@ class MapGenerator {
         this.fillAbove(objects, currentX, blockY, blockSize);
       }
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
-      const hazardThreshold = 0.15 + difficulty / 30 * 0.25;
+      const hazardThreshold = 0.2 + difficulty / 30 * 0.35;
       if (stepY === 0 && currentGap > 100 && rand < hazardThreshold) {
         let spikeH = 40;
         if (difficulty <= 5) spikeH = 20;
         else if (difficulty <= 10) spikeH = 30;
+        if (difficulty > 15) spikeH = 45;
+        if (difficulty > 25) spikeH = 50;
         const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
         const segIdx = Math.floor(progress * SEGMENT_COUNT);
         const currentFloorOptions = segmentFloor[segIdx];
@@ -4625,11 +4562,18 @@ class MapGenerator {
             });
           }
         } else {
-          if (currentPoint.y > currentCeilY + spikeH + 40 && currentCeilY + spikeH < currentFloorY - 40) {
+          let adjustedCeilY = currentCeilY;
+          if (ceilType === "falling_spike") {
+            const dist = currentPoint.y - currentCeilY;
+            if (dist > 250) {
+              adjustedCeilY = currentPoint.y - 250;
+            }
+          }
+          if (currentPoint.y > adjustedCeilY + spikeH + 40 && adjustedCeilY + spikeH < currentFloorY - 40) {
             objects.push({
               type: ceilType,
               x: currentX,
-              y: currentCeilY,
+              y: adjustedCeilY,
               width: blockSize,
               height: spikeH,
               rotation: 180,

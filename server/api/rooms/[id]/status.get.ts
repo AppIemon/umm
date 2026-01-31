@@ -7,7 +7,6 @@ export default defineEventHandler(async (event) => {
 
   // Update lastSeen if userId provided
   if (roomId && userId) {
-    // We can maximize performance by not waiting for this write
     Room.updateOne(
       { _id: roomId, 'players.userId': userId },
       { $set: { 'players.$.lastSeen': new Date() } }
@@ -15,17 +14,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const room = await Room.findById(roomId)
-    .populate('map') // Populate map if game started
-
   if (!room) {
     throw createError({ statusCode: 404, statusMessage: 'Room not found' })
   }
 
-  // Cleanup inactive players (timeout > 15s)
-  // Only host should do this? Or automatic?
-  // For now, simpler is better: return room state
-
-  // Optimization Helper
+  // Optimization Helper (Actually maps are already optimized in start.post.ts)
+  // But we can re-verify or optimize just in case.
   const roundNum = (num: number, precision: number = 1) => {
     if (typeof num !== 'number' || isNaN(num)) return 0
     const factor = Math.pow(10, precision)
@@ -43,13 +37,11 @@ export default defineEventHandler(async (event) => {
     }))
   }
 
-  // Optimize map data if present
-  let optimizedMap = room.map as any
-  if (optimizedMap && optimizedMap.engineObstacles) {
-    const mObj = optimizedMap.toObject ? optimizedMap.toObject() : optimizedMap
-    mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles)
-    mObj.enginePortals = optimizeObstacles(mObj.enginePortals)
-    optimizedMap = mObj
+  let optimizedMap = room.map
+  if (optimizedMap && optimizedMap.engineObstacles && !optimizedMap._alreadyOptimized) {
+    optimizedMap.engineObstacles = optimizeObstacles(optimizedMap.engineObstacles)
+    optimizedMap.enginePortals = optimizeObstacles(optimizedMap.enginePortals)
+    optimizedMap._alreadyOptimized = true
   }
 
   return {
