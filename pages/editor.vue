@@ -1,49 +1,55 @@
 <template>
-  <div class="editor-page">
+  <div class="editor-page" :class="{ 'is-mobile': isMobile }">
     <div class="background-anim"></div>
     
     <!-- Top Header -->
     <header class="editor-header glass-panel">
-      <div class="left">
-        <h1 class="title">MAP_ARCHITECT <span class="version">v2.0</span></h1>
-        <div class="map-meta">
-          <input v-model="mapData.title" placeholder="Map Title" class="map-title-input" />
-          <span class="creator">BY: {{ user?.username || 'Guest' }}</span>
+      <div class="header-row">
+        <div class="left">
+          <h1 class="title">MAP_ARCHITECT <span class="version">v2.0</span></h1>
+          <div class="map-meta" v-if="!isMobile">
+            <input v-model="mapData.title" placeholder="Map Title" class="map-title-input" />
+            <span class="creator">BY: {{ user?.username || 'Guest' }}</span>
+          </div>
+        </div>
+        <div class="right" v-if="!isMobile">
+          <div class="config-summary">
+            <span class="stat">OBJ: {{ mapData.engineObstacles.length }}</span>
+            <span class="stat">PORT: {{ mapData.enginePortals.length }}</span>
+          </div>
         </div>
       </div>
-      <div class="center">
-        <div class="transport-controls">
-          <!-- Mobile Toggles -->
-          <button v-if="isMobile" @click="showPalette = !showPalette" class="control-btn mobile-toggle" :class="{ active: showPalette }">
-             🎨
-          </button>
-          
-          <button @click="testMap" class="control-btn test" :disabled="isTesting">
-            <span class="icon">▶</span> <span v-if="!isMobile">{{ isTesting ? 'TESTING...' : 'TEST' }}</span>
-          </button>
-          <button @click="togglePreview" class="control-btn tutorial" :class="{ active: isPreviewing }">
-            <span class="icon">🎓</span> <span v-if="!isMobile">{{ isPreviewing ? 'STOP' : 'TUTORIAL' }}</span>
-          </button>
-          <button @click="saveMap" class="control-btn save" :disabled="isSaving">
-            <span class="icon">💾</span> <span v-if="!isMobile">{{ isSaving ? 'SAVING...' : 'SAVE' }}</span>
-          </button>
-
-          <button @click="showHitboxes = !showHitboxes" class="control-btn" :class="{ active: showHitboxes }">
-            <span class="icon">⛶</span> <span v-if="!isMobile">HITBOX</span>
-          </button>
-          
-          <button v-if="isMobile" @click="showProperties = !showProperties" class="control-btn mobile-toggle" :class="{ active: showProperties }">
-             ⚙️
-          </button>
-
-          <button @click="router.push('/maps')" class="control-btn exit"><span v-if="!isMobile">EXIT</span><span v-else>✕</span></button>
-        </div>
+      
+      <!-- Mobile Title Row -->
+      <div class="mobile-title-row" v-if="isMobile">
+        <input v-model="mapData.title" placeholder="Map Title" class="map-title-input" />
       </div>
-      <div class="right">
-        <div class="config-summary">
-          <span class="stat">OBJ: {{ mapData.engineObstacles.length }}</span>
-          <span class="stat">PORT: {{ mapData.enginePortals.length }}</span>
-        </div>
+      
+      <div class="transport-controls">
+        <!-- Mobile Toggles -->
+        <button v-if="isMobile" @click="showPalette = !showPalette" class="control-btn mobile-toggle" :class="{ active: showPalette }">
+           🎨
+        </button>
+        
+        <button @click="testMap" class="control-btn test" :disabled="isTesting">
+          <span class="icon">▶</span> <span v-if="!isMobile">{{ isTesting ? 'TESTING...' : 'TEST' }}</span>
+        </button>
+        <button @click="togglePreview" class="control-btn tutorial" :class="{ active: isPreviewing }">
+          <span class="icon">🎓</span> <span v-if="!isMobile">{{ isPreviewing ? 'STOP' : 'TUTORIAL' }}</span>
+        </button>
+        <button @click="saveMap" class="control-btn save" :disabled="isSaving">
+          <span class="icon">💾</span> <span v-if="!isMobile">{{ isSaving ? 'SAVING...' : 'SAVE' }}</span>
+        </button>
+
+        <button @click="showHitboxes = !showHitboxes" class="control-btn" :class="{ active: showHitboxes }">
+          <span class="icon">⛶</span> <span v-if="!isMobile">HITBOX</span>
+        </button>
+        
+        <button v-if="isMobile" @click="showProperties = !showProperties" class="control-btn mobile-toggle" :class="{ active: showProperties }">
+           ⚙️
+        </button>
+
+        <button @click="router.push('/maps')" class="control-btn exit"><span v-if="!isMobile">EXIT</span><span v-else>✕</span></button>
       </div>
     </header>
 
@@ -77,10 +83,13 @@
             @mousedown="onWorkspaceMouseDown" 
             @mousemove="onWorkspaceMouseMove" 
             @mouseup="onWorkspaceMouseUp"
+            @touchstart="onWorkspaceTouchStart"
+            @touchmove="onWorkspaceTouchMove"
+            @touchend="onWorkspaceTouchEnd"
             @wheel="onWorkspaceWheel"
             @contextmenu.prevent>
         
-        <canvas ref="canvasRef" width="1200" height="600" class="editor-canvas"></canvas>
+        <canvas ref="canvasRef" :width="canvasWidth" :height="canvasHeight" class="editor-canvas"></canvas>
         
         <!-- Grid Info Overlay -->
         <div class="grid-info">
@@ -307,9 +316,22 @@ const isMobile = ref(false);
 const showPalette = ref(true);
 const showProperties = ref(true);
 
+// Canvas dimensions (responsive)
+const canvasWidth = ref(1200);
+const canvasHeight = ref(600);
+
+const updateCanvasSize = () => {
+  if (!workspaceRef.value) return;
+  const rect = workspaceRef.value.getBoundingClientRect();
+  // Use devicePixelRatio for sharper rendering on high-DPI displays
+  const dpr = window.devicePixelRatio || 1;
+  canvasWidth.value = Math.floor(rect.width * dpr);
+  canvasHeight.value = Math.floor((rect.height - 40) * dpr); // -40 for timeline
+};
+
 const checkMobile = () => {
   const wasMobile = isMobile.value;
-  isMobile.value = window.innerWidth <= 1024;
+  isMobile.value = window.innerWidth <= 768;
   if (!wasMobile && isMobile.value) {
      // Switched to mobile
      showPalette.value = false;
@@ -319,6 +341,94 @@ const checkMobile = () => {
      showPalette.value = true;
      showProperties.value = true;
   }
+  // Update canvas size when checking mobile
+  setTimeout(updateCanvasSize, 50);
+};
+
+// Touch State
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartCamX = 0;
+let lastTouchTime = 0;
+let isTouchDragging = false;
+let touchDragObject: any = null;
+
+const onWorkspaceTouchStart = (e: TouchEvent) => {
+  if (e.touches.length !== 1) return;
+  const touch = e.touches[0];
+  if (!canvasRef.value) return;
+  
+  const rect = canvasRef.value.getBoundingClientRect();
+  const scaleX = canvasRef.value.width / rect.width;
+  const scaleY = canvasRef.value.height / rect.height;
+  
+  const x = ((touch.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
+  const y = ((touch.clientY - rect.top) * scaleY) / zoom.value;
+  
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  touchStartCamX = cameraX.value;
+  
+  // Check for object selection
+  const found = findObjectAt(x, y);
+  
+  // Double tap to add object
+  const now = Date.now();
+  if (now - lastTouchTime < 300 && !found) {
+    addObject(x, y);
+    saveState();
+    lastTouchTime = 0;
+    return;
+  }
+  lastTouchTime = now;
+  
+  if (found) {
+    selectedObjects.value = [found];
+    isTouchDragging = true;
+    touchDragObject = found;
+    dragInitialPos.clear();
+    dragInitialPos.set(found, { x: found.x - x, y: found.y - y });
+  } else {
+    // Pan mode
+    isTouchDragging = false;
+    touchDragObject = null;
+  }
+};
+
+const onWorkspaceTouchMove = (e: TouchEvent) => {
+  if (e.touches.length !== 1) return;
+  const touch = e.touches[0];
+  if (!canvasRef.value) return;
+  
+  if (isTouchDragging && touchDragObject) {
+    const rect = canvasRef.value.getBoundingClientRect();
+    const scaleX = canvasRef.value.width / rect.width;
+    const scaleY = canvasRef.value.height / rect.height;
+    
+    const x = ((touch.clientX - rect.left) * scaleX) / zoom.value + cameraX.value;
+    const y = ((touch.clientY - rect.top) * scaleY) / zoom.value;
+    
+    const offset = dragInitialPos.get(touchDragObject);
+    if (offset) {
+      touchDragObject.x = x + offset.x;
+      touchDragObject.y = y + offset.y;
+      if ('initialY' in touchDragObject) touchDragObject.initialY = touchDragObject.y;
+    }
+  } else {
+    // Pan camera
+    const dx = touch.clientX - touchStartX;
+    cameraX.value = Math.max(0, touchStartCamX - dx / zoom.value);
+  }
+  
+  e.preventDefault();
+};
+
+const onWorkspaceTouchEnd = () => {
+  if (isTouchDragging && touchDragObject) {
+    saveState();
+  }
+  isTouchDragging = false;
+  touchDragObject = null;
 };
 
 // Smart Generation
@@ -1333,6 +1443,8 @@ onMounted(() => {
   
   checkMobile();
   window.addEventListener('resize', checkMobile);
+  window.addEventListener('resize', updateCanvasSize);
+  setTimeout(updateCanvasSize, 100);
 });
 </script>
 
@@ -1340,6 +1452,7 @@ onMounted(() => {
 .editor-page {
   width: 100%;
   height: 100vh;
+  height: 100dvh; /* Dynamic viewport height for mobile */
   background: #050510;
   color: white;
   display: flex;
@@ -1357,18 +1470,32 @@ onMounted(() => {
 }
 
 .editor-header {
-  height: 80px;
   margin: 10px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 2rem;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0.8rem 1rem;
   z-index: 10;
   flex-shrink: 0;
 }
 
-.title { font-size: 1.5rem; font-weight: 900; color: #00ffff; margin: 0; }
-.version { font-size: 0.7rem; color: #666; vertical-align: middle; }
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.mobile-title-row {
+  width: 100%;
+}
+
+.mobile-title-row .map-title-input {
+  width: 100%;
+}
+
+.title { font-size: 1.2rem; font-weight: 900; color: #00ffff; margin: 0; }
+.version { font-size: 0.6rem; color: #666; vertical-align: middle; }
 
 .map-title-input {
   background: transparent;
@@ -1377,21 +1504,25 @@ onMounted(() => {
   font-weight: bold;
   padding: 5px 10px;
   border-radius: 4px;
+  font-size: 0.9rem;
 }
 
 .transport-controls {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .control-btn {
-  padding: 0.6rem 1.2rem;
+  padding: 0.5rem 0.8rem;
   border-radius: 6px;
   font-weight: 900;
   cursor: pointer;
   border: none;
   transition: all 0.2s;
   white-space: nowrap;
+  font-size: 0.8rem;
 }
 
 .control-btn.test { background: #00ffaa; color: #000; }
@@ -1403,10 +1534,23 @@ onMounted(() => {
 .main-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 240px 1fr 280px;
   gap: 10px;
   padding: 0 10px 10px 10px;
   overflow: hidden;
+  min-height: 0; /* Important for flex child with grid */
+}
+
+/* Desktop-only stats display */
+.config-summary {
+  display: flex;
+  gap: 1rem;
+}
+
+.stat {
+  font-size: 0.75rem;
+  color: #666;
+  font-weight: bold;
 }
 
 .sidebar {
@@ -1609,12 +1753,16 @@ input, select {
 .mobile-toggle {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  font-size: 1.2rem;
-  padding: 0.4rem 0.8rem;
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .main-layout.is-mobile {
-  display: block; /* Stack (but sidebars are fixed) */
+  display: block;
   position: relative;
 }
 
@@ -1622,20 +1770,21 @@ input, select {
   width: 100%;
   height: 100%;
   border: none;
+  border-radius: 0;
 }
 
 .sidebar.mobile-drawer {
   position: fixed;
-  top: 80px;
+  top: 0;
   bottom: 0;
-  width: 280px;
-  z-index: 100;
-  background: rgba(10, 10, 20, 0.95);
+  width: min(280px, 85vw);
+  z-index: 200;
+  background: rgba(10, 10, 20, 0.98);
   backdrop-filter: blur(20px);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
-  transform: translateX(-100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding-top: 0;
+  padding: 1rem;
 }
 
 .sidebar.mobile-drawer.left-sidebar {
@@ -1659,6 +1808,18 @@ input, select {
   transform: translateX(0);
 }
 
+/* Backdrop overlay when drawer is open */
+.editor-page.is-mobile .sidebar.mobile-drawer.open::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: -1;
+}
+
 .drawer-header {
   display: flex;
   justify-content: space-between;
@@ -1668,38 +1829,140 @@ input, select {
   margin-bottom: 1rem;
   position: sticky;
   top: 0;
-  background: inherit;
+  background: rgba(10, 10, 20, 0.98);
   z-index: 1;
 }
 
-.close-drawer {
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 1.2rem;
-  cursor: pointer;
+.drawer-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #00ffff;
 }
 
-/* Base Mobile Cleanups */
-@media (max-width: 1024px) {
-  .editor-header {
-    padding: 0.5rem;
-    height: auto;
-    flex-wrap: wrap;
+.close-drawer {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile: Hide desktop sidebars */
+@media (max-width: 768px) {
+  .editor-page.is-mobile .main-layout {
+    display: block;
+    padding: 0;
   }
   
-  .transport-controls {
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    justify-content: center;
+  .editor-page.is-mobile .editor-header {
+    margin: 5px;
+    padding: 0.5rem;
+  }
+  
+  .editor-page.is-mobile .title {
+    font-size: 1rem;
+  }
+  
+  .editor-page.is-mobile .transport-controls {
+    gap: 0.3rem;
+  }
+  
+  .editor-page.is-mobile .control-btn {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  .editor-page.is-mobile .workspace {
+    border-radius: 0;
+    margin: 0;
+  }
+  
+  .editor-page.is-mobile .grid-info {
+    font-size: 0.6rem;
+    padding: 3px 6px;
+  }
+  
+  .editor-page.is-mobile .timeline-container {
+    height: 32px;
+    padding: 0 10px;
+  }
+  
+  /* Palette items smaller on mobile */
+  .sidebar.mobile-drawer .palette-item {
+    padding: 8px;
+    gap: 8px;
+  }
+  
+  .sidebar.mobile-drawer .symbol {
+    font-size: 1rem;
+    width: 24px;
+  }
+  
+  .sidebar.mobile-drawer .name {
+    font-size: 0.65rem;
+  }
+  
+  /* Properties panel adjustments */
+  .sidebar.mobile-drawer .prop-group label {
+    font-size: 0.6rem;
+  }
+  
+  .sidebar.mobile-drawer input,
+  .sidebar.mobile-drawer select {
+    padding: 6px;
+    font-size: 0.85rem;
+  }
+  
+  .sidebar.mobile-drawer .rot-btn {
+    padding: 6px;
+    font-size: 0.75rem;
+  }
+  
+  .sidebar.mobile-drawer .delete-btn {
+    padding: 8px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .main-layout {
+    grid-template-columns: 200px 1fr 240px;
+  }
+  
+  .sidebar {
+    padding: 1rem;
+  }
+  
+  .palette-item {
+    padding: 8px;
+  }
+  
+  .symbol {
+    font-size: 1rem;
+  }
+  
+  .name {
+    font-size: 0.65rem;
+  }
+}
+
+/* Large desktop */
+@media (min-width: 1400px) {
+  .main-layout {
+    grid-template-columns: 300px 1fr 350px;
   }
   
   .control-btn {
-    padding: 0.5rem;
-    font-size: 0.8rem;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
   }
-  
-  /* Disable old column layout forcing if we are using IS-MOBILE class logic */
 }
 
 @import '@/assets/css/smart_gen_ui.css';

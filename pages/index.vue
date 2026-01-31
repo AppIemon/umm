@@ -15,8 +15,8 @@
       <p class="subtitle">GEOMETRY • RHYTHM • WAVE</p>
       
       <div class="actions">
-        <NuxtLink to="/play" class="play-btn-large">SINGLE PLAY</NuxtLink>
-        <NuxtLink to="/multiplayer" class="play-btn-large secondary">MULTIPLAYER</NuxtLink>
+        <NuxtLink to="/play" class="play-btn-large">▶ SINGLE</NuxtLink>
+        <NuxtLink to="/multiplayer" class="play-btn-large secondary">⚔ MULTI</NuxtLink>
       </div>
 
       <div class="user-preview" v-if="user">
@@ -27,8 +27,8 @@
         </div>
       </div>
       <div class="auth-actions" v-else>
-        <NuxtLink to="/login" class="auth-btn">LOGIN</NuxtLink>
-        <NuxtLink to="/register" class="auth-btn">REGISTER</NuxtLink>
+        <NuxtLink to="/login" class="auth-btn">🔐 로그인</NuxtLink>
+        <NuxtLink to="/register" class="auth-btn">📝 회원가입</NuxtLink>
       </div>
 
       <div class="stats-preview">
@@ -401,21 +401,87 @@ const { user } = useAuth();
 
 @media (max-width: 768px) {
   .game-title-main {
-    font-size: 2.5rem;
+    font-size: 1.8rem;
+    letter-spacing: 2px;
   }
   
   .wave-icon-large {
-    font-size: 5rem;
+    font-size: 4rem;
+  }
+  
+  .subtitle {
+    font-size: 0.75rem;
+    letter-spacing: 4px;
+    margin-bottom: 1.5rem;
+  }
+  
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    width: 100%;
+    padding: 0 1rem;
   }
   
   .play-btn-large {
-    padding: 1rem 2.5rem;
-    font-size: 1.2rem;
+    padding: 0.8rem 1.5rem;
+    font-size: 1rem;
+    width: 100%;
+    text-align: center;
+    margin: 0;
+  }
+  
+  .play-btn-large.secondary {
+    margin-left: 0;
   }
   
   .stats-preview {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .stat-box {
+    padding: 0.8rem 1rem;
+    min-width: 80px;
+  }
+  
+  .val {
+    font-size: 1.2rem;
+  }
+  
+  .lbl {
+    font-size: 0.6rem;
+  }
+  
+  .hero-content {
+    padding: 1rem;
+  }
+  
+  .how-to-play {
+    padding: 1rem 1.5rem;
+  }
+  
+  .how-to-play h3 {
+    font-size: 0.85rem;
+  }
+  
+  .how-to-play p {
+    font-size: 0.8rem;
+  }
+  
+  .user-preview {
+    padding: 0.8rem;
+    width: 90%;
+  }
+  
+  .auth-actions {
     gap: 1rem;
+  }
+  
+  .auth-btn {
+    font-size: 0.8rem;
   }
 }
 </style>

@@ -2,7 +2,7 @@
   <div class="mypage-container">
     <div class="header">
       <h1 class="title">PILOT PROFILE</h1>
-      <button class="back-btn" @click="router.push('/')">BACK TO MENU</button>
+      <button class="back-btn" @click="router.push('/')"><span class="btn-icon">←</span><span class="btn-text">BACK</span></button>
     </div>
 
     <div class="content">
@@ -83,7 +83,7 @@
                   <span class="song-date">{{ formatDate(song.date) }}</span>
                 </div>
                 <div class="actions">
-                  <button class="delete-btn" @click="removeSong(song.id)">DELETE</button>
+                  <button class="delete-btn" @click="removeSong(song.id)" title="Delete"><span class="btn-icon">✕</span><span class="btn-text">DELETE</span></button>
                 </div>
               </div>
             </div>
@@ -436,5 +436,103 @@ h2 {
   padding: 3rem;
   color: #444;
   font-style: italic;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .mypage-container {
+    padding: 1rem;
+  }
+  
+  .header {
+    margin-bottom: 1rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+  }
+  
+  .back-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  
+  .back-btn .btn-text {
+    display: none;
+  }
+  
+  .back-btn .btn-icon {
+    display: inline;
+  }
+  
+  .content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .glass-panel {
+    padding: 1rem;
+  }
+  
+  h2 {
+    font-size: 1rem;
+    margin-bottom: 0.8rem;
+  }
+  
+  .rating-display .value {
+    font-size: 2rem;
+  }
+  
+  .match-item {
+    padding: 0.8rem;
+  }
+  
+  .drop-zone {
+    height: 120px;
+    padding: 0.5rem;
+  }
+  
+  .song-item {
+    padding: 0.8rem;
+  }
+  
+  .song-name {
+    font-size: 0.9rem;
+  }
+  
+  .delete-btn {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+  }
+  
+  .delete-btn .btn-text {
+    display: none;
+  }
+  
+  .delete-btn .btn-icon {
+    display: inline;
+  }
+  
+  .setting-row {
+    padding: 0.3rem;
+    font-size: 0.85rem;
+  }
+  
+  .setting-row input[type="color"] {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (min-width: 769px) {
+  .back-btn .btn-icon,
+  .delete-btn .btn-icon {
+    display: none;
+  }
+  
+  .back-btn .btn-text,
+  .delete-btn .btn-text {
+    display: inline;
+  }
 }
 </style>

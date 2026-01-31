@@ -2,8 +2,8 @@
   <div class="rankings-page">
     <div class="background-anim"></div>
     <div class="header">
-      <h1 class="title">HALL OF SYNCHRONIZATION</h1>
-      <NuxtLink to="/" class="back-btn">RETURN</NuxtLink>
+      <h1 class="title">HALL OF SYNC</h1>
+      <NuxtLink to="/" class="back-btn">← BACK</NuxtLink>
     </div>
     
     <div class="rank-list glass-panel">
@@ -168,5 +168,42 @@ onMounted(() => {
   color: #666;
   font-size: 0.9rem;
   font-family: monospace;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .rankings-page {
+    padding: 1.5rem 1rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+    letter-spacing: 2px;
+  }
+  
+  .glass-panel {
+    padding: 1rem;
+  }
+  
+  .rank-item {
+    padding: 1rem 0.8rem;
+  }
+  
+  .rank-pos {
+    font-size: 1.1rem;
+    width: 40px;
+  }
+  
+  .score-val {
+    font-size: 1.4rem;
+  }
+  
+  .score-label {
+    font-size: 0.65rem;
+  }
+  
+  .date {
+    font-size: 0.7rem;
+  }
 }
 </style>

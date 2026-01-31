@@ -499,4 +499,113 @@ const generateEasyMap = (duration: number) => {
 .action-btn:hover {
   transform: scale(1.05);
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .guide-container {
+    padding: 1rem;
+    gap: 1rem;
+  }
+  
+  .page-title {
+    font-size: 1.8rem;
+    letter-spacing: 2px;
+  }
+  
+  .guide-card {
+    padding: 1.5rem 1rem;
+    min-height: auto;
+    gap: 1.5rem;
+  }
+  
+  .demo-box {
+    height: 160px;
+    gap: 1rem;
+  }
+  
+  .key-icon {
+    padding: 0.8rem 1rem;
+    font-size: 1rem;
+  }
+  
+  .portal-demo {
+    padding: 0 1.5rem;
+    font-size: 1rem;
+  }
+  
+  .portal-row {
+    font-size: 1rem;
+    gap: 1rem;
+  }
+  
+  .p-icon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .tips-demo {
+    padding: 0 1rem;
+    font-size: 0.95rem;
+  }
+  
+  .step-text h3 {
+    font-size: 1.3rem;
+    margin-bottom: 0.8rem;
+  }
+  
+  .step-text p {
+    font-size: 0.95rem;
+  }
+  
+  .guide-nav {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  
+  .nav-dot {
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+  }
+  
+  .actions {
+    flex-direction: column;
+    gap: 0.8rem;
+    width: 100%;
+  }
+  
+  .action-btn {
+    padding: 0.8rem 1.5rem;
+    font-size: 0.95rem;
+    width: 100%;
+    text-align: center;
+  }
+  
+  /* Tutorial Overlay */
+  .tutorial-overlay {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+  }
+  
+  .message-box {
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .message-content {
+    font-size: 1rem;
+  }
+  
+  .key-guide {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
+  
+  .exit-btn {
+    top: 80px;
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+  }
+}
 </style>

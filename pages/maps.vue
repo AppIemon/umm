@@ -47,20 +47,21 @@
           </div>
           
             <div class="actions">
-              <button @click="playMap(map)" class="action-btn play">PLAY</button>
+              <button @click="playMap(map)" class="action-btn play" title="Play"><span class="btn-icon">▶</span><span class="btn-text">PLAY</span></button>
               <template v-if="currentTab === 'my'">
-                <button @click="startEdit(map)" class="action-btn edit">EDIT</button>
-                <button @click="startRename(map)" class="action-btn rename">RENAME</button>
+                <button @click="startEdit(map)" class="action-btn edit" title="Edit"><span class="btn-icon">✏</span><span class="btn-text">EDIT</span></button>
+                <button @click="startRename(map)" class="action-btn rename" title="Rename"><span class="btn-icon">📝</span><span class="btn-text">NAME</span></button>
                 <button 
                   @click="toggleShare(map)" 
                   class="action-btn share"
+                  :title="map.isShared ? 'Make Private' : 'Share'"
                 >
-                  {{ map.isShared ? 'PRIVATE' : 'SHARE' }}
+                  <span class="btn-icon">{{ map.isShared ? '🔒' : '🌐' }}</span><span class="btn-text">{{ map.isShared ? 'PRIV' : 'SHARE' }}</span>
                 </button>
-                <button @click="deleteMap(map)" class="action-btn delete">DEL</button>
+                <button @click="deleteMap(map)" class="action-btn delete" title="Delete"><span class="btn-icon">✕</span><span class="btn-text">DEL</span></button>
               </template>
               <template v-if="currentTab === 'shared' && map.isVerified">
-                <button @click="openRating(map)" class="action-btn rate">RATE</button>
+                <button @click="openRating(map)" class="action-btn rate" title="Rate"><span class="btn-icon">★</span><span class="btn-text">RATE</span></button>
               </template>
             </div>
         </div>
@@ -604,5 +605,92 @@ onMounted(() => {
   font-weight: 900;
   min-width: 40px;
   text-align: center;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .maps-page {
+    padding: 1rem 0.5rem;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+    letter-spacing: 2px;
+  }
+  
+  .tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .tab-btn {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+  
+  .map-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .map-card {
+    padding: 1rem;
+  }
+  
+  .card-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.7rem;
+  }
+  
+  .map-title {
+    font-size: 1.1rem;
+  }
+  
+  .map-info {
+    font-size: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  
+  .actions {
+    gap: 0.4rem;
+  }
+  
+  .action-btn {
+    padding: 0.6rem 0.3rem;
+    font-size: 0.9rem;
+    min-width: 40px;
+  }
+  
+  .action-btn .btn-text {
+    display: none;
+  }
+  
+  .action-btn .btn-icon {
+    display: inline;
+  }
+  
+  .modal-content {
+    padding: 1.5rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .action-btn .btn-icon {
+    display: none;
+  }
+  
+  .action-btn .btn-text {
+    display: inline;
+  }
 }
 </style>

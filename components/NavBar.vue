@@ -36,11 +36,11 @@
     <div class="user-panel">
       <div v-if="user" class="user-info">
         <span class="username">{{ user.username }}</span>
-        <button @click="logout" class="logout-btn">LOGOUT</button>
+        <button @click="logout" class="logout-btn"><span class="btn-icon">↪</span><span class="btn-text">LOGOUT</span></button>
       </div>
       <div v-else class="auth-btns">
-        <NuxtLink to="/login" class="auth-btn login">LOGIN</NuxtLink>
-        <NuxtLink to="/register" class="auth-btn register">JOIN</NuxtLink>
+        <NuxtLink to="/login" class="auth-btn login"><span class="btn-icon">🔐</span><span class="btn-text">LOGIN</span></NuxtLink>
+        <NuxtLink to="/register" class="auth-btn register"><span class="btn-icon">➕</span><span class="btn-text">JOIN</span></NuxtLink>
       </div>
     </div>
   </nav>
@@ -260,23 +260,107 @@ const isGuest = computed(() => user.value?.isGuest ?? true);
     margin-right: 0;
   }
   
-  .label, .username, .logout-btn, .auth-btn {
+  .label, .username {
     display: none;
+  }
+  
+  .logout-btn .btn-text,
+  .auth-btn .btn-text {
+    display: none;
+  }
+  
+  .logout-btn .btn-icon,
+  .auth-btn .btn-icon {
+    display: inline;
+  }
+  
+  .logout-btn {
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  
+  .auth-btn {
+    padding: 0.5rem;
+    font-size: 1rem;
   }
   
   .nav-item:hover, .nav-item.router-link-active {
     transform: none;
   }
   
-  /* Show icons for auth instead? Or just hide panel */
-  .auth-btns {
-     display: none; /* Hide login/register on collapsed for now, or use icon */
-  }
-  
-  /* Maybe show a simple login icon if guest? */
   .user-panel {
      padding-top: 1rem;
      border-top: none;
+  }
+}
+
+@media (min-width: 1025px) {
+  .logout-btn .btn-icon,
+  .auth-btn .btn-icon {
+    display: none;
+  }
+  
+  .logout-btn .btn-text,
+  .auth-btn .btn-text {
+    display: inline;
+  }
+}
+
+/* Bottom navigation for very small screens */
+@media (max-width: 640px) {
+  .cyber-nav {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    padding: 0.5rem;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.5);
+  }
+  
+  .brand {
+    display: none;
+  }
+  
+  .links {
+    flex-direction: row;
+    flex: 1;
+    justify-content: space-around;
+    gap: 0;
+  }
+  
+  .nav-item {
+    flex-direction: column;
+    padding: 0.5rem 0.3rem;
+    font-size: 0.6rem;
+  }
+  
+  .nav-item .icon {
+    font-size: 1.2rem;
+    margin-right: 0;
+    margin-bottom: 0.2rem;
+  }
+  
+  .label {
+    display: block;
+    font-size: 0.55rem;
+    letter-spacing: 0;
+  }
+  
+  .nav-item.router-link-active::before {
+    width: 100%;
+    height: 3px;
+    top: 0;
+    left: 0;
+    bottom: auto;
+  }
+  
+  .user-panel {
+    display: none;
   }
 }
 </style>

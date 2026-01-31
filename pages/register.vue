@@ -157,4 +157,36 @@ const handleRegister = () => {
 .footer-link a:hover {
   text-decoration: underline;
 }
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .auth-card {
+    padding: 2rem 1.5rem;
+    margin: 1rem;
+    max-width: 100%;
+  }
+  
+  .glitch-title {
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .input-group {
+    margin-bottom: 1rem;
+  }
+  
+  .input-group input {
+    padding: 0.8rem;
+  }
+  
+  .cta-btn {
+    padding: 0.8rem;
+    font-size: 1rem;
+  }
+  
+  .footer-link {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+  }
+}
 </style>

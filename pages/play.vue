@@ -1448,5 +1448,107 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
   background: rgba(0, 255, 255, 0.1);
 }
 
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .setup-container {
+    padding: 1rem;
+    gap: 1rem;
+  }
+  
+  .header-icon {
+    font-size: 3rem;
+  }
+  
+  .title {
+    font-size: 1.5rem;
+    letter-spacing: 2px;
+  }
+  
+  .desc {
+    font-size: 0.9rem;
+    padding: 0 0.5rem;
+  }
+  
+  .difficulty-select {
+    width: 100%;
+    padding: 0 1rem;
+  }
+  
+  .diff-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .slider-marks {
+    font-size: 0.6rem;
+  }
+  
+  .wave-loader {
+    font-size: 3rem;
+  }
+  
+  .loader-content h2 {
+    font-size: 1.1rem;
+  }
+  
+  .progress-bar {
+    width: 200px;
+  }
+  
+  .failure-log {
+    margin: 1rem 0.5rem;
+    padding: 0.5rem;
+  }
+  
+  .fail-preview {
+    height: 80px;
+  }
+  
+  /* Mode Modal */
+  .mode-modal {
+    width: 95%;
+    padding: 1.5rem 1rem;
+    margin: 1rem;
+  }
+  
+  .mode-header-row {
+    flex-direction: column;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+  }
+  
+  .mode-header-row h2 {
+    font-size: 1.2rem;
+  }
+  
+  .mode-options {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  
+  .mode-btn {
+    padding: 1rem;
+    min-width: 100%;
+  }
+  
+  .mode-btn h3 {
+    font-size: 1rem;
+  }
+  
+  .mode-btn p {
+    font-size: 0.8rem;
+  }
+  
+  .mode-icon {
+    font-size: 1.5rem;
+  }
+  
+  .smart-gen-logs {
+    max-height: 120px;
+    font-size: 0.7rem;
+  }
+}
+
 @import '@/assets/css/play_smart_gen.css';
 </style>

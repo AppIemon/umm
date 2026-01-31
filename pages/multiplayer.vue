@@ -921,4 +921,143 @@ const didIWin = computed(() => {
   transform: translateY(1px);
 }
 
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .lobby-screen, .create-screen, .room-view {
+    padding: 1rem;
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+  }
+  
+  .section-title {
+    font-size: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .header-row {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  
+  .create-btn, .refresh-btn {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .room-grid {
+    grid-template-columns: 1fr;
+    gap: 0.8rem;
+  }
+  
+  .room-card {
+    padding: 1rem;
+  }
+  
+  .room-name {
+    font-size: 1.1rem;
+  }
+  
+  .form-container {
+    max-width: 100%;
+    padding: 0;
+  }
+  
+  .input-field, .select-field {
+    font-size: 1rem;
+    padding: 0.8rem;
+  }
+  
+  .duration-opts {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .duration-opts button {
+    padding: 0.8rem;
+  }
+  
+  .action-row {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  
+  .confirm-btn, .cancel-btn {
+    flex: none;
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1rem;
+  }
+  
+  .room-header-title {
+    font-size: 1.5rem;
+  }
+  
+  .room-header-meta {
+    font-size: 0.9rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  
+  .room-content-row {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .player-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.8rem;
+  }
+  
+  .player-card-lg {
+    padding: 1rem;
+  }
+  
+  .avatar-lg {
+    width: 50px;
+    height: 50px;
+    font-size: 1.3rem;
+  }
+  
+  .chat-sidebar {
+    min-width: 100%;
+    max-height: 200px;
+  }
+  
+  .start-btn {
+    padding: 1rem;
+    font-size: 1.1rem;
+  }
+  
+  .leave-btn {
+    padding: 0.6rem 1.5rem;
+  }
+  
+  .timer-display {
+    font-size: 1.8rem;
+  }
+  
+  .leaderboard-hud {
+    padding: 0.5rem;
+    font-size: 0.9rem;
+  }
+  
+  .result-box {
+    width: 90%;
+    padding: 1rem;
+  }
+  
+  .result-row {
+    padding: 0.8rem;
+    font-size: 1rem;
+  }
+  
+  .action-btn {
+    padding: 0.8rem 2rem;
+    font-size: 1rem;
+  }
+}
+
 </style>
