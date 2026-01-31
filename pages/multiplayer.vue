@@ -233,6 +233,8 @@ const allPlayers = ref<any[]>([]); // Synced via poll
 
 let isEnteringGame = false;
 
+const showNavbar = useState('showNavbar');
+
 onMounted(() => {
   if (!user.value?._id && !sessionStorage.getItem('umm_player_id')) {
     sessionStorage.setItem('umm_player_id', playerId.value);
@@ -242,6 +244,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPolling();
+  showNavbar.value = true;
 });
 
 function stopPolling() {
@@ -380,6 +383,7 @@ async function leaveRoom() {
   currentRoomId.value = null;
   currentRoom.value = null;
   step.value = 'LOBBY';
+  showNavbar.value = true;
   refreshRooms();
 }
 
@@ -485,6 +489,7 @@ async function enterGame(roomData: any) {
   // So we just pass `selectedMap`.
   
   step.value = 'PLAY';
+  showNavbar.value = false;
   isEnteringGame = false;
   
   // Start local timer (As fallback/smoother, but poll will correct it)
@@ -716,5 +721,31 @@ const didIWin = computed(() => {
 .rank { font-weight: 900; width: 50px; }
 .name { flex: 1; text-align: left; }
 .score { font-weight: bold; }
+
+.action-btn {
+  margin-top: 2rem;
+  padding: 1rem 3rem;
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: white;
+  background: linear-gradient(90deg, #ff4444, #ff8844);
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(255, 68, 68, 0.4);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.action-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 8px 25px rgba(255, 68, 68, 0.6);
+  background: linear-gradient(90deg, #ff5555, #ff9955);
+}
+
+.action-btn:active {
+  transform: translateY(1px);
+}
 
 </style>

@@ -1,12 +1,16 @@
 <template>
   <div class="layout-container">
     <LandscapeOverlay />
-    <NavBar />
-    <div class="content-area">
+    <NavBar v-if="showNavbar" />
+    <div class="content-area" :class="{ 'full-width': !showNavbar }">
       <slot />
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+const showNavbar = useState('showNavbar', () => true)
+</script>
 
 <style>
 /* Global resets */
@@ -30,6 +34,10 @@ body, html {
   position: relative;
   min-height: 100vh;
   transition: margin-left 0.3s;
+}
+
+.content-area.full-width {
+  margin-left: 0 !important;
 }
 
 /* Scrollbar */
@@ -56,6 +64,11 @@ body, html {
   .content-area {
     margin-left: 70px; /* Keep space for icon bar or 0 if we hide it completely */
     margin-bottom: 60px;
+  }
+
+  .content-area.full-width {
+    margin-left: 0 !important;
+    margin-bottom: 0 !important;
   }
   
   .layout-container {
