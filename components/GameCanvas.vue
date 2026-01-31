@@ -16,7 +16,7 @@
             </button>
             <button @click="emit('exit', { progress: progressPct, score: score, outcome: gameOver ? 'fail' : 'win' })" class="hud-action-btn exit">나가기</button>
             <button @click="emit('change-mode')" class="hud-action-btn mode-change">MODE</button>
-            <button v-if="practiceMode && !gameOver" @click="manualCheckpoint" class="hud-action-btn checkpoint">SET CP (C)</button>
+            <button v-if="practiceMode && !gameOver && !isRecording" @click="manualCheckpoint" class="hud-action-btn checkpoint">SET CP (C)</button>
           </div>
           <div class="title-container">
             <div class="wave-icon" :class="{ inverted: isGravityInverted }">▶</div>
@@ -49,7 +49,7 @@
           <span v-if="isMini" class="mini-badge">MINI</span>
           <span v-if="isAutoplayUI && !tutorialMode" class="autoplay-badge">AUTO MODE</span>
           <span v-if="tutorialMode" class="autoplay-badge tutorial">TUTORIAL</span>
-          <span v-if="practiceMode" class="autoplay-badge practice">PRACTICE</span>
+          <span v-if="practiceMode && !isRecording" class="autoplay-badge practice">PRACTICE</span>
         </div>
 
         
@@ -116,7 +116,7 @@
            </div>
         </div>
         
-        <div v-if="practiceMode && checkpoints.length > 0" class="checkpoint-indicator">
+        <div v-if="practiceMode && checkpoints.length > 0 && !isRecording" class="checkpoint-indicator">
            CPs: {{ checkpoints.length }} (Last: {{ Math.floor(checkpoints[checkpoints.length - 1].progress) }}%)
         </div>
 
@@ -126,7 +126,7 @@
           </div>
           <div v-else>
             <span>클릭/스페이스 유지 = 위로 | 해제 = 아래로</span>
-            <span v-if="practiceMode"> | [C] 체크포인트 | [X] 최근 삭제</span>
+            <span v-if="practiceMode && !isRecording"> | [C] 체크포인트 | [X] 최근 삭제</span>
           </div>
         </div>
       </div>
@@ -180,6 +180,7 @@ const hasVoted = ref(false);
 // Video Recording
 const isRecordingSaved = ref(false);
 const isSavingVideo = ref(false);
+const isRecording = ref(false); // Track when actively recording
 let mediaRecorder: MediaRecorder | null = null;
 let recordedChunks: Blob[] = [];
 
@@ -236,6 +237,7 @@ const startRecording = () => {
     };
     
     mediaRecorder.start(100); // 100ms chunks
+    isRecording.value = true;
     console.log('[Recording] Started');
   } catch (e) {
     console.error('[Recording] Failed to start:', e);
@@ -246,6 +248,7 @@ const startRecording = () => {
 const stopRecording = () => {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
+    isRecording.value = false;
     console.log('[Recording] Stopped');
   }
 };
@@ -1263,8 +1266,8 @@ const draw = () => {
      });
   }
 
-  // Draw checkpoints
-  if (props.practiceMode) {
+  // Draw checkpoints (hide during recording for clean output)
+  if (props.practiceMode && !isRecording.value) {
     checkpoints.value.forEach((cp, idx) => {
       ctx.save();
       const cpSize = 15;

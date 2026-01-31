@@ -380,6 +380,20 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, x: nu
     ctx.beginPath();
     const cx = x + obs.width / 2;
     if (obs.type === 'falling_spike') {
+      // Draw falling path indicator
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 68, 68, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      // Line from spike tip (bottom center of spike) down to reasonably far
+      const tipX = cx;
+      const tipY = y + obs.height;
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX, tipY + 400); // Draw downward path
+      ctx.stroke();
+      ctx.restore();
+
       ctx.moveTo(x, y);
       ctx.lineTo(x + obs.width, y);
       ctx.lineTo(cx, y + obs.height);
