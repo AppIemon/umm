@@ -672,16 +672,45 @@ export class GameEngine {
   }
 
   loadMapData(mapData: any) {
-    // 객체 깊은 복사 또는 상태 초기화 (재시작 시 포탈 상태 리셋)
-    this.obstacles = mapData.engineObstacles.map((o: any) => ({ ...o }));
-    this.portals = mapData.enginePortals.map((p: any) => ({ ...p, activated: false }));
-    this.autoplayLog = mapData.autoplayLog ? [...mapData.autoplayLog] : [];
-    this.totalLength = mapData.duration * this.baseSpeed + 500;
+    if (!mapData) return;
 
-    // 오토플레이 인덱스 초기화 (중요!)
+    // Helper for restoring default values in optimized objects
+    const restoreObjects = (list: any[]) => {
+      if (!list || !Array.isArray(list)) return [];
+      return list.map((o: any) => ({
+        ...o,
+        width: o.width ?? 50,
+        height: o.height ?? 50,
+        angle: o.angle ?? 0,
+        initialY: o.initialY ?? o.y,
+        movement: o.movement ?? { type: 'none', range: 0, speed: 0, phase: 0 },
+        children: o.children ? restoreObjects(o.children) : []
+      }));
+    };
+
+    this.obstacles = restoreObjects(mapData.engineObstacles || []);
+    this.portals = restoreObjects(mapData.enginePortals || []).map(p => ({ ...p, activated: false }));
+
+    // Unpack compressed autoplayLog [x, y, h, t, ...]
+    if (mapData.autoplayLog && Array.isArray(mapData.autoplayLog) && mapData.autoplayLog.length > 0 && typeof mapData.autoplayLog[0] === 'number') {
+      const unpacked = [];
+      for (let i = 0; i < mapData.autoplayLog.length; i += 4) {
+        unpacked.push({
+          x: mapData.autoplayLog[i],
+          y: mapData.autoplayLog[i + 1],
+          holding: mapData.autoplayLog[i + 2] === 1,
+          time: mapData.autoplayLog[i + 3]
+        });
+      }
+      this.autoplayLog = unpacked;
+    } else {
+      this.autoplayLog = mapData.autoplayLog ? [...mapData.autoplayLog] : [];
+    }
+
+    this.totalLength = (mapData.duration || 60) * this.getDynamicBaseSpeed() + 500;
     this.lastAutoplayIndex = 0;
 
-    console.log(`[loadMapData] Loaded ${this.obstacles.length} obstacles, ${this.portals.length} portals, ${this.autoplayLog.length} autoplay points`);
+    console.log(`[loadMapData] Restored ${this.obstacles.length} obstacles, ${this.portals.length} portals, ${this.autoplayLog.length} points.`);
   }
 
   // Autoplay data

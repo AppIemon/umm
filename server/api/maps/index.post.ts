@@ -93,54 +93,63 @@ export default defineEventHandler(async (event) => {
 
     const optimizeObstacles = (obs: any[]) => {
       if (!Array.isArray(obs)) return [];
-      return obs.map(o => ({
-        ...o,
-        x: round(o.x),
-        y: round(o.y),
-        width: round(o.width),
-        height: round(o.height)
-      }));
+      return obs.map(o => {
+        const optimized: any = {
+          type: o.type,
+          x: round(o.x),
+          y: round(o.y)
+        };
+
+        // Remove default values to save space
+        if (o.width && round(o.width) !== 50) optimized.width = round(o.width);
+        if (o.height && round(o.height) !== 50) optimized.height = round(o.height);
+        if (o.angle && round(o.angle) !== 0) optimized.angle = round(o.angle);
+
+        // Movement optimization
+        if (o.movement && o.movement.type !== 'none') {
+          optimized.movement = {
+            type: o.movement.type,
+            range: round(o.movement.range || 0),
+            speed: round(o.movement.speed || 0),
+            phase: round(o.movement.phase || 0)
+          };
+        }
+
+        if (o.initialY !== undefined && round(o.initialY) !== round(o.y)) {
+          optimized.initialY = round(o.initialY);
+        }
+
+        // Children recursive optimization
+        if (o.children && Array.isArray(o.children) && o.children.length > 0) {
+          optimized.children = optimizeObstacles(o.children);
+        }
+
+        return optimized;
+      });
     };
 
     const optimizeLog = (log: any[]) => {
       if (!log || !Array.isArray(log) || log.length === 0) return [];
-      const optimized = [];
 
-      // Ensure first point exists and is valid
-      let last = log[0];
-      if (!last || typeof last.x !== 'number') return [];
+      const optimized: number[] = [];
+      let lastPoint = log[0];
 
-      // Create a copy to avoid mutating original data structure if it matters
-      // (Though here we are constructing a new 'optimized' array)
-
-      // Round first point
-      // We push a new object to avoid reference issues
-      let lastPoint = { ...last, x: round(last.x), y: round(last.y), time: round(last.time, 3) };
-      optimized.push(lastPoint);
+      // Push first point: [x, y, holding (0/1), time]
+      optimized.push(round(lastPoint.x), round(lastPoint.y), lastPoint.holding ? 1 : 0, round(lastPoint.time, 3));
 
       for (let i = 1; i < log.length; i++) {
         const curr = log[i];
         if (!curr) continue;
 
-        // Always keep input changes (Critical for gameplay)
-        if (curr.holding !== last.holding) {
-          const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
-          optimized.push(p);
-          last = curr; // update reference to original for comparison logic? 
-          // actually comparison was curr.holding vs last.holding. 
-          // lastPoint vs last is different. 
-          // Let's stick to logic but use rounded values for storage.
-          lastPoint = p;
-          continue;
-        }
+        // Keep all input changes
+        const inputChanged = curr.holding !== lastPoint.holding;
 
-        // Downsample: Keep point only if distance > 30px (Significant reduction)
-        const distSq = Math.pow(curr.x - last.x, 2) + Math.pow(curr.y - last.y, 2);
-        if (distSq > 900) { // 30^2 instead of 15^2
-          const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
-          optimized.push(p);
-          last = curr;
-          lastPoint = p;
+        // Distance-based downsampling: 40px threshold for better optimization
+        const distSq = Math.pow(curr.x - lastPoint.x, 2) + Math.pow(curr.y - lastPoint.y, 2);
+
+        if (inputChanged || distSq > 1600) { // 40^2
+          optimized.push(round(curr.x), round(curr.y), curr.holding ? 1 : 0, round(curr.time, 3));
+          lastPoint = curr;
         }
       }
       return optimized;

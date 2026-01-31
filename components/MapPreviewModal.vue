@@ -117,8 +117,8 @@ const drawMap = () => {
     props.mapData.engineObstacles.forEach((obs: any) => {
       const x = obs.x * drawScaleX;
       const y = obs.y * drawScaleY;
-      const w = obs.width * drawScaleX;
-      const h = obs.height * drawScaleY;
+      const w = (obs.width ?? 50) * drawScaleX;
+      const h = (obs.height ?? 50) * drawScaleY;
       
       if (obs.type === 'spike' || obs.type === 'mini_spike') {
          ctx.beginPath();
@@ -141,18 +141,30 @@ const drawMap = () => {
     ctx.strokeStyle = '#00ffff'; // Cyan path
     ctx.lineWidth = 4;
     
-    let first = true;
-    props.mapData.autoplayLog.forEach((p: any) => {
-      const x = p.x * drawScaleX;
-      const y = p.y * drawScaleY;
-      
-      if (first) {
-        ctx.moveTo(x, y);
-        first = false;
-      } else {
-        ctx.lineTo(x, y);
+    // Check if flat number array or objects
+    const isPacked = typeof props.mapData.autoplayLog[0] === 'number';
+    
+    if (isPacked) {
+      for (let i = 0; i < props.mapData.autoplayLog.length; i += 4) {
+        const lx = props.mapData.autoplayLog[i] * drawScaleX;
+        const ly = props.mapData.autoplayLog[i + 1] * drawScaleY;
+        if (i === 0) ctx.moveTo(lx, ly);
+        else ctx.lineTo(lx, ly);
       }
-    });
+    } else {
+      let first = true;
+      props.mapData.autoplayLog.forEach((p: any) => {
+        const x = p.x * drawScaleX;
+        const y = p.y * drawScaleY;
+        
+        if (first) {
+          ctx.moveTo(x, y);
+          first = false;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+    }
     ctx.stroke();
   }
 };

@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3eb66-AFH8jN3Wr6e8fuz/0yanH4tJ2ak\"",
-    "mtime": "2026-01-31T05:33:54.877Z",
-    "size": 256870,
+    "etag": "\"3ed46-BLjU6YbO0eeBcihcg6+SY4/vTL4\"",
+    "mtime": "2026-01-31T05:39:15.881Z",
+    "size": 257350,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f0be6-wT1qGYkZT8j8HIjZR0CY2QFBDAc\"",
-    "mtime": "2026-01-31T05:33:54.881Z",
-    "size": 986086,
+    "etag": "\"f14b6-vUCLKsPEoinutTs4c1QUd6vUdys\"",
+    "mtime": "2026-01-31T05:39:15.883Z",
+    "size": 988342,
     "path": "index.mjs.map"
   }
 };
@@ -3337,37 +3337,45 @@ const index_post = defineEventHandler(async (event) => {
     };
     const optimizeObstacles = (obs) => {
       if (!Array.isArray(obs)) return [];
-      return obs.map((o) => ({
-        ...o,
-        x: round(o.x),
-        y: round(o.y),
-        width: round(o.width),
-        height: round(o.height)
-      }));
+      return obs.map((o) => {
+        const optimized = {
+          type: o.type,
+          x: round(o.x),
+          y: round(o.y)
+        };
+        if (o.width && round(o.width) !== 50) optimized.width = round(o.width);
+        if (o.height && round(o.height) !== 50) optimized.height = round(o.height);
+        if (o.angle && round(o.angle) !== 0) optimized.angle = round(o.angle);
+        if (o.movement && o.movement.type !== "none") {
+          optimized.movement = {
+            type: o.movement.type,
+            range: round(o.movement.range || 0),
+            speed: round(o.movement.speed || 0),
+            phase: round(o.movement.phase || 0)
+          };
+        }
+        if (o.initialY !== void 0 && round(o.initialY) !== round(o.y)) {
+          optimized.initialY = round(o.initialY);
+        }
+        if (o.children && Array.isArray(o.children) && o.children.length > 0) {
+          optimized.children = optimizeObstacles(o.children);
+        }
+        return optimized;
+      });
     };
     const optimizeLog = (log) => {
       if (!log || !Array.isArray(log) || log.length === 0) return [];
       const optimized = [];
-      let last = log[0];
-      if (!last || typeof last.x !== "number") return [];
-      let lastPoint = { ...last, x: round(last.x), y: round(last.y), time: round(last.time, 3) };
-      optimized.push(lastPoint);
+      let lastPoint = log[0];
+      optimized.push(round(lastPoint.x), round(lastPoint.y), lastPoint.holding ? 1 : 0, round(lastPoint.time, 3));
       for (let i = 1; i < log.length; i++) {
         const curr = log[i];
         if (!curr) continue;
-        if (curr.holding !== last.holding) {
-          const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
-          optimized.push(p);
-          last = curr;
-          lastPoint = p;
-          continue;
-        }
-        const distSq = Math.pow(curr.x - last.x, 2) + Math.pow(curr.y - last.y, 2);
-        if (distSq > 900) {
-          const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
-          optimized.push(p);
-          last = curr;
-          lastPoint = p;
+        const inputChanged = curr.holding !== lastPoint.holding;
+        const distSq = Math.pow(curr.x - lastPoint.x, 2) + Math.pow(curr.y - lastPoint.y, 2);
+        if (inputChanged || distSq > 1600) {
+          optimized.push(round(curr.x), round(curr.y), curr.holding ? 1 : 0, round(curr.time, 3));
+          lastPoint = curr;
         }
       }
       return optimized;
@@ -5183,12 +5191,41 @@ class GameEngine {
     this.mapConfig = { ...this.mapConfig, ...config };
   }
   loadMapData(mapData) {
-    this.obstacles = mapData.engineObstacles.map((o) => ({ ...o }));
-    this.portals = mapData.enginePortals.map((p) => ({ ...p, activated: false }));
-    this.autoplayLog = mapData.autoplayLog ? [...mapData.autoplayLog] : [];
-    this.totalLength = mapData.duration * this.baseSpeed + 500;
+    if (!mapData) return;
+    const restoreObjects = (list) => {
+      if (!list || !Array.isArray(list)) return [];
+      return list.map((o) => {
+        var _a, _b, _c, _d, _e;
+        return {
+          ...o,
+          width: (_a = o.width) != null ? _a : 50,
+          height: (_b = o.height) != null ? _b : 50,
+          angle: (_c = o.angle) != null ? _c : 0,
+          initialY: (_d = o.initialY) != null ? _d : o.y,
+          movement: (_e = o.movement) != null ? _e : { type: "none", range: 0, speed: 0, phase: 0 },
+          children: o.children ? restoreObjects(o.children) : []
+        };
+      });
+    };
+    this.obstacles = restoreObjects(mapData.engineObstacles || []);
+    this.portals = restoreObjects(mapData.enginePortals || []).map((p) => ({ ...p, activated: false }));
+    if (mapData.autoplayLog && Array.isArray(mapData.autoplayLog) && mapData.autoplayLog.length > 0 && typeof mapData.autoplayLog[0] === "number") {
+      const unpacked = [];
+      for (let i = 0; i < mapData.autoplayLog.length; i += 4) {
+        unpacked.push({
+          x: mapData.autoplayLog[i],
+          y: mapData.autoplayLog[i + 1],
+          holding: mapData.autoplayLog[i + 2] === 1,
+          time: mapData.autoplayLog[i + 3]
+        });
+      }
+      this.autoplayLog = unpacked;
+    } else {
+      this.autoplayLog = mapData.autoplayLog ? [...mapData.autoplayLog] : [];
+    }
+    this.totalLength = (mapData.duration || 60) * this.getDynamicBaseSpeed() + 500;
     this.lastAutoplayIndex = 0;
-    console.log(`[loadMapData] Loaded ${this.obstacles.length} obstacles, ${this.portals.length} portals, ${this.autoplayLog.length} autoplay points`);
+    console.log(`[loadMapData] Restored ${this.obstacles.length} obstacles, ${this.portals.length} portals, ${this.autoplayLog.length} points.`);
   }
   // 한 마디 길이 (초)
   /**
