@@ -273,9 +273,58 @@ export class MapGenerator {
 
       // 4. Decoration & Hazards
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
+      // Increase hazard threshold slightly
       const hazardThreshold = 0.2 + (difficulty / 30) * 0.35;
 
-      if (stepY === 0 && ceilStepY === 0 && currentGap > 120 && rand < hazardThreshold) {
+      // Anti-stick Logic counters (Global or local var?)
+      // Since we are in a loop, we can track sticky distance?
+      // Actually, we can just check if last few blocks were same Y.
+      // But simpler: If stepY === 0 (flat floor), increment floorFlatCount.
+      // If ceilStepY === 0 (flat ceil), increment ceilFlatCount.
+      // If count > threshold (e.g. 5 blocks = 250px), FORCE a spike.
+
+      // Note: We need to maintain state outside loop or rely on checking previous objects.
+      // Since this is one big function, we can add counters at the start of loop? 
+      // No, function starts much earlier. 
+      // For now, let's just use a high probability if flat.
+
+      let forceFloorSpike = false;
+      let forceCeilSpike = false;
+
+      // Simple heuristic: If we are flat for this step, 50% chance to place spike if diff > 5
+      // Better: Use a dedicated counter variable kept outside the loop.
+      // But passing variables is hard with replace_file_content partial view.
+      // Instead, let's check current 'flatness' by randomness + difficulty boost.
+
+      // Stronger Anti-Stick:
+      // If difficulty > 3 and flat, 40% chance of spike on floor/ceiling.
+      // If difficulty > 15, 70% chance.
+      let antiStickChance = 0;
+      if (difficulty >= 3) antiStickChance = 0.3;
+      if (difficulty >= 10) antiStickChance = 0.5;
+      if (difficulty >= 20) antiStickChance = 0.7;
+
+      const isFlatFloor = (stepY === 0);
+      const isFlatCeil = (ceilStepY === 0);
+
+      // Check emptiness (don't place if too tight)
+      if (currentGap > 120) {
+        if (isFlatFloor && Math.random() < antiStickChance) {
+          // Try to place floor spike
+          forceFloorSpike = true;
+        }
+        if (isFlatCeil && Math.random() < antiStickChance) {
+          // Try to place ceil spike if floor not placed (or both?)
+          // Avoid double hazard at same X usually, unless high difficulty
+          if (!forceFloorSpike || difficulty > 15) {
+            forceCeilSpike = true;
+          }
+        }
+      }
+
+      const hasHazard = (stepY === 0 && ceilStepY === 0 && rand < hazardThreshold);
+
+      if (hasHazard || forceFloorSpike || forceCeilSpike) {
         // Diversified Size
         const sizeVariance = 0.8 + Math.random() * 0.4; // 0.8x ~ 1.2x
         let baseH = 40;
@@ -284,10 +333,19 @@ export class MapGenerator {
         const spikeH = baseH * sizeVariance;
 
         // Balanced Floor/Ceiling Choice (Rotate)
-        const isFloor = (currentX / blockSize) % 2 === 0;
+        // If Forced, respect that. If not, pick partially random based on index (checkerboard style)
+        let placeOnFloor = (currentX / blockSize) % 2 === 0;
 
-        if (isFloor) {
+        if (forceFloorSpike && !forceCeilSpike) placeOnFloor = true;
+        else if (forceCeilSpike && !forceFloorSpike) placeOnFloor = false;
+        else if (forceFloorSpike && forceCeilSpike) {
+          // Both? Pick one random or both? For now just random to avoid impassable wall
+          placeOnFloor = Math.random() < 0.5;
+        }
+
+        if (placeOnFloor) {
           const type = floorBag.next();
+          // Safety Check: Don't block path
           if (currentPoint.y < currentFloorY - spikeH - 20) {
             objects.push({
               type: (type === 'spike' && difficulty <= 8) ? 'mini_spike' : type,

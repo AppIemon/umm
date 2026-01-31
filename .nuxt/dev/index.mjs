@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"40652-e1tXJP5XmzB+BYq/bLcGe3bSDOE\"",
-    "mtime": "2026-01-31T06:44:05.095Z",
-    "size": 263762,
+    "etag": "\"408b2-1kFIRbcpCUKKy/lFFrqXjryhTYI\"",
+    "mtime": "2026-01-31T07:04:53.129Z",
+    "size": 264370,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f7064-qAVL58b6DkFw+OOg3HlJoUJd49U\"",
-    "mtime": "2026-01-31T06:44:05.097Z",
-    "size": 1011812,
+    "etag": "\"f7c01-19lB4RywRZPTPO+jswPwSkgGJLU\"",
+    "mtime": "2026-01-31T07:04:53.132Z",
+    "size": 1014785,
     "path": "index.mjs.map"
   }
 };
@@ -4646,14 +4646,38 @@ class MapGenerator {
       }
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
       const hazardThreshold = 0.2 + difficulty / 30 * 0.35;
-      if (stepY === 0 && ceilStepY === 0 && currentGap > 120 && rand < hazardThreshold) {
+      let forceFloorSpike = false;
+      let forceCeilSpike = false;
+      let antiStickChance = 0;
+      if (difficulty >= 3) antiStickChance = 0.3;
+      if (difficulty >= 10) antiStickChance = 0.5;
+      if (difficulty >= 20) antiStickChance = 0.7;
+      const isFlatFloor = stepY === 0;
+      const isFlatCeil = ceilStepY === 0;
+      if (currentGap > 120) {
+        if (isFlatFloor && Math.random() < antiStickChance) {
+          forceFloorSpike = true;
+        }
+        if (isFlatCeil && Math.random() < antiStickChance) {
+          if (!forceFloorSpike || difficulty > 15) {
+            forceCeilSpike = true;
+          }
+        }
+      }
+      const hasHazard = stepY === 0 && ceilStepY === 0 && rand < hazardThreshold;
+      if (hasHazard || forceFloorSpike || forceCeilSpike) {
         const sizeVariance = 0.8 + Math.random() * 0.4;
         let baseH = 40;
         if (difficulty <= 5) baseH = 25;
         else if (difficulty > 20) baseH = 50;
         const spikeH = baseH * sizeVariance;
-        const isFloor = currentX / blockSize % 2 === 0;
-        if (isFloor) {
+        let placeOnFloor = currentX / blockSize % 2 === 0;
+        if (forceFloorSpike && !forceCeilSpike) placeOnFloor = true;
+        else if (forceCeilSpike && !forceFloorSpike) placeOnFloor = false;
+        else if (forceFloorSpike && forceCeilSpike) {
+          placeOnFloor = Math.random() < 0.5;
+        }
+        if (placeOnFloor) {
           const type = floorBag.next();
           if (currentPoint.y < currentFloorY - spikeH - 20) {
             objects.push({
@@ -6398,12 +6422,12 @@ class GameEngine {
       const nX = curr.x + spd * dt;
       let nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       let nYR = curr.y + amp * (nG ? -1 : 1) * dt;
-      let isOffscreenH = false;
-      let isOffscreenR = false;
-      if (nYH < this.minY + sz || nYH > this.maxY - sz) isOffscreenH = true;
-      if (nYR < this.minY + sz || nYR > this.maxY - sz) isOffscreenR = true;
-      let dH = isOffscreenH || checkColl(nX, nYH, sz, nT, nSM, 0.1);
-      let dR = isOffscreenR || checkColl(nX, nYR, sz, nT, nSM, 0.1);
+      if (nYH < this.minY + sz) nYH = this.minY + sz;
+      if (nYH > this.maxY - sz) nYH = this.maxY - sz;
+      if (nYR < this.minY + sz) nYR = this.minY + sz;
+      if (nYR > this.maxY - sz) nYR = this.maxY - sz;
+      let dH = checkColl(nX, nYH, sz, nT, nSM, 0.1);
+      let dR = checkColl(nX, nYR, sz, nT, nSM, 0.1);
       const vDist = sz * 0.8;
       if (!dH && Math.abs(nYH - curr.y) > vDist) {
         if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 0.1)) dH = true;
@@ -6636,11 +6660,9 @@ class GameEngine {
     }
     if (this.playerY < this.minY + this.playerSize) {
       this.playerY = this.minY + this.playerSize;
-      this.die("\uCDA9\uB3CC: \uCC9C\uC7A5");
     }
     if (this.playerY > this.maxY - this.playerSize) {
       this.playerY = this.maxY - this.playerSize;
-      this.die("\uCDA9\uB3CC: \uBC14\uB2E5");
     }
     this.cameraX = this.playerX - 280;
     this.progress = Math.min(100, this.playerX / this.totalLength * 100);

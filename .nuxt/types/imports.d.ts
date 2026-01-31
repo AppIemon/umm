@@ -215,16 +215,16 @@ declare global {
   export type { StoredSong } from '../../composables/useSongStorage'
   import('../../composables/useSongStorage')
   // @ts-ignore
-  export type { MapGenerator, MapObject, MapGenerator } from '../../utils/MapGenerator'
+  export type { MapGenerator, MapObject } from '../../utils/MapGenerator'
   import('../../utils/MapGenerator')
   // @ts-ignore
-  export type { AudioAnalyzerClient, AudioAnalyzerClient } from '../../utils/audio-analyzer-client'
+  export type { AudioAnalyzerClient } from '../../utils/audio-analyzer-client'
   import('../../utils/audio-analyzer-client')
   // @ts-ignore
-  export type { GameEngine, Obstacle, Portal, Boss, Pattern, GameState, MapConfig, StateEvent, BeatAction, GameEngine } from '../../utils/game-engine'
+  export type { GameEngine, Obstacle, Portal, Boss, Pattern, GameState, MapConfig, StateEvent, BeatAction } from '../../utils/game-engine'
   import('../../utils/game-engine')
   // @ts-ignore
-  export type { SmartMapGenerator, SmartGenStatus, SmartMapGenerator } from '../../utils/smart-map-generator'
+  export type { SmartMapGenerator, SmartGenStatus } from '../../utils/smart-map-generator'
   import('../../utils/smart-map-generator')
   // @ts-ignore
   export type { ObstacleType, PortalType, ObstacleMovement } from '../../utils/types'
