@@ -129,6 +129,34 @@
             <span v-if="practiceMode && !isRecording"> | [C] 체크포인트 | [X] 최근 삭제</span>
           </div>
         </div>
+        
+        <!-- Practice Mode: Speed Hack & Noclip Controls -->
+        <div v-if="practiceMode && !isRecording" class="practice-controls">
+          <div class="speed-control">
+            <label>SPEED:</label>
+            <input 
+              type="number" 
+              v-model.number="gameSpeedMultiplier" 
+              min="0.1" 
+              max="3" 
+              step="0.1" 
+              class="speed-input"
+              @change="applyGameSpeed"
+            />
+          </div>
+          <div class="noclip-control">
+            <label>
+              <input type="checkbox" v-model="noclipEnabled" />
+              NOCLIP
+            </label>
+            <span v-if="noclipEnabled" class="noclip-stats">
+              Deaths: {{ noclipDeathCount }} | Accuracy: {{ noclipAccuracy }}%
+            </span>
+          </div>
+        </div>
+        
+        <!-- Noclip Death Flash Overlay -->
+        <div v-if="noclipFlashActive" class="noclip-flash-overlay"></div>
       </div>
     </div>
   </div>
@@ -173,6 +201,22 @@ const isAutoplayUI = ref(false);
 const hasSaved = ref(false);
 const bestProgress = ref(0);
 const isNewBest = ref(false);
+
+// Practice Mode: Speed Hack & Noclip
+const gameSpeedMultiplier = ref(1.0);
+const noclipEnabled = ref(false);
+const noclipDeathCount = ref(0);
+const noclipFlashActive = ref(false);
+let lastHoldingBeforeDeath = false; // For hold carry-over on respawn
+
+const noclipAccuracy = computed(() => {
+  if (noclipDeathCount.value === 0) return 100;
+  // Calculate based on deaths vs progress
+  const prog = Math.max(1, progress.value);
+  // Simple formula: 100 - (deaths * penalty)
+  const penalty = Math.min(100, noclipDeathCount.value * 5);
+  return Math.max(0, 100 - penalty);
+});
 
 const userRating = ref(15);
 const hasVoted = ref(false);
@@ -480,7 +524,27 @@ const startGame = () => {
     startCountdown();
   }
   
+  // Apply hold state carry-over if restarting after death
+  if (lastHoldingBeforeDeath) {
+    engine.value.setHolding(true);
+  }
+  
+  // Reset noclip death count on new game start
+  noclipDeathCount.value = 0;
+  
   attempts.value++;
+};
+
+// Apply game speed for speed hack feature
+const applyGameSpeed = () => {
+  if (!audioSource) return;
+  
+  // Clamp the value
+  const speed = Math.max(0.1, Math.min(3.0, gameSpeedMultiplier.value));
+  gameSpeedMultiplier.value = speed;
+  
+  // Apply to audio playback rate
+  audioSource.playbackRate.value = speed;
 };
 
 const emitMapData = () => {
@@ -551,7 +615,9 @@ const restoreCheckpoint = () => {
   engine.value.playerX = cp.x;
   engine.value.playerY = cp.y;
   engine.value.velocity = cp.velocity;
-  engine.value.isHolding = cp.isHolding;
+  
+  // Restore hold state from before death (carry-over feature)
+  engine.value.isHolding = lastHoldingBeforeDeath;
   
   engine.value.cameraX = cp.cameraX;
   engine.value.isGravityInverted = cp.isGravityInverted;
@@ -875,7 +941,7 @@ const handleGameOver = () => {
         startGame();
       }
     }
-  }, props.practiceMode ? 1000 : 3000); // Faster restart for practice
+  }, 1000); // Always 1 second delay for faster feedback
 
 };
 
@@ -951,11 +1017,21 @@ const update = () => {
   isMini.value = engine.value.isMini;
   
   if (engine.value.isDead) {
-    if (props.invincible) {
+    if (props.invincible || (props.practiceMode && noclipEnabled.value)) {
+      // Noclip mode: count death, flash red, but don't die
+      if (props.practiceMode && noclipEnabled.value) {
+        noclipDeathCount.value++;
+        // Flash red briefly
+        noclipFlashActive.value = true;
+        setTimeout(() => {
+          noclipFlashActive.value = false;
+        }, 150);
+      }
       engine.value.isDead = false; // Revive
       engine.value.isPlaying = true; // Ensure keeps playing
-      // Optional: Add visual feedback for hit even if invincible
     } else if (!gameOver.value) {
+      // Save hold state before death for carry-over
+      lastHoldingBeforeDeath = engine.value.isHolding;
       handleGameOver();
     }
   } else if (!engine.value.isPlaying && isRunning.value && !gameOver.value && !victory.value) {
@@ -2407,6 +2483,85 @@ button.secondary:hover {
   color: #888;
   font-size: 0.75rem;
   margin-top: 0.5rem;
+}
+
+/* Practice Mode Controls */
+.practice-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 0, 0.3);
+  pointer-events: auto;
+  z-index: 100;
+}
+
+.speed-control, .noclip-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffff00;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.speed-input {
+  width: 60px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #ffff00;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.speed-input:focus {
+  outline: none;
+  border-color: #00ffff;
+  box-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+}
+
+.noclip-control label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.noclip-control input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #ff0000;
+}
+
+.noclip-stats {
+  color: #ff6666;
+  font-size: 0.75rem;
+  margin-left: 10px;
+}
+
+/* Noclip Flash Overlay */
+.noclip-flash-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 999;
+  animation: noclipFlash 0.15s ease-out;
+}
+
+@keyframes noclipFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }
 </style>
 

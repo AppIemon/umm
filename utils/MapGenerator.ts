@@ -311,34 +311,32 @@ export class MapGenerator {
       let forceFloorSpike = false;
       let forceCeilSpike = false;
 
-      // Simple heuristic: If we are flat for this step, 50% chance to place spike if diff > 5
-      // Better: Use a dedicated counter variable kept outside the loop.
-      // But passing variables is hard with replace_file_content partial view.
-      // Instead, let's check current 'flatness' by randomness + difficulty boost.
-
-      // Stronger Anti-Stick:
-      // If difficulty > 3 and flat, 40% chance of spike on floor/ceiling.
-      // If difficulty > 15, 70% chance.
+      // IMPROVED ANTI-STICK: 바닥만 뛰어서 깨는 맵 방지
+      // 평평한 구간에서 장애물 생성 확률 대폭 증가
       let antiStickChance = 0;
-      if (difficulty >= 3) antiStickChance = 0.3;
-      if (difficulty >= 10) antiStickChance = 0.5;
-      if (difficulty >= 20) antiStickChance = 0.7;
+      if (difficulty >= 3) antiStickChance = 0.45;  // 기존 0.3
+      if (difficulty >= 10) antiStickChance = 0.65; // 기존 0.5
+      if (difficulty >= 20) antiStickChance = 0.85; // 기존 0.7
 
       const isFlatFloor = (stepY === 0);
       const isFlatCeil = (ceilStepY === 0);
 
       // Check emptiness (don't place if too tight)
       if (currentGap > 120) {
+        // 바닥 스파이크 배치
         if (isFlatFloor && Math.random() < antiStickChance) {
-          // Try to place floor spike
           forceFloorSpike = true;
         }
-        if (isFlatCeil && Math.random() < antiStickChance) {
-          // Try to place ceil spike if floor not placed (or both?)
-          // Avoid double hazard at same X usually, unless high difficulty
-          if (!forceFloorSpike || difficulty > 15) {
-            forceCeilSpike = true;
-          }
+        // 천장 스파이크 배치 - 확률 증가 (바닥만 깨는 맵 방지의 핵심)
+        if (isFlatCeil && Math.random() < antiStickChance * 1.2) { // 20% 더 높은 확률
+          // 천장 장애물은 더 자주 배치 (바닥에만 가만히 있으면 안되게)
+          forceCeilSpike = true;
+        }
+
+        // 둘 다 없으면 최소 하나는 강제 배치 (난이도 5 이상)
+        if (!forceFloorSpike && !forceCeilSpike && difficulty >= 5 && Math.random() < 0.3) {
+          // 천장 장애물 우선 배치
+          forceCeilSpike = true;
         }
       }
 
@@ -355,9 +353,19 @@ export class MapGenerator {
         else baseH = 60 + Math.random() * 30; // 60~90
         const spikeH = baseH * sizeVariance;
 
-        // Balanced Floor/Ceiling Choice (Rotate)
-        // If Forced, respect that. If not, pick partially random based on index (checkerboard style)
-        let placeOnFloor = (currentX / blockSize) % 2 === 0;
+        // Balanced Floor/Ceiling Choice - IMPROVED Y DISTRIBUTION
+        // 바닥만 깨는 맵 방지: ceiling 장애물 확률 증가
+        // 기본 50% 확률로 floor/ceiling 결정 (이전: checkerboard)
+        let placeOnFloor = Math.random() < 0.5;
+
+        // 난이도별 ceiling 선호도 증가 (높은 난이도에서 더 다양한 장애물)
+        if (difficulty >= 10) {
+          // 더 높은 난이도에서는 ceiling 장애물 선호
+          placeOnFloor = Math.random() < 0.4; // 40% floor, 60% ceiling
+        }
+        if (difficulty >= 20) {
+          placeOnFloor = Math.random() < 0.35; // 35% floor, 65% ceiling
+        }
 
         if (forceFloorSpike && !forceCeilSpike) placeOnFloor = true;
         else if (forceCeilSpike && !forceFloorSpike) placeOnFloor = false;
