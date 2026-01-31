@@ -196,14 +196,36 @@ const newRoomDuration = ref(120);
 const newRoomDifficulty = ref(10);
 const newRoomMusic = ref<any>(null);
 
-const sampleTracks = [
-  { id: '1', name: "God Chang-seop (신창섭) '바로 리부트 정상화' MV", url: '/audio/samples/God Chang-seop (신창섭) \'바로 리부트 정상화\' MV.mp3' },
-  { id: '2', name: 'I Love You', url: '/audio/samples/I Love You.mp3' },
-  { id: '3', name: 'Nyan Cat! [Official]', url: '/audio/samples/Nyan Cat! [Official].mp3' },
-  { id: 'random', name: 'Random Sample', url: null }
-];
+const sampleTracks = ref<any[]>([
+  { id: 'random', name: '🎲 Random Sample', url: null, bpm: 120, measureLength: 2.0 },
+  { id: '1', name: "God Chang-seop (신창섭) '바로 리부트 정상화' MV", url: '/audio/samples/God Chang-seop (신창섭) \'바로 리부트 정상화\' MV.mp3', bpm: 128, measureLength: 2.0 },
+  { id: '2', name: 'I Love You', url: '/audio/samples/I Love You.mp3', bpm: 128, measureLength: 2.0 },
+  { id: '3', name: 'Nyan Cat! [Official]', url: '/audio/samples/Nyan Cat! [Official].mp3', bpm: 140, measureLength: 2.0 },
+]);
+
+async function fetchRecentMaps() {
+  try {
+    const res: any = await $fetch('/api/maps', {
+      params: { shared: 'true' }
+    });
+    if (res && Array.isArray(res)) {
+       const recentMaps = res.slice(0, 50).map((m: any) => ({
+         id: m._id,
+         name: `🎵 ${m.title} (by ${m.creatorName})`,
+         url: m.audioUrl,
+         bpm: m.bpm || 120,
+         measureLength: m.measureLength || 2.0
+       }));
+       sampleTracks.value.push(...recentMaps);
+    }
+  } catch (e) {
+    console.error("Failed to fetch recent maps", e);
+  }
+}
+
 onMounted(() => {
-    newRoomMusic.value = sampleTracks[3]; // Default Random
+    newRoomMusic.value = sampleTracks.value[0]; // Default Random
+    fetchRecentMaps();
 });
 
 // Room State
@@ -320,12 +342,16 @@ async function createRoom() {
 
   let finalMusicUrl = newRoomMusic.value?.url;
   let finalMusicTitle = newRoomMusic.value?.name;
+  let finalBpm = newRoomMusic.value?.bpm || 120;
+  let finalMeasureLength = newRoomMusic.value?.measureLength || 2.0;
 
   if (!newRoomMusic.value || newRoomMusic.value.id === 'random') {
-    const realTracks = sampleTracks.filter(t => t.id !== 'random');
+    const realTracks = sampleTracks.value.filter(t => t.id !== 'random');
     const randomTrack = realTracks[Math.floor(Math.random() * realTracks.length)];
     finalMusicUrl = randomTrack.url;
     finalMusicTitle = randomTrack.name;
+    finalBpm = randomTrack.bpm;
+    finalMeasureLength = randomTrack.measureLength;
   }
 
   try {
@@ -339,7 +365,9 @@ async function createRoom() {
         username: playerUsername.value,
         difficulty: newRoomDifficulty.value,
         musicUrl: finalMusicUrl,
-        musicTitle: finalMusicTitle
+        musicTitle: finalMusicTitle,
+        musicBpm: finalBpm,
+        musicMeasureLength: finalMeasureLength
       }
     });
     if (res.success) {

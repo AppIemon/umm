@@ -4,7 +4,7 @@ import mongoose from 'mongoose'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { title, maxPlayers, duration, userId, username: passedUsername, difficulty, musicUrl, musicTitle } = body
+  const { title, maxPlayers, duration, userId, username: passedUsername, difficulty, musicUrl, musicTitle, musicBpm, musicMeasureLength } = body
 
   if (!userId || !title) {
     throw createError({ statusCode: 400, statusMessage: 'Missing required fields' })
@@ -24,6 +24,8 @@ export default defineEventHandler(async (event) => {
     difficulty: difficulty || 5,
     musicUrl: musicUrl || null,
     musicTitle: musicTitle || null,
+    musicBpm: musicBpm || 120,
+    musicMeasureLength: musicMeasureLength || 2.0,
     players: [{
       userId,
       username,

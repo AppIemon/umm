@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
       // Increase difficulty each round
       engine.setMapConfig({ difficulty: currentDifficulty })
 
-      engine.generateMap([], [], d, seed, false)
+      engine.generateMap([], [], d, seed, false, 0, room.musicBpm || 120, room.musicMeasureLength || 2.0)
 
       // We no longer save to GameMap collection to avoid database bloat.
       // Maps are stored inline within the Room document.

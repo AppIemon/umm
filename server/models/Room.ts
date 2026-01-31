@@ -10,6 +10,8 @@ export interface IRoom extends Document {
   difficulty: number
   musicUrl?: string
   musicTitle?: string
+  musicBpm?: number
+  musicMeasureLength?: number
 
   map: any
   mapQueue: any[]
@@ -46,6 +48,8 @@ const roomSchema = new mongoose.Schema<IRoom>({
   difficulty: { type: Number, required: true, default: 5 },
   musicUrl: { type: String, default: null },
   musicTitle: { type: String, default: null },
+  musicBpm: { type: Number, default: 120 },
+  musicMeasureLength: { type: Number, default: 2.0 },
 
   map: { type: mongoose.Schema.Types.Mixed, default: null },
   mapQueue: { type: [mongoose.Schema.Types.Mixed], default: [] },
