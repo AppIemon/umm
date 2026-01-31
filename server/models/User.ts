@@ -11,6 +11,8 @@ export interface IUser extends Document {
   mapsCleared: number
   mapsCreated: number
   rating: number
+  tier: string
+  winStreak: number
   matchHistory: {
     opponent: string
     winner: string
@@ -61,6 +63,14 @@ const userSchema = new mongoose.Schema<IUser>({
   rating: {
     type: Number,
     default: 1000
+  },
+  tier: {
+    type: String,
+    default: 'Bronze'
+  },
+  winStreak: {
+    type: Number,
+    default: 0
   },
   matchHistory: [{
     opponent: String,

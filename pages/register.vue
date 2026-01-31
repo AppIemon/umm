@@ -2,29 +2,29 @@
   <div class="auth-page">
     <div class="background-anim"></div>
     <div class="auth-card">
-      <h1 class="glitch-title">REGISTER</h1>
+      <h1 class="glitch-title">회원가입</h1>
       
       <form @submit.prevent="handleRegister">
         <div class="input-group">
-          <label>NEW_IDENTIFIER</label>
-          <input v-model="username" type="text" placeholder="CHOOSE_ID" required />
+          <label>사용자명</label>
+          <input v-model="username" type="text" placeholder="아이디 입력" required />
         </div>
         
         <div class="input-group">
-          <label>ACCESS_CODE</label>
+          <label>비밀번호</label>
           <input v-model="password" type="password" placeholder="********" required />
         </div>
 
         <div class="input-group">
-          <label>CONFIRM_CODE</label>
+          <label>비밀번호 확인</label>
           <input v-model="confirmPassword" type="password" placeholder="********" required />
         </div>
 
-        <button type="submit" class="cta-btn secondary">CREATE IDENTITY</button>
+        <button type="submit" class="cta-btn secondary">계정 생성</button>
       </form>
 
       <div class="footer-link">
-        Already registered? <NuxtLink to="/login">Initialize Session</NuxtLink>
+        이미 계정이 있으신가요? <NuxtLink to="/login">로그인</NuxtLink>
       </div>
     </div>
   </div>

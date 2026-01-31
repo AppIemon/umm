@@ -2205,9 +2205,9 @@ export class GameEngine {
         }
       }
 
-      // USER REQUEST: "튜토리얼 모드(autoplay)는 falling spike를 지나갈때 최대한 위로 가도록."
+      // USER REQUEST: "튜토리얼 모드가 falling spike를 만나면 가능한 루트 중 가장 위로 가는 루트로 간다"
       // Falling Spike Strategy Override:
-      // Try 'High' first (Hold in Normal, Release in Inverted)
+      // 가능한 루트(Hold/Release) 중에서 Y좌표가 가장 작은(화면상 가장 위쪽) 루트 선택
       const scanEnd = nX + 400;
       let fallingSpikeAhead = false;
 
@@ -2221,7 +2221,13 @@ export class GameEngine {
       }
 
       if (fallingSpikeAhead) {
-        preferHold = !nG; // Normal(F): true(Hold/High). Inverted(T): false(Release/High).
+        // nYH와 nYR 중 Y좌표가 더 작은 쪽(화면상 더 위쪽)을 선택
+        // Y좌표가 작을수록 화면의 위쪽이므로, 더 작은 값을 선택
+        if (nYH < nYR) {
+          preferHold = true;  // Hold가 더 위쪽
+        } else {
+          preferHold = false; // Release가 더 위쪽
+        }
       }
 
       // 1. If currently violating CPS limit, FORCE keeping same state if safe.

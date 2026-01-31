@@ -10,6 +10,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing fields' })
   }
 
+  // Block guests from multiplayer
+  if (userId.toString().startsWith('guest_')) {
+    throw createError({ statusCode: 403, statusMessage: '멀티플레이는 로그인이 필요합니다. (Multiplayer requires login)' })
+  }
+
   // 1. Check if room exists and is joinable
   const room = await Room.findById(roomId)
   if (!room) throw createError({ statusCode: 404, statusMessage: 'Room not found' })

@@ -94,6 +94,9 @@
           <div v-for="pl in currentRoom?.players" :key="pl.userId" class="player-card-lg" :class="{host: pl.isHost}">
             <div class="avatar-lg">◆</div>
             <div class="player-name">{{ pl.username }}</div>
+            <div class="tier-badge" :style="{ color: getPlayerTier(pl.rating).color }">
+              {{ getPlayerTier(pl.rating).icon }} {{ getPlayerTier(pl.rating).nameKr }}
+            </div>
             <span v-if="pl.userId === playerId" class="me-badge">YOU</span>
             <span v-if="pl.isHost" class="host-badge">HOST</span>
           </div>
@@ -116,7 +119,10 @@
       </div>
 
       <div v-if="isHost" class="host-controls">
-         <button @click="startRoomGame" class="start-btn" :disabled="!currentRoom || currentRoom.players.length < 1">START GAME</button>
+         <button @click="startRoomGame" class="start-btn" :disabled="!currentRoom || currentRoom.players.length < 1 || isStartingGame">
+           <span v-if="isStartingGame" class="loading-spinner-inline"></span>
+           {{ isStartingGame ? 'STARTING...' : 'START GAME' }}
+         </button>
          <p v-if="currentRoom && currentRoom.players.length < 2" class="hint-text">Waiting for players...</p>
       </div>
       <div v-else class="guest-controls">
@@ -139,7 +145,7 @@
                <span class="score">{{ p.progress.toFixed(1) }}% ({{ p.clearCount || 0 }} Wins)</span>
              </div>
           </div>
-          <button @click="leaveRoom" class="action-btn">EXIT TO LOBBY</button>
+          <button @click="exitToRoomOrLobby" class="action-btn">돌아가기 (RETURN)</button>
         </div>
       </div>
     
@@ -150,10 +156,10 @@
         
         <!-- Leaderboard HUD -->
         <div class="leaderboard-hud">
-          <div v-for="(p, idx) in top3Players" :key="p.userId" class="lb-item">
+          <div v-for="(p, idx) in sortedPlayers" :key="p.userId" class="lb-item">
              <span class="lb-rank">#{{ idx + 1 }}</span>
              <span class="lb-name">{{ p.username }}</span>
-             <span class="lb-score">{{ p.progress.toFixed(0) }}%</span>
+             <span class="lb-score">{{ p.clearCount || 0 }}</span>
           </div>
         </div>
       </div>
@@ -173,6 +179,19 @@
         @progress-update="updateMyProgress"
       />
     </div>
+    
+    <!-- Tier Change Overlay -->
+    <TierChangeOverlay
+      :show="showTierOverlay"
+      :oldTierName="tierChangeData.oldTierName"
+      :oldTierIcon="tierChangeData.oldTierIcon"
+      :oldTierColor="tierChangeData.oldTierColor"
+      :newTierName="tierChangeData.newTierName"
+      :newTierIcon="tierChangeData.newTierIcon"
+      :newTierColor="tierChangeData.newTierColor"
+      :isPromotion="tierChangeData.isPromotion"
+      @close="showTierOverlay = false"
+    />
   </div>
 </template>
 
@@ -181,9 +200,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { type SongSection } from '@/composables/useAudioAnalyzer';
 import { useAuth } from '@/composables/useAuth';
+import { getTierFromRating, type TierInfo } from '@/utils/eloTier';
 
 const router = useRouter();
-const { user } = useAuth(); // We don't use updateRating logic for custom rooms yet
+const { user } = useAuth();
 
 type Step = 'LOBBY' | 'CREATE' | 'ROOM' | 'PLAY' | 'RESULT';
 const step = ref<Step>('LOBBY');
@@ -195,6 +215,30 @@ const newRoomMaxPlayers = ref(4);
 const newRoomDuration = ref(120);
 const newRoomDifficulty = ref(10);
 const newRoomMusic = ref<any>(null);
+
+// Loading and UI State
+const isStartingGame = ref(false);
+const lastRoomId = ref<string | null>(null); // For returning to room after match
+
+// Tier Change Overlay State
+const showTierOverlay = ref(false);
+const tierChangeData = ref<{
+  oldTierName: string;
+  oldTierIcon: string;
+  oldTierColor: string;
+  newTierName: string;
+  newTierIcon: string;
+  newTierColor: string;
+  isPromotion: boolean;
+}>({
+  oldTierName: 'Bronze',
+  oldTierIcon: '🥉',
+  oldTierColor: '#cd7f32',
+  newTierName: 'Silver',
+  newTierIcon: '🥈',
+  newTierColor: '#c0c0c0',
+  isPromotion: true
+});
 
 const sampleTracks = ref<any[]>([
   { id: 'random', name: '🎲 Random Sample', url: null, bpm: 120, measureLength: 2.0 },
@@ -233,6 +277,10 @@ const currentRoom = ref<any>(null);
 const currentRoomId = ref<string | null>(null);
 const currentMapIndex = ref(0); // Track progress in stages
 
+// Helper to get player tier info
+function getPlayerTier(rating: number | undefined): TierInfo {
+  return getTierFromRating(rating || 1000);
+}
 
 const playerId = computed(() => user.value?._id || sessionStorage.getItem('umm_player_id') || ('guest_' + Math.random().toString(36).substr(2,9)));
 const playerUsername = computed(() => user.value?.displayName || user.value?.username || 'Guest');
@@ -258,6 +306,13 @@ let isEnteringGame = false;
 const showNavbar = useState('showNavbar');
 
 onMounted(() => {
+  // Guest check - redirect to login if guest
+  if (user.value?.isGuest) {
+    alert('멀티플레이는 로그인이 필요합니다.\nMultiplayer requires login.');
+    router.push('/login');
+    return;
+  }
+  
   if (!user.value?._id && !sessionStorage.getItem('umm_player_id')) {
     sessionStorage.setItem('umm_player_id', playerId.value);
   }
@@ -467,7 +522,11 @@ function startRoomPolling() {
 
 // 3. START GAME
 async function startRoomGame() {
-  if (!isHost.value || !currentRoomId.value) return;
+  if (!isHost.value || !currentRoomId.value || isStartingGame.value) return;
+  
+  isStartingGame.value = true;
+  lastRoomId.value = currentRoomId.value; // Store for return-to-room
+  
   try {
     await $fetch(`/api/rooms/${currentRoomId.value}/start`, {
       method: 'POST',
@@ -476,6 +535,7 @@ async function startRoomGame() {
   } catch (e: any) {
     const errorMsg = e.data?.statusMessage || e.statusMessage || e.message || "Unknown error";
     alert("Failed to start: " + errorMsg);
+    isStartingGame.value = false;
   }
 }
 
@@ -560,7 +620,89 @@ async function finishGame() {
   } catch (e) {}
   
   stopPolling();
+  isStartingGame.value = false;
   step.value = 'RESULT';
+  
+  // Calculate ELO if logged in user
+  if (user.value?._id && !user.value?.isGuest) {
+    await updateEloAfterMatch();
+  }
+}
+
+// Calculate ELO after match ends
+async function updateEloAfterMatch() {
+  try {
+    // Find opponent (best opponent or random)
+    const opponents = allPlayers.value.filter(p => p.userId !== playerId.value);
+    if (opponents.length === 0) return;
+    
+    // Average opponent rating - in a real scenario you'd have stored ratings
+    const avgOpponentRating = 1000; // Default since we don't track in room
+    const avgOpponentStreak = 0;
+    
+    // Did I win? (rank 1)
+    const sorted = sortedPlayers.value;
+    const myRank = sorted.findIndex(p => p.userId === playerId.value);
+    const didWin = myRank === 0;
+    
+    const res: any = await $fetch('/api/auth/update-elo', {
+      method: 'POST',
+      body: {
+        userId: user.value?._id,
+        opponentRating: avgOpponentRating,
+        opponentStreak: avgOpponentStreak,
+        didWin
+      }
+    });
+    
+    if (res.success) {
+      // Update local user state
+      if (user.value) {
+        user.value.rating = res.newRating;
+        user.value.tier = res.newTier.name;
+        user.value.winStreak = res.winStreak;
+      }
+      
+      // Show tier change overlay if tier changed
+      if (res.tierChanged) {
+        tierChangeData.value = {
+          oldTierName: res.oldTier.name,
+          oldTierIcon: res.oldTier.icon,
+          oldTierColor: res.oldTier.color,
+          newTierName: res.newTier.name,
+          newTierIcon: res.newTier.icon,
+          newTierColor: res.newTier.color,
+          isPromotion: res.isPromotion
+        };
+        showTierOverlay.value = true;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to update ELO', e);
+  }
+}
+
+// Return to room if possible, otherwise exit to lobby
+async function exitToRoomOrLobby() {
+  if (lastRoomId.value) {
+    try {
+      // Try to rejoin the room
+      const res: any = await $fetch('/api/rooms/join', {
+        method: 'POST',
+        body: { roomId: lastRoomId.value, userId: playerId.value, username: playerUsername.value }
+      });
+      if (res.success) {
+        currentRoomId.value = res.roomId;
+        step.value = 'ROOM';
+        startRoomPolling();
+        return;
+      }
+    } catch (e) {
+      // Room no longer exists, go to lobby
+      console.log('Room no longer available, going to lobby');
+    }
+  }
+  leaveRoom();
 }
 
 async function exitGame() {
@@ -726,8 +868,11 @@ const didIWin = computed(() => {
 .avatar-lg { width: 80px; height: 80px; background: rgba(0,255,255,0.1); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 2rem; color: #00ffff; }
 .host-badge { position: absolute; top: 10px; right: 10px; background: #ffd700; color: #000; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; }
 .me-badge { background: #00ffff; color: #000; padding: 0.2rem 0.8rem; border-radius: 12px; font-weight: bold; font-size: 0.8rem; }
-.start-btn { width: 100%; max-width: 400px; padding: 1.5rem; font-size: 1.5rem; font-weight: 900; background: #00ff00; color: #000; border: none; border-radius: 12px; cursor: pointer; }
+.tier-badge { font-size: 0.9rem; font-weight: bold; padding: 0.3rem 0.8rem; background: rgba(0,0,0,0.3); border-radius: 8px; }
+.start-btn { width: 100%; max-width: 400px; padding: 1.5rem; font-size: 1.5rem; font-weight: 900; background: #00ff00; color: #000; border: none; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .start-btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+.loading-spinner-inline { width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.2); border-top-color: #000; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .leave-btn { color: #ff4444; background: transparent; border: 1px solid #ff4444; padding: 0.8rem 2rem; border-radius: 8px; cursor: pointer; margin-top: 1rem; }
 
 /* PLAY HUD */

@@ -10,6 +10,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing required fields' })
   }
 
+  // Block guests from multiplayer
+  if (userId.toString().startsWith('guest_')) {
+    throw createError({ statusCode: 403, statusMessage: '멀티플레이는 로그인이 필요합니다. (Multiplayer requires login)' })
+  }
+
   // Get user info
   const isValidId = mongoose.Types.ObjectId.isValid(userId)
   const user = isValidId ? await User.findById(userId) : null

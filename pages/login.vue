@@ -2,28 +2,28 @@
   <div class="auth-page">
     <div class="background-anim"></div>
     <div class="auth-card">
-      <h1 class="glitch-title" data-text="LOGIN">P_LOGIN</h1>
+      <h1 class="glitch-title" data-text="로그인">로그인</h1>
       
       <form @submit.prevent="handleLogin">
         <div class="input-group">
-          <label>IDENTIFIER</label>
-          <input v-model="username" type="text" placeholder="USER_ID" required />
+          <label>사용자명</label>
+          <input v-model="username" type="text" placeholder="아이디 입력" required />
         </div>
         
         <div class="input-group">
-          <label>ACCESS_CODE</label>
+          <label>비밀번호</label>
           <input v-model="password" type="password" placeholder="********" required />
         </div>
 
-        <button type="submit" class="cta-btn">INITIALIZE SESSION</button>
+        <button type="submit" class="cta-btn">로그인</button>
       </form>
 
-      <div class="divider">-- OR --</div>
+      <div class="divider">-- 또는 --</div>
 
-      <button @click="loginAsGuest" class="guest-btn">GUEST_MODE</button>
+      <button @click="loginAsGuest" class="guest-btn">게스트 모드</button>
 
       <div class="footer-link">
-        New entity? <NuxtLink to="/register">Register Identity</NuxtLink>
+        계정이 없으신가요? <NuxtLink to="/register">회원가입</NuxtLink>
       </div>
     </div>
   </div>

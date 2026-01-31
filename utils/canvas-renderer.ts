@@ -29,17 +29,24 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, x: nu
     if (hasAngle) ctx.restore();
     return;
   } else if (obs.type === 'fake_block') {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.fillRect(x, y, obs.width, obs.height);
-    ctx.strokeStyle = '#fff';
+    // 투명한 블록 - 점선 테두리만 표시
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]);
     ctx.strokeRect(x, y, obs.width, obs.height);
+    ctx.setLineDash([]);
+
+    // 매우 투명한 내부 (거의 보이지 않음)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fillRect(x, y, obs.width, obs.height);
+
     if (isEditor) {
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
       ctx.font = '10px Arial';
       ctx.fillText("FAKE", x + 5, y + 15);
     }
     if (hasAngle) ctx.restore();
-    return; // Basic fake block logic
+    return;
   }
 
   if (obs.type === 'spike' || obs.type === 'mini_spike') {
@@ -376,14 +383,19 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, x: nu
     ctx.fill();
 
   } else if (['falling_spike', 'growing_spike'].includes(obs.type)) {
-    ctx.fillStyle = '#ff4444';
+    // Falling spike는 파란색, Growing spike는 빨간색
+    const isFalling = obs.type === 'falling_spike';
+    ctx.fillStyle = isFalling ? '#4444ff' : '#ff4444';
+    ctx.shadowBlur = isFalling ? 15 : 12;
+    ctx.shadowColor = isFalling ? '#4444ff' : '#ff4444';
+
     ctx.beginPath();
     const cx = x + obs.width / 2;
     if (obs.type === 'falling_spike') {
-      // Draw falling path indicator
+      // Draw falling path indicator (파란색)
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 68, 68, 0.3)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(68, 68, 255, 0.4)';
+      ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       // Line from spike tip (bottom center of spike) down to reasonably far
@@ -405,40 +417,58 @@ export function drawObstacle(ctx: CanvasRenderingContext2D, obs: Obstacle, x: nu
     ctx.fill();
 
   } else if (obs.type === 'crusher_jaw') {
-    // Unique Crusher Jaw Design (Biting Trap)
+    // 다 갈아버리는 Crusher Jaw 디자인 - 톱날 스타일
     const cx = x + obs.width / 2;
     const cy = y + obs.height / 2;
-    const padding = 5;
+    const pulse = Math.sin(time * 8) * 0.05 + 1;
 
-    ctx.fillStyle = '#ff4444';
+    // 메인 바디 (어두운 금속)
+    ctx.fillStyle = '#333';
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#ff0000';
+    ctx.fillRect(x, y, obs.width, obs.height);
 
-    // Top Jaw
+    // 위쪽 톱날 (여러 개)
+    ctx.fillStyle = '#ff3333';
+    const teethCount = 6;
+    const teethWidth = obs.width / teethCount;
+
+    for (let i = 0; i < teethCount; i++) {
+      ctx.beginPath();
+      const tx = x + i * teethWidth;
+      ctx.moveTo(tx, y);
+      ctx.lineTo(tx + teethWidth / 2, y + obs.height * 0.35 * pulse);
+      ctx.lineTo(tx + teethWidth, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 아래쪽 톱날 (여러 개)
+    for (let i = 0; i < teethCount; i++) {
+      ctx.beginPath();
+      const tx = x + i * teethWidth;
+      ctx.moveTo(tx, y + obs.height);
+      ctx.lineTo(tx + teethWidth / 2, y + obs.height - obs.height * 0.35 * pulse);
+      ctx.lineTo(tx + teethWidth, y + obs.height);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 중앙 위험 표시
+    ctx.fillStyle = '#ffaa00';
     ctx.beginPath();
-    ctx.moveTo(x + padding, y);
-    ctx.lineTo(x + obs.width - padding, y);
-    ctx.lineTo(cx, cy - 5);
+    ctx.arc(cx, cy, obs.width * 0.15, 0, Math.PI * 2);
     ctx.fill();
 
-    // Bottom Jaw
+    // 경고 선
+    ctx.strokeStyle = '#ffff00';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 3]);
     ctx.beginPath();
-    ctx.moveTo(x + padding, y + obs.height);
-    ctx.lineTo(x + obs.width - padding, y + obs.height);
-    ctx.lineTo(cx, cy + 5);
-    ctx.fill();
-
-    // Teeth details
-    ctx.fillStyle = '#ffaaaa';
-    ctx.beginPath();
-    ctx.moveTo(x + obs.width * 0.3, y);
-    ctx.lineTo(x + obs.width * 0.35, y + obs.height * 0.3);
-    ctx.lineTo(x + obs.width * 0.4, y);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(x + obs.width * 0.6, y + obs.height);
-    ctx.lineTo(x + obs.width * 0.65, y + obs.height * 0.7);
-    ctx.lineTo(x + obs.width * 0.7, y + obs.height);
-    ctx.fill();
+    ctx.moveTo(x, cy);
+    ctx.lineTo(x + obs.width, cy);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
   } else if (obs.type === 'swing_blade') {
     const cx = x + obs.width / 2;

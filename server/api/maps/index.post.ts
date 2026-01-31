@@ -1,6 +1,6 @@
 import { GameMap } from '~/server/models/Map'
 import { User } from '~/server/models/User'
-import { AudioContent } from '~/server/models/AudioContent' // Keep for legacy if needed, or remove if unused. Better to keep import for now just in case.
+import { MusicRequest } from '~/server/models/MusicRequest'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -33,23 +33,60 @@ export default defineEventHandler(async (event) => {
         if (mimeType.includes('mpeg') || mimeType.includes('mp3')) ext = '.mp3';
         else if (mimeType.includes('ogg')) ext = '.ogg';
 
-        // Pure File-based Strategy
+        const filename = `${hash}${ext}`;
         const isVercel = !!process.env.VERCEL;
 
         if (isVercel) {
-          // On Vercel, we can't write to public/music.
-          // Raise a custom error that the client can catch to show the Open Profile Link.
-          throw createError({
-            statusCode: 403,
-            statusMessage: "MUSIC_NOT_IN_SERVER",
-            data: {
-              guide: "이 곡은 아직 서버(GitHub)에 등록되지 않았습니다. 관리자에게 곡 추가를 요청해주세요!",
-              contact: "https://open.kakao.com/o/sPXMJgUg"
+          // On Vercel, create a MusicRequest instead of saving the file
+          try {
+            // Check if request already exists
+            let existingRequest = await MusicRequest.findOne({ hash });
+
+            if (!existingRequest) {
+              // Create new music request
+              existingRequest = await MusicRequest.create({
+                hash,
+                filename,
+                title: title || 'Unknown Track',
+                requestedBy: user._id,
+                requestedByName: user.displayName,
+                status: 'pending',
+                bpm: bpm || 120,
+                measureLength: measureLength || 2.0
+              });
+              console.log(`[MusicRequest] Created new music request: ${filename}`);
             }
-          });
+
+            // Return error with request status
+            throw createError({
+              statusCode: 403,
+              statusMessage: "MUSIC_REQUEST_PENDING",
+              data: {
+                requestId: existingRequest._id,
+                status: existingRequest.status,
+                guide: existingRequest.status === 'pending'
+                  ? "이 곡은 아직 승인되지 않았습니다. 관리자가 승인할 때까지 기다려주세요!"
+                  : existingRequest.status === 'rejected'
+                    ? "이 곡은 거절되었습니다. 다른 곡을 선택해주세요."
+                    : "이 곡은 승인되었지만 아직 서버에 배포되지 않았습니다.",
+                contact: "https://open.kakao.com/o/sPXMJgUg"
+              }
+            });
+          } catch (error: any) {
+            if (error.statusCode === 403) throw error;
+            console.error('[MusicRequest] Error creating request:', error);
+            throw createError({
+              statusCode: 500,
+              statusMessage: "MUSIC_REQUEST_FAILED",
+              data: {
+                guide: "음악 요청 생성 중 오류가 발생했습니다.",
+                contact: "https://open.kakao.com/o/sPXMJgUg"
+              }
+            });
+          }
         }
 
-        const filename = `${hash}${ext}`;
+        // Localhost: save directly to public/music
         const musicDir = path.join(process.cwd(), 'public', 'music');
 
         // Ensure directory exists

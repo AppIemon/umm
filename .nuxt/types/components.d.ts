@@ -21,6 +21,7 @@ interface _GlobalComponents {
   'MultiplayerChat': typeof import("../../components/MultiplayerChat.vue").default
   'NavBar': typeof import("../../components/NavBar.vue").default
   'SongSelector': typeof import("../../components/SongSelector.vue").default
+  'TierChangeOverlay': typeof import("../../components/TierChangeOverlay.vue").default
   'NuxtWelcome': typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue").default
   'NuxtLayout': typeof import("../../node_modules/nuxt/dist/app/components/nuxt-layout").default
   'NuxtErrorBoundary': typeof import("../../node_modules/nuxt/dist/app/components/nuxt-error-boundary.vue").default
@@ -51,6 +52,7 @@ interface _GlobalComponents {
   'LazyMultiplayerChat': LazyComponent<typeof import("../../components/MultiplayerChat.vue").default>
   'LazyNavBar': LazyComponent<typeof import("../../components/NavBar.vue").default>
   'LazySongSelector': LazyComponent<typeof import("../../components/SongSelector.vue").default>
+  'LazyTierChangeOverlay': LazyComponent<typeof import("../../components/TierChangeOverlay.vue").default>
   'LazyNuxtWelcome': LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue").default>
   'LazyNuxtLayout': LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/nuxt-layout").default>
   'LazyNuxtErrorBoundary': LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/nuxt-error-boundary.vue").default>

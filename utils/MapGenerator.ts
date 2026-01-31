@@ -110,8 +110,17 @@ export class MapGenerator {
     // -----------------------------------
 
     // Initial Y Snap
+    // Canvas boundaries to prevent blocks from going off-screen
+    const CANVAS_TOP = -400;     // Maximum ceiling height (above this gets cut off)
+    const CANVAS_BOTTOM = 900;   // Maximum floor depth (below this gets cut off)
+    const BOUNDARY_MARGIN = 100; // Safety margin from edges
+
     let currentFloorY = Math.floor((path[0]!.y + baseGapVal / 2) / blockSize) * blockSize;
     let currentCeilY = Math.floor((path[0]!.y - baseGapVal / 2) / blockSize) * blockSize;
+
+    // Clamp initial values to prevent off-screen placement
+    currentFloorY = Math.min(CANVAS_BOTTOM - BOUNDARY_MARGIN, currentFloorY);
+    currentCeilY = Math.max(CANVAS_TOP + BOUNDARY_MARGIN, currentCeilY);
 
     // Trackers for post-filtering (Map X to floor/ceil Y)
     const boundaryMap: Map<number, { floorY: number, ceilY: number }> = new Map();
@@ -231,6 +240,9 @@ export class MapGenerator {
         const slopeType = isSteep ? 'steep_triangle' : 'triangle';
         const slopeHeight = Math.abs(stepY);
         currentFloorY += stepY;
+        // Clamp floor to prevent going too high (into visible area excessively)
+        currentFloorY = Math.max(currentCeilY + currentGap * 0.5, currentFloorY);
+        currentFloorY = Math.min(CANVAS_BOTTOM - BOUNDARY_MARGIN, currentFloorY);
         const blockY = currentFloorY;
         objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 0 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
@@ -242,6 +254,8 @@ export class MapGenerator {
         objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 90 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
         currentFloorY += stepY;
+        // Clamp floor to prevent going off-screen
+        currentFloorY = Math.min(CANVAS_BOTTOM - BOUNDARY_MARGIN, currentFloorY);
       } else {
         const blockY = currentFloorY;
         objects.push({ type: 'block', x: currentX, y: blockY, width: blockSize, height: blockSize });
@@ -254,6 +268,9 @@ export class MapGenerator {
         const slopeType = isSteep ? 'steep_triangle' : 'triangle';
         const slopeHeight = Math.abs(ceilStepY);
         currentCeilY += ceilStepY;
+        // Clamp ceiling to prevent going too low (into visible area excessively)
+        currentCeilY = Math.min(currentFloorY - currentGap * 0.5, currentCeilY);
+        currentCeilY = Math.max(CANVAS_TOP + BOUNDARY_MARGIN, currentCeilY);
         const blockY = currentCeilY;
         objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 180 });
         this.fillAbove(objects, currentX, blockY, blockSize);
@@ -265,6 +282,8 @@ export class MapGenerator {
         objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: -90 });
         this.fillAbove(objects, currentX, blockY, blockSize);
         currentCeilY += ceilStepY;
+        // Clamp ceiling to prevent going off-screen
+        currentCeilY = Math.max(CANVAS_TOP + BOUNDARY_MARGIN, currentCeilY);
       } else {
         const blockY = currentCeilY - blockSize;
         objects.push({ type: 'block', x: currentX, y: blockY, width: blockSize, height: blockSize });
@@ -390,8 +409,16 @@ export class MapGenerator {
 
         if (obsType === 'planet' || obsType === 'star') {
           const count = obsType === 'planet' ? 2 : 3;
-          customData = { orbitSpeed: 1.0 + Math.random(), orbitDistance: mineSize * 0.8, orbitCount: count };
-          children = Array(count).fill(0).map(() => ({ type: 'moon', x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true }));
+          // 실제 장애물 타입 풀 (위험한 느낌)
+          const childTypes: ObstacleType[] = ['spike', 'saw', 'mine', 'spike_ball', 'mini_spike'];
+          customData = { orbitSpeed: 1.0 + Math.random() * 1.5, orbitDistance: mineSize * 0.85, orbitCount: count };
+          children = Array(count).fill(0).map(() => {
+            const childType = childTypes[Math.floor(Math.random() * childTypes.length)]!;
+            // 크기 제각각 (0.3x ~ 0.6x of parent size)
+            const sizeMultiplier = 0.3 + Math.random() * 0.3;
+            const childSize = mineSize * sizeMultiplier;
+            return { type: childType, x: 0, y: 0, width: childSize, height: childSize, isHitbox: true };
+          });
         }
 
         objects.push({

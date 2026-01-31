@@ -16,6 +16,8 @@ export interface User {
   displayName?: string;
   isGuest: boolean;
   rating?: number;
+  tier?: string;
+  winStreak?: number;
   matchHistory?: MatchRecord[];
 }
 

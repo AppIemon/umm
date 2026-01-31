@@ -7,10 +7,13 @@ declare global {
   const MAX_SINGLE_UPLOAD_SIZE: typeof import('../../utils/audioUtils').MAX_SINGLE_UPLOAD_SIZE
   const MapGenerator: typeof import('../../utils/MapGenerator').MapGenerator
   const SmartMapGenerator: typeof import('../../utils/smart-map-generator').SmartMapGenerator
+  const TIER_THRESHOLDS: typeof import('../../utils/eloTier').TIER_THRESHOLDS
   const abortNavigation: typeof import('../../node_modules/nuxt/dist/app/composables/router').abortNavigation
   const addRouteMiddleware: typeof import('../../node_modules/nuxt/dist/app/composables/router').addRouteMiddleware
   const audioBufferToWavBlob: typeof import('../../utils/audioUtils').audioBufferToWavBlob
   const blobToBase64: typeof import('../../utils/audioUtils').blobToBase64
+  const calculateEloChange: typeof import('../../utils/eloTier').calculateEloChange
+  const calculateNewRating: typeof import('../../utils/eloTier').calculateNewRating
   const callOnce: typeof import('../../node_modules/nuxt/dist/app/composables/once').callOnce
   const cancelIdleCallback: typeof import('../../node_modules/nuxt/dist/app/compat/idle-callback').cancelIdleCallback
   const clearError: typeof import('../../node_modules/nuxt/dist/app/composables/error').clearError
@@ -38,6 +41,8 @@ declare global {
   const getCurrentInstance: typeof import('vue').getCurrentInstance
   const getCurrentScope: typeof import('vue').getCurrentScope
   const getRouteRules: typeof import('../../node_modules/nuxt/dist/app/composables/manifest').getRouteRules
+  const getTierFromRating: typeof import('../../utils/eloTier').getTierFromRating
+  const getTierIndex: typeof import('../../utils/eloTier').getTierIndex
   const h: typeof import('vue').h
   const hasInjectionContext: typeof import('vue').hasInjectionContext
   const inject: typeof import('vue').inject
@@ -221,6 +226,9 @@ declare global {
   export type { AudioAnalyzerClient } from '../../utils/audio-analyzer-client'
   import('../../utils/audio-analyzer-client')
   // @ts-ignore
+  export type { TierInfo } from '../../utils/eloTier'
+  import('../../utils/eloTier')
+  // @ts-ignore
   export type { GameEngine, Obstacle, Portal, Boss, Pattern, GameState, MapConfig, StateEvent, BeatAction } from '../../utils/game-engine'
   import('../../utils/game-engine')
   // @ts-ignore
@@ -240,10 +248,13 @@ declare module 'vue' {
     readonly MAX_SINGLE_UPLOAD_SIZE: UnwrapRef<typeof import('../../utils/audioUtils')['MAX_SINGLE_UPLOAD_SIZE']>
     readonly MapGenerator: UnwrapRef<typeof import('../../utils/MapGenerator')['MapGenerator']>
     readonly SmartMapGenerator: UnwrapRef<typeof import('../../utils/smart-map-generator')['SmartMapGenerator']>
+    readonly TIER_THRESHOLDS: UnwrapRef<typeof import('../../utils/eloTier')['TIER_THRESHOLDS']>
     readonly abortNavigation: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/router')['abortNavigation']>
     readonly addRouteMiddleware: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/router')['addRouteMiddleware']>
     readonly audioBufferToWavBlob: UnwrapRef<typeof import('../../utils/audioUtils')['audioBufferToWavBlob']>
     readonly blobToBase64: UnwrapRef<typeof import('../../utils/audioUtils')['blobToBase64']>
+    readonly calculateEloChange: UnwrapRef<typeof import('../../utils/eloTier')['calculateEloChange']>
+    readonly calculateNewRating: UnwrapRef<typeof import('../../utils/eloTier')['calculateNewRating']>
     readonly callOnce: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/once')['callOnce']>
     readonly cancelIdleCallback: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/compat/idle-callback')['cancelIdleCallback']>
     readonly clearError: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/error')['clearError']>
@@ -271,6 +282,8 @@ declare module 'vue' {
     readonly getCurrentInstance: UnwrapRef<typeof import('vue')['getCurrentInstance']>
     readonly getCurrentScope: UnwrapRef<typeof import('vue')['getCurrentScope']>
     readonly getRouteRules: UnwrapRef<typeof import('../../node_modules/nuxt/dist/app/composables/manifest')['getRouteRules']>
+    readonly getTierFromRating: UnwrapRef<typeof import('../../utils/eloTier')['getTierFromRating']>
+    readonly getTierIndex: UnwrapRef<typeof import('../../utils/eloTier')['getTierIndex']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
     readonly hasInjectionContext: UnwrapRef<typeof import('vue')['hasInjectionContext']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>

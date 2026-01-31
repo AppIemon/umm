@@ -40,6 +40,7 @@ export { MapGenerator, MapGenerator, MapObject } from '../utils/MapGenerator';
 export { AudioAnalyzerClient, AudioAnalyzerClient } from '../utils/audio-analyzer-client';
 export { trimAudioBuffer, audioBufferToWavBlob, blobToBase64, splitBase64ToChunks, trimAndEncodeAudio, CHUNK_SIZE, MAX_SINGLE_UPLOAD_SIZE } from '../utils/audioUtils';
 export { drawObstacle } from '../utils/canvas-renderer';
+export { TIER_THRESHOLDS, getTierFromRating, calculateEloChange, calculateNewRating, getTierIndex, TierInfo } from '../utils/eloTier';
 export { GameEngine, GameEngine, Obstacle, Portal, Boss, Pattern, GameState, MapConfig, StateEvent, BeatAction } from '../utils/game-engine';
 export { SmartMapGenerator, SmartMapGenerator, SmartGenStatus } from '../utils/smart-map-generator';
 export { ObstacleType, PortalType, ObstacleMovement } from '../utils/types';

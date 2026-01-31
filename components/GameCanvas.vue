@@ -760,7 +760,10 @@ const handleInputDown = (e?: Event) => {
   if (!isRunning.value || engine.value.isAutoplay) return;
   
   if (!engine.value.isHolding) {
-    playSfx(clickDownBuffer, 1.5);
+    // 튜토리얼 모드에서만 클릭 소리 재생
+    if (props.tutorialMode) {
+      playSfx(clickDownBuffer, 1.5);
+    }
   }
   engine.value.setHolding(true);
 };
@@ -776,7 +779,10 @@ const handleInputUp = (e?: Event) => {
   if (engine.value.isAutoplay) return;
   
   if (engine.value.isHolding) {
-    playSfx(clickUpBuffer, 1.0);
+    // 튜토리얼 모드에서만 클릭 소리 재생
+    if (props.tutorialMode) {
+      playSfx(clickUpBuffer, 1.0);
+    }
   }
   engine.value.setHolding(false);
 };
