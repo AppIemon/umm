@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3f7e0-k0CbxLz1ut48josef4EY9KiyqxI\"",
-    "mtime": "2026-01-31T05:51:41.098Z",
-    "size": 260064,
+    "etag": "\"3f7d1-8N2uq1RgKRxy9m1ZsUbjb6LLGv4\"",
+    "mtime": "2026-01-31T06:10:18.985Z",
+    "size": 260049,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f428c-3zsd4GO9E0WuYA0eQOHm+0+P1xY\"",
-    "mtime": "2026-01-31T05:51:41.100Z",
-    "size": 1000076,
+    "etag": "\"f429b-psWWrNc+IPEXwCOp51eNvUtt7Vs\"",
+    "mtime": "2026-01-31T06:10:18.988Z",
+    "size": 1000091,
     "path": "index.mjs.map"
   }
 };
@@ -6190,8 +6190,8 @@ class GameEngine {
     };
     const visited = /* @__PURE__ */ new Set();
     const getVisitedKey = (s) => {
-      const xi = Math.floor(s.x / (this.baseSpeed * 0.033));
-      const yi = Math.floor(s.y / 12);
+      const xi = Math.floor(s.x / 5);
+      const yi = Math.floor(s.y / 2);
       return `${xi}_${yi}_${s.g ? 1 : 0}_${Math.round(s.sm * 10)}_${s.m ? 1 : 0}`;
     };
     const checkColl = (tx, ty, sz, tm, sm, margin = 0) => {
@@ -6236,14 +6236,14 @@ class GameEngine {
         sy += amp * vy * dt;
         if (sy < this.minY + sz) sy = this.minY + sz;
         if (sy > this.maxY - sz) sy = this.maxY - sz;
-        if (checkColl(sx, sy, sz, sTime, ssm, 1)) return false;
+        if (checkColl(sx, sy, sz, sTime, ssm, 0.1)) return false;
       }
       return true;
     };
     const stack = [initialState];
     let maxX = startX;
     let loops = 0;
-    const maxLoops = 5e5;
+    const maxLoops = 1e6;
     let bestState = null;
     let furthestFailX = startX;
     let failY = startY;
@@ -6299,14 +6299,14 @@ class GameEngine {
       if (nYH > this.maxY - sz) nYH = this.maxY - sz;
       if (nYR < this.minY + sz) nYR = this.minY + sz;
       if (nYR > this.maxY - sz) nYR = this.maxY - sz;
-      let dH = checkColl(nX, nYH, sz, nT, nSM, 3);
-      let dR = checkColl(nX, nYR, sz, nT, nSM, 3);
+      let dH = checkColl(nX, nYH, sz, nT, nSM, 0.1);
+      let dR = checkColl(nX, nYR, sz, nT, nSM, 0.1);
       const vDist = sz * 0.8;
       if (!dH && Math.abs(nYH - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 3)) dH = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 0.1)) dH = true;
       }
       if (!dR && Math.abs(nYR - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, nSM, 3)) dR = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, nSM, 0.1)) dR = true;
       }
       if (dH && dR && nX > furthestFailX) {
         furthestFailX = nX;
@@ -6314,7 +6314,7 @@ class GameEngine {
       }
       const prevH = curr.h;
       const lookaheadFrames = 60;
-      const MIN_SWITCH_INTERVAL = 0.125 / Math.pow(curr.sm, 0.7);
+      const MIN_SWITCH_INTERVAL = 0.05 / Math.pow(curr.sm, 0.7);
       const timeSinceLastSwitch = curr.time - curr.lastSwitchTime;
       let isSwitchRestricted = timeSinceLastSwitch < MIN_SWITCH_INTERVAL;
       if (isSwitchRestricted) {

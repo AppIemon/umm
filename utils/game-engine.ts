@@ -1922,9 +1922,10 @@ export class GameEngine {
 
     const visited = new Set<string>();
     const getVisitedKey = (s: SearchState) => {
-      // 성능 최적화: 더 큰 그리드 셀 사용
-      const xi = Math.floor(s.x / (this.baseSpeed * 0.033));
-      const yi = Math.floor(s.y / 12);
+      // 성능 최적화: 더 작은 그리드 셀 사용 (Impossible 난이도를 위한 정밀 탐색)
+      // X: 5px 단위, Y: 2px 단위
+      const xi = Math.floor(s.x / 5);
+      const yi = Math.floor(s.y / 2);
       return `${xi}_${yi}_${s.g ? 1 : 0}_${Math.round(s.sm * 10)}_${s.m ? 1 : 0}`;
     };
 
@@ -1989,8 +1990,8 @@ export class GameEngine {
         if (sy < this.minY + sz) sy = this.minY + sz;
         if (sy > this.maxY - sz) sy = this.maxY - sz;
 
-        // 생존 확인: 안전 마진 1px 적용 (더 정밀한 경로 탐색 허용)
-        if (checkColl(sx, sy, sz, sTime, ssm, 1)) return false;
+        // 생존 확인: 안전 마진 1px -> 0.1px (정밀 검사)
+        if (checkColl(sx, sy, sz, sTime, ssm, 0.1)) return false;
       }
       return true;
     };
@@ -1998,7 +1999,7 @@ export class GameEngine {
     const stack: SearchState[] = [initialState];
     let maxX = startX;
     let loops = 0;
-    const maxLoops = 500000; // Increased search depth
+    const maxLoops = 1000000; // Increased search depth
     let bestState: SearchState | null = null;
     let furthestFailX = startX;
     let failY = startY;
@@ -2059,17 +2060,18 @@ export class GameEngine {
       if (nYR < this.minY + sz) nYR = this.minY + sz;
       if (nYR > this.maxY - sz) nYR = this.maxY - sz;
 
-      let dH = checkColl(nX, nYH, sz, nT, nSM, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
-      let dR = checkColl(nX, nYR, sz, nT, nSM, 3);
+      // 생존 확인: 안전 마진 0.1px로 완화 (Pixel Perfect 허용)
+      let dH = checkColl(nX, nYH, sz, nT, nSM, 0.1);
+      let dR = checkColl(nX, nYR, sz, nT, nSM, 0.1);
 
       // Tunneling prevention: Check midpoint if moving fast vertically
       // dt=1/30 (approx 11px X movement), but Y movement can be large (50px+)
       const vDist = sz * 0.8;
       if (!dH && Math.abs(nYH - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 3)) dH = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 0.1)) dH = true;
       }
       if (!dR && Math.abs(nYR - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, nSM, 3)) dR = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, nSM, 0.1)) dR = true;
       }
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
@@ -2079,8 +2081,8 @@ export class GameEngine {
       const lookaheadFrames = 60;
 
       // CPS Limiting Logic:
-      // Scale interval: 0.125 / (speedMultiplier^0.7)
-      const MIN_SWITCH_INTERVAL = 0.125 / Math.pow(curr.sm, 0.7);
+      // Scale interval: 0.05 / (speedMultiplier^0.7) (Relaxed for 20 CPS)
+      const MIN_SWITCH_INTERVAL = 0.05 / Math.pow(curr.sm, 0.7);
 
       const timeSinceLastSwitch = curr.time - curr.lastSwitchTime;
       let isSwitchRestricted = timeSinceLastSwitch < MIN_SWITCH_INTERVAL;
