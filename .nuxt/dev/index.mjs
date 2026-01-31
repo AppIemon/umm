@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3f7d1-8N2uq1RgKRxy9m1ZsUbjb6LLGv4\"",
-    "mtime": "2026-01-31T06:10:18.985Z",
-    "size": 260049,
+    "etag": "\"3f95e-7gfUoC1tjVMV2z/AyFgFwOtXN+s\"",
+    "mtime": "2026-01-31T06:18:35.795Z",
+    "size": 260446,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f429b-psWWrNc+IPEXwCOp51eNvUtt7Vs\"",
-    "mtime": "2026-01-31T06:10:18.988Z",
-    "size": 1000091,
+    "etag": "\"f489b-5IxYftiIrvpGqa65TSBqOAe8R+k\"",
+    "mtime": "2026-01-31T06:18:35.798Z",
+    "size": 1001627,
     "path": "index.mjs.map"
   }
 };
@@ -2748,9 +2748,23 @@ const register_post = defineEventHandler(async (event) => {
     return userData;
   } catch (error) {
     console.error("Registration Error:", error);
+    if (error.name === "ValidationError") {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Validation Error",
+        data: { message: error.message }
+      });
+    }
+    if (error.code === 11e3) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: "Username already exists"
+      });
+    }
     throw createError({
       statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || "Failed to create entity"
+      statusMessage: error.statusMessage || error.message || "Failed to create entity",
+      data: { error: error.message }
     });
   }
 });

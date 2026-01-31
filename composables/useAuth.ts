@@ -60,7 +60,9 @@ export const useAuth = () => {
       user.value = userData;
       router.push('/guide');
     } catch (error: any) {
-      alert(error.statusMessage || 'Registration failed');
+      // Try to extract detailed error message from response
+      const errorMessage = error.data?.data?.message || error.data?.statusMessage || error.statusMessage || 'Registration failed';
+      alert(errorMessage);
     }
   };
 
