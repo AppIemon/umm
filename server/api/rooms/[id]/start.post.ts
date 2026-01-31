@@ -50,7 +50,12 @@ export default defineEventHandler(async (event) => {
     console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating inline rounds...`)
 
     // Incremental duration rounds: 10, 20, 30... maxDuration
+    let currentDifficulty = room.difficulty || 10;
+
     for (let d = 10; d <= maxDuration; d += 10) {
+      // Increase difficulty each round
+      engine.setMapConfig({ difficulty: currentDifficulty })
+
       engine.generateMap([], [], d, seed, false)
 
       // We no longer save to GameMap collection to avoid database bloat.
@@ -58,7 +63,7 @@ export default defineEventHandler(async (event) => {
       const mapData = {
         _id: new mongoose.Types.ObjectId(), // Virtual ID for tracking
         title: `ROOM_${room.title}_ROUND_${d / 10}`,
-        difficulty: room.difficulty || 10,
+        difficulty: currentDifficulty,
         seed,
         engineObstacles: optimizeObstacles(engine.obstacles),
         enginePortals: optimizeObstacles(engine.portals),
@@ -68,6 +73,8 @@ export default defineEventHandler(async (event) => {
         createdAt: new Date()
       }
       rounds.push(mapData)
+      currentDifficulty++; // Next round is harder
+
       if (rounds.length >= 100) break;
     }
 

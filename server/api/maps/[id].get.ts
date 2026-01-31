@@ -46,42 +46,21 @@ export default defineEventHandler(async (event) => {
 
   // 0. Prefer Static URL (New System)
   if (mapObj.audioUrl && mapObj.audioUrl.length > 5) {
-    mapObj.audioData = mapObj.audioUrl;
+    // Keep the URL, remove heavy sources
     delete mapObj.audioContentId;
     delete mapObj.audioChunks;
+    delete mapObj.audioData;
   }
-  // 1. Try to get audio from AudioContent (Legacy optimized way)
-  else if (mapObj.audioContentId) {
-    const ac = mapObj.audioContentId as any;
-    if (ac.chunks && ac.chunks.length > 0) {
-      // Filter out null chunks and ensure we have Buffers (handle potential BSON Binary types)
-      const validChunks = ac.chunks
-        .filter((c: any) => c !== null)
-        .map((c: any) => {
-          // If it's already a Buffer, return it
-          if (Buffer.isBuffer(c)) return c;
-          // If it's a BSON Binary object (has .buffer property which is the actual Buffer)
-          if (c && typeof c === 'object' && c.buffer && Buffer.isBuffer(c.buffer)) return c.buffer;
-          // If it has a .buffer property that is an ArrayBuffer (e.g. some other binary formats)
-          if (c && c.buffer instanceof ArrayBuffer) return Buffer.from(c.buffer);
-          // As a fallback, try to create a Buffer
-          try {
-            return Buffer.from(c);
-          } catch (e) {
-            console.warn('Failed to convert chunk to Buffer:', c);
-            return Buffer.alloc(0);
-          }
-        });
+  // 1. Legacy Audio Sources -> Convert to Stream URL
+  else if (mapObj.audioContentId || (mapObj.audioChunks && mapObj.audioChunks.length > 0) || (mapObj.audioData && mapObj.audioData.length > 100)) {
+    // Instead of embedding 5MB+ of Base64, we point to the streaming endpoint
+    // This prevents Vercel Function Payload Too Large errors (4.5MB limit)
+    mapObj.audioUrl = `/api/maps/${id}/audio`;
 
-      const buffer = Buffer.concat(validChunks);
-      mapObj.audioData = `data:audio/wav;base64,${buffer.toString('base64')}`;
-    }
-    // No need to return the full content object to client
+    // Cleanup heavy fields from JSON response
     delete mapObj.audioContentId;
-  }
-  // 2. Fallback to legacy chunks in GameMap document
-  else if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
-    mapObj.audioData = mapObj.audioChunks.join('');
+    delete mapObj.audioChunks;
+    delete mapObj.audioData;
   }
 
   // 2. Optimization on the fly (Prevents Vercel/SessionStorage limits)

@@ -3,10 +3,10 @@ import { Server } from 'node:http';
 import path, { resolve, dirname, join } from 'node:path';
 import crypto$1 from 'node:crypto';
 import { parentPort, threadId } from 'node:worker_threads';
-import { defineEventHandler, handleCacheHeaders, splitCookiesString, createEvent, fetchWithEvent, isEvent, eventHandler, setHeaders, sendRedirect, proxyRequest, getRequestHeader, setResponseHeaders, setResponseStatus, send, getRequestHeaders, setResponseHeader, appendResponseHeader, getRequestURL, getResponseHeader, removeResponseHeader, createError, getQuery as getQuery$1, readBody, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getResponseStatus, getRouterParam, setCookie, deleteCookie, getCookie, sendStream, getResponseStatusText } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/h3/dist/index.mjs';
+import { defineEventHandler, handleCacheHeaders, splitCookiesString, createEvent, fetchWithEvent, isEvent, eventHandler, setHeaders, sendRedirect, proxyRequest, getRequestHeader, setResponseHeaders, setResponseStatus, send, getRequestHeaders, setResponseHeader, appendResponseHeader, getRequestURL, getResponseHeader, removeResponseHeader, createError, getQuery as getQuery$1, readBody, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getResponseStatus, getRouterParam, setCookie, deleteCookie, getCookie, setHeader, sendStream, getResponseStatusText } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/h3/dist/index.mjs';
 import { escapeHtml } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/@vue/shared/dist/shared.cjs.js';
-import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
 import fs, { promises } from 'node:fs';
+import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
 import { Readable } from 'node:stream';
 import { createRenderer, getRequestDependencies, getPreloadLinks, getPrefetchLinks } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { parseURL, withoutBase, joinURL, getQuery, withQuery, withTrailingSlash, decodePath, withLeadingSlash, withoutTrailingSlash, joinRelativeURL } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/ufo/dist/index.mjs';
@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3f95e-7gfUoC1tjVMV2z/AyFgFwOtXN+s\"",
-    "mtime": "2026-01-31T06:18:35.795Z",
-    "size": 260446,
+    "etag": "\"3ffab-RWbhh1eGdYc4LvPYQo2pTlT81tE\"",
+    "mtime": "2026-01-31T06:28:58.987Z",
+    "size": 262059,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f489b-5IxYftiIrvpGqa65TSBqOAe8R+k\"",
-    "mtime": "2026-01-31T06:18:35.798Z",
-    "size": 1001627,
+    "etag": "\"f5beb-LU0hgm+h17gRbCvtu9/MEJg2JI8\"",
+    "mtime": "2026-01-31T06:28:58.988Z",
+    "size": 1006571,
     "path": "index.mjs.map"
   }
 };
@@ -1945,6 +1945,7 @@ const _lazy_ItOqgi = () => Promise.resolve().then(function () { return _id__dele
 const _lazy_dtHPno = () => Promise.resolve().then(function () { return _id__get$1; });
 const _lazy_wh0PQr = () => Promise.resolve().then(function () { return _id__patch$1; });
 const _lazy_GIoMLU = () => Promise.resolve().then(function () { return audioChunk_post$1; });
+const _lazy_zKzxsy = () => Promise.resolve().then(function () { return audio_get$1; });
 const _lazy_gy6T5E = () => Promise.resolve().then(function () { return rate_post$1; });
 const _lazy_vSvfPH = () => Promise.resolve().then(function () { return record_post$1; });
 const _lazy_tYJqVb = () => Promise.resolve().then(function () { return index_get$3; });
@@ -1976,6 +1977,7 @@ const handlers = [
   { route: '/api/maps/:id', handler: _lazy_dtHPno, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps/:id', handler: _lazy_wh0PQr, lazy: true, middleware: false, method: "patch" },
   { route: '/api/maps/:id/audio-chunk', handler: _lazy_GIoMLU, lazy: true, middleware: false, method: "post" },
+  { route: '/api/maps/:id/audio', handler: _lazy_zKzxsy, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps/:id/rate', handler: _lazy_gy6T5E, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps/:id/record', handler: _lazy_vSvfPH, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps', handler: _lazy_tYJqVb, lazy: true, middleware: false, method: "get" },
@@ -2877,29 +2879,14 @@ const _id__get = defineEventHandler(async (event) => {
     }));
   };
   if (mapObj.audioUrl && mapObj.audioUrl.length > 5) {
-    mapObj.audioData = mapObj.audioUrl;
     delete mapObj.audioContentId;
     delete mapObj.audioChunks;
-  } else if (mapObj.audioContentId) {
-    const ac = mapObj.audioContentId;
-    if (ac.chunks && ac.chunks.length > 0) {
-      const validChunks = ac.chunks.filter((c) => c !== null).map((c) => {
-        if (Buffer.isBuffer(c)) return c;
-        if (c && typeof c === "object" && c.buffer && Buffer.isBuffer(c.buffer)) return c.buffer;
-        if (c && c.buffer instanceof ArrayBuffer) return Buffer.from(c.buffer);
-        try {
-          return Buffer.from(c);
-        } catch (e) {
-          console.warn("Failed to convert chunk to Buffer:", c);
-          return Buffer.alloc(0);
-        }
-      });
-      const buffer = Buffer.concat(validChunks);
-      mapObj.audioData = `data:audio/wav;base64,${buffer.toString("base64")}`;
-    }
+    delete mapObj.audioData;
+  } else if (mapObj.audioContentId || mapObj.audioChunks && mapObj.audioChunks.length > 0 || mapObj.audioData && mapObj.audioData.length > 100) {
+    mapObj.audioUrl = `/api/maps/${id}/audio`;
     delete mapObj.audioContentId;
-  } else if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
-    mapObj.audioData = mapObj.audioChunks.join("");
+    delete mapObj.audioChunks;
+    delete mapObj.audioData;
   }
   if (mapObj.engineObstacles) mapObj.engineObstacles = optimizeObstacles(mapObj.engineObstacles);
   if (mapObj.enginePortals) mapObj.enginePortals = optimizeObstacles(mapObj.enginePortals);
@@ -3038,6 +3025,69 @@ const audioChunk_post = defineEventHandler(async (event) => {
 const audioChunk_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: audioChunk_post
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const audio_get = defineEventHandler(async (event) => {
+  const id = getRouterParam(event, "id");
+  const map = await GameMap.findById(id).select("audioContentId audioChunks audioUrl audioData");
+  if (!map) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Map not found"
+    });
+  }
+  if (map.audioUrl) {
+    return sendRedirect(event, map.audioUrl);
+  }
+  let finalBuffer = null;
+  if (map.audioContentId) {
+    const ac = await AudioContent.findById(map.audioContentId);
+    if (ac && ac.chunks && ac.chunks.length > 0) {
+      const validChunks = ac.chunks.filter((c) => c);
+      if (validChunks.length > 0) {
+        finalBuffer = Buffer.concat(validChunks);
+      }
+    }
+  }
+  if (!finalBuffer && map.audioData && map.audioData.length > 0) {
+    try {
+      const matches = map.audioData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        finalBuffer = Buffer.from(matches[2], "base64");
+      } else {
+        finalBuffer = Buffer.from(map.audioData, "base64");
+      }
+    } catch (e) {
+      console.error("Failed to decode legacy audioData", e);
+    }
+  }
+  if (!finalBuffer && map.audioChunks && map.audioChunks.length > 0) {
+    try {
+      const fullBase64 = map.audioChunks.join("");
+      const matches = fullBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        finalBuffer = Buffer.from(matches[2], "base64");
+      } else {
+        finalBuffer = Buffer.from(fullBase64, "base64");
+      }
+    } catch (e) {
+      console.error("Failed to decode legacy audio chunks", e);
+    }
+  }
+  if (!finalBuffer) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Audio not found"
+    });
+  }
+  setHeader(event, "Content-Type", "audio/wav");
+  setHeader(event, "Content-Length", finalBuffer.length);
+  return finalBuffer;
+});
+
+const audio_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: audio_get
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const rate_post = defineEventHandler(async (event) => {
@@ -3598,13 +3648,15 @@ const start_post = defineEventHandler(async (event) => {
     const maxDuration = room.duration || 120;
     const rounds = [];
     console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating inline rounds...`);
+    let currentDifficulty = room.difficulty || 10;
     for (let d = 10; d <= maxDuration; d += 10) {
+      engine.setMapConfig({ difficulty: currentDifficulty });
       engine.generateMap([], [], d, seed, false);
       const mapData = {
         _id: new mongoose.Types.ObjectId(),
         // Virtual ID for tracking
         title: `ROOM_${room.title}_ROUND_${d / 10}`,
-        difficulty: room.difficulty || 10,
+        difficulty: currentDifficulty,
         seed,
         engineObstacles: optimizeObstacles(engine.obstacles),
         enginePortals: optimizeObstacles(engine.portals),
@@ -3614,6 +3666,7 @@ const start_post = defineEventHandler(async (event) => {
         createdAt: /* @__PURE__ */ new Date()
       };
       rounds.push(mapData);
+      currentDifficulty++;
       if (rounds.length >= 100) break;
     }
     const updatedRoom = await Room.findOneAndUpdate(

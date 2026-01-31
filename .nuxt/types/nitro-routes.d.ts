@@ -29,6 +29,9 @@ declare module "nitropack/types" {
     '/api/maps/:id/audio-chunk': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id]/audio-chunk.post').default>>>>
     }
+    '/api/maps/:id/audio': {
+      'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id]/audio.get').default>>>>
+    }
     '/api/maps/:id/rate': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/[id]/rate.post').default>>>>
     }

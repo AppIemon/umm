@@ -144,14 +144,8 @@ const fetchMaps = async () => {
 
 const filteredMaps = computed(() => maps.value);
 
-const playMap = async (map: any) => {
-  try {
-    const fullMap = await $fetch(`/api/maps/${map._id}`);
-    sessionStorage.setItem('umm_load_map', JSON.stringify(fullMap));
-    router.push('/play');
-  } catch (e) {
-    alert("Failed to load map data.");
-  }
+const playMap = (map: any) => {
+  router.push({ path: '/play', query: { map: map._id } });
 };
 
 const startEdit = async (map: any) => {
