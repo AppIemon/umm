@@ -119,8 +119,9 @@ export class MapGenerator {
     let currentCeilY = Math.floor((path[0]!.y - baseGapVal / 2) / blockSize) * blockSize;
 
     // Clamp initial values to prevent off-screen placement
-    currentFloorY = Math.min(CANVAS_BOTTOM - BOUNDARY_MARGIN, currentFloorY);
-    currentCeilY = Math.max(CANVAS_TOP + BOUNDARY_MARGIN, currentCeilY);
+    // Floor는 플레이어 시야 내에 있어야 함 (최대 Y = 600)
+    currentFloorY = Math.min(600, Math.max(400, currentFloorY));
+    currentCeilY = Math.max(CANVAS_TOP + BOUNDARY_MARGIN, Math.min(200, currentCeilY));
 
     // Trackers for post-filtering (Map X to floor/ceil Y)
     const boundaryMap: Map<number, { floorY: number, ceilY: number }> = new Map();
@@ -254,8 +255,8 @@ export class MapGenerator {
         objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 90 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
         currentFloorY += stepY;
-        // Clamp floor to prevent going off-screen
-        currentFloorY = Math.min(CANVAS_BOTTOM - BOUNDARY_MARGIN, currentFloorY);
+        // Clamp floor to prevent going below visible area (max Y = 650)
+        currentFloorY = Math.min(650, currentFloorY);
       } else {
         const blockY = currentFloorY;
         objects.push({ type: 'block', x: currentX, y: blockY, width: blockSize, height: blockSize });
@@ -344,11 +345,14 @@ export class MapGenerator {
       const hasHazard = (stepY === 0 && ceilStepY === 0 && rand < hazardThreshold);
 
       if (hasHazard || forceFloorSpike || forceCeilSpike) {
-        // Diversified Size
-        const sizeVariance = 0.8 + Math.random() * 0.4; // 0.8x ~ 1.2x
-        let baseH = 40;
-        if (difficulty <= 5) baseH = 25;
-        else if (difficulty > 20) baseH = 50;
+        // Diversified Size - 더 다양하고 큰 장애물
+        const sizeVariance = 0.7 + Math.random() * 0.6; // 0.7x ~ 1.3x
+        let baseH: number;
+        // 난이도에 따른 기본 장애물 크기 증가
+        if (difficulty <= 5) baseH = 35 + Math.random() * 15; // 35~50
+        else if (difficulty <= 15) baseH = 45 + Math.random() * 20; // 45~65
+        else if (difficulty <= 23) baseH = 55 + Math.random() * 25; // 55~80
+        else baseH = 60 + Math.random() * 30; // 60~90
         const spikeH = baseH * sizeVariance;
 
         // Balanced Floor/Ceiling Choice (Rotate)
@@ -397,25 +401,32 @@ export class MapGenerator {
         }
       }
 
-      // Floating Hazards (Perfectly Balanced)
-      if (rand > 0.94 && currentGap > 220) {
-        const mineSize = (difficulty <= 7 ? 20 : 35) * (0.9 + Math.random() * 0.2);
+      // Floating Hazards (Perfectly Balanced) - 더 큰 사이즈와 더 다양한 위치
+      if (rand > 0.92 && currentGap > 180) {
+        // 플로팅 장애물 크기 대폭 증가
+        let mineBaseSize: number;
+        if (difficulty <= 7) mineBaseSize = 35 + Math.random() * 15; // 35~50
+        else if (difficulty <= 15) mineBaseSize = 45 + Math.random() * 25; // 45~70
+        else mineBaseSize = 55 + Math.random() * 35; // 55~90
+        const mineSize = mineBaseSize;
         const midY = (currentFloorY + currentCeilY) / 2;
-        let pY = currentPoint.y < midY ? midY + (currentFloorY - midY) * 0.5 : midY - (midY - currentCeilY) * 0.5;
+        // 더 다양한 Y 위치 - 중간에서 위아래로 분포
+        const yOffset = (Math.random() - 0.5) * (currentFloorY - currentCeilY) * 0.4;
+        let pY = midY + yOffset;
 
         const obsType = floatBag.next();
         let children: any[] | undefined = undefined;
         let customData: any | undefined = undefined;
 
         if (obsType === 'planet' || obsType === 'star') {
-          const count = obsType === 'planet' ? 2 : 3;
+          const count = obsType === 'planet' ? 2 + Math.floor(Math.random() * 2) : 3 + Math.floor(Math.random() * 2);
           // 실제 장애물 타입 풀 (위험한 느낌)
           const childTypes: ObstacleType[] = ['spike', 'saw', 'mine', 'spike_ball', 'mini_spike'];
-          customData = { orbitSpeed: 1.0 + Math.random() * 1.5, orbitDistance: mineSize * 0.85, orbitCount: count };
+          customData = { orbitSpeed: 1.0 + Math.random() * 1.5, orbitDistance: mineSize * 0.9 + Math.random() * 20, orbitCount: count };
           children = Array(count).fill(0).map(() => {
             const childType = childTypes[Math.floor(Math.random() * childTypes.length)]!;
-            // 크기 제각각 (0.3x ~ 0.6x of parent size)
-            const sizeMultiplier = 0.3 + Math.random() * 0.3;
+            // 크기 제각각 - 더 다양하게 (0.35x ~ 0.7x of parent size)
+            const sizeMultiplier = 0.35 + Math.random() * 0.35;
             const childSize = mineSize * sizeMultiplier;
             return { type: childType, x: 0, y: 0, width: childSize, height: childSize, isHitbox: true };
           });
