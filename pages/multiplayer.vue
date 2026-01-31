@@ -196,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { type SongSection } from '@/composables/useAudioAnalyzer';
 import { useAuth } from '@/composables/useAuth';
@@ -377,12 +377,23 @@ async function loadNextMap() {
     if (res.map) {
       console.log('[loadNextMap] New map received:', res.map.title);
       console.log('[loadNextMap] New map obstacles count:', res.map.engineObstacles?.length);
+      
+      // Force GameCanvas remount by temporarily clearing audioBuffer
+      const savedBuffer = audioBuffer.value;
+      audioBuffer.value = null;
+      
+      // Update map data
       selectedMap.value = res.map;
-      currentMapIndex.value = res.mapIndex; // Update index ONLY after successful fetch
+      currentMapIndex.value = res.mapIndex;
       obstacles.value = res.map.engineObstacles || [];
       sections.value = res.map.sections || [];
       myProgress.value = 0;
-      console.log('[loadNextMap] Map switched successfully');
+      
+      // Restore audioBuffer after Vue's next tick to trigger v-if remount
+      await nextTick();
+      audioBuffer.value = savedBuffer;
+      
+      console.log('[loadNextMap] Map switched successfully, GameCanvas remounted');
     } else {
       console.log('[loadNextMap] No map in response');
     }

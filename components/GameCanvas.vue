@@ -145,14 +145,31 @@
             />
           </div>
           <div class="noclip-control">
-            <label>
-              <input type="checkbox" v-model="noclipEnabled" />
-              NOCLIP
-            </label>
-            <span v-if="noclipEnabled" class="noclip-stats">
-              Deaths: {{ noclipDeathCount }} | Accuracy: {{ noclipAccuracy }}%
-            </span>
+            <!-- If noclipMode prop is true, don't show checkbox, just show mode indicator -->
+            <template v-if="noclipMode">
+              <span class="noclip-mode-badge">👻 NOCLIP MODE</span>
+              <span class="noclip-stats">
+                Deaths: {{ noclipDeathCount }} | Accuracy: {{ noclipAccuracy }}%
+              </span>
+            </template>
+            <template v-else>
+              <label>
+                <input type="checkbox" v-model="noclipEnabled" />
+                NOCLIP
+              </label>
+              <span v-if="noclipEnabled" class="noclip-stats">
+                Deaths: {{ noclipDeathCount }} | Accuracy: {{ noclipAccuracy }}%
+              </span>
+            </template>
           </div>
+        </div>
+        
+        <!-- Noclip Mode Only: Show stats at bottom when not in practice mode -->
+        <div v-if="noclipMode && !practiceMode" class="noclip-mode-overlay">
+          <span class="noclip-mode-badge">👻 NOCLIP MODE</span>
+          <span class="noclip-stats">
+            Deaths: {{ noclipDeathCount }} | Accuracy: {{ noclipAccuracy }}%
+          </span>
         </div>
         
         <!-- Noclip Death Flash Overlay -->
@@ -180,6 +197,7 @@ const props = defineProps<{
   practiceMode?: boolean;
   tutorialMode?: boolean;
   invincible?: boolean;
+  noclipMode?: boolean; // Noclip mode - 죽지 않고 정확도 기록
 }>();
 
 const emit = defineEmits(['retry', 'exit', 'complete', 'map-ready', 'progress-update', 'record-update']);
@@ -204,7 +222,7 @@ const isNewBest = ref(false);
 
 // Practice Mode: Speed Hack & Noclip
 const gameSpeedMultiplier = ref(1.0);
-const noclipEnabled = ref(false);
+const noclipEnabled = ref(props.noclipMode ?? false); // Auto-enable if noclipMode prop is true
 const noclipDeathCount = ref(0);
 const noclipFlashActive = ref(false);
 let lastHoldingBeforeDeath = false; // For hold carry-over on respawn
@@ -1017,9 +1035,10 @@ const update = () => {
   isMini.value = engine.value.isMini;
   
   if (engine.value.isDead) {
-    if (props.invincible || (props.practiceMode && noclipEnabled.value)) {
+    const isNoclipActive = props.noclipMode || (props.practiceMode && noclipEnabled.value);
+    if (props.invincible || isNoclipActive) {
       // Noclip mode: count death, flash red, but don't die
-      if (props.practiceMode && noclipEnabled.value) {
+      if (isNoclipActive) {
         noclipDeathCount.value++;
         // Flash red briefly
         noclipFlashActive.value = true;
@@ -2562,6 +2581,31 @@ button.secondary:hover {
 @keyframes noclipFlash {
   0% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+.noclip-mode-badge {
+  background: linear-gradient(90deg, #00ff99, #00ffcc);
+  color: #000;
+  font-weight: 900;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  box-shadow: 0 0 10px rgba(0, 255, 153, 0.5);
+}
+
+.noclip-mode-overlay {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 255, 153, 0.3);
+  z-index: 50;
 }
 </style>
 

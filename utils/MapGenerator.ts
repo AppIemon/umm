@@ -29,8 +29,8 @@ export class MapGenerator {
     let baseGap: number;
 
     if (difficulty <= 7) {
-      // 1~7: Easy (580 ~ 460)
-      baseGap = 580 - (difficulty - 1) * 20;
+      // 1~7: Easy (700 ~ 550) - 더 넓은 간격으로 쉽게
+      baseGap = 700 - (difficulty - 1) * 25;
     } else if (difficulty <= 15) {
       // 8~15: Normal (460 ~ 320)
       baseGap = 460 - (difficulty - 8) * 17.5;
@@ -314,9 +314,11 @@ export class MapGenerator {
       // IMPROVED ANTI-STICK: 바닥만 뛰어서 깨는 맵 방지
       // 평평한 구간에서 장애물 생성 확률 대폭 증가
       let antiStickChance = 0;
-      if (difficulty >= 3) antiStickChance = 0.45;  // 기존 0.3
-      if (difficulty >= 10) antiStickChance = 0.65; // 기존 0.5
-      if (difficulty >= 20) antiStickChance = 0.85; // 기존 0.7
+      // EASY (1~7): 장애물 생성 확률 대폭 감소
+      if (difficulty >= 5) antiStickChance = 0.2;  // 난이도 5부터 시작
+      if (difficulty >= 8) antiStickChance = 0.45;
+      if (difficulty >= 15) antiStickChance = 0.65;
+      if (difficulty >= 23) antiStickChance = 0.85;
 
       const isFlatFloor = (stepY === 0);
       const isFlatCeil = (ceilStepY === 0);
@@ -346,9 +348,10 @@ export class MapGenerator {
         // Diversified Size - 더 다양하고 큰 장애물
         const sizeVariance = 0.7 + Math.random() * 0.6; // 0.7x ~ 1.3x
         let baseH: number;
-        // 난이도에 따른 기본 장애물 크기 증가
-        if (difficulty <= 5) baseH = 35 + Math.random() * 15; // 35~50
-        else if (difficulty <= 15) baseH = 45 + Math.random() * 20; // 45~65
+        // 난이도에 따른 기본 장애물 크기 - EASY는 작게!
+        if (difficulty <= 3) baseH = 20 + Math.random() * 10; // 20~30 (매우 작음)
+        else if (difficulty <= 7) baseH = 28 + Math.random() * 12; // 28~40 (작음)
+        else if (difficulty <= 15) baseH = 40 + Math.random() * 20; // 40~60
         else if (difficulty <= 23) baseH = 55 + Math.random() * 25; // 55~80
         else baseH = 60 + Math.random() * 30; // 60~90
         const spikeH = baseH * sizeVariance;
@@ -410,10 +413,13 @@ export class MapGenerator {
       }
 
       // Floating Hazards (Perfectly Balanced) - 더 큰 사이즈와 더 다양한 위치
-      if (rand > 0.92 && currentGap > 180) {
-        // 플로팅 장애물 크기 대폭 증가
+      // EASY (1~4): 플로팅 장애물 거의 생성 안함
+      const floatThreshold = difficulty <= 4 ? 0.98 : 0.92;
+      if (rand > floatThreshold && currentGap > 180) {
+        // 플로팅 장애물 크기
         let mineBaseSize: number;
-        if (difficulty <= 7) mineBaseSize = 35 + Math.random() * 15; // 35~50
+        if (difficulty <= 4) mineBaseSize = 25 + Math.random() * 10; // 25~35 (작음)
+        else if (difficulty <= 7) mineBaseSize = 30 + Math.random() * 15; // 30~45
         else if (difficulty <= 15) mineBaseSize = 45 + Math.random() * 25; // 45~70
         else mineBaseSize = 55 + Math.random() * 35; // 55~90
         const mineSize = mineBaseSize;

@@ -90,6 +90,7 @@
       :difficulty="difficulty"
       :practiceMode="isPractice"
       :tutorialMode="isTutorial"
+      :noclipMode="isNoclip"
       @retry="startGame"
       @exit="handleExit"
       @map-ready="handleMapReady"
@@ -125,6 +126,12 @@
             <div v-if="isFirstTime" class="rec-badge">RECOMMENDED</div>
             <h3>TUTORIAL MODE</h3>
             <p>게임 가이드<br>기초 배우기</p>
+          </button>
+          
+          <button @click="selectMode('noclip')" class="mode-btn noclip">
+            <div class="mode-icon">👻</div>
+            <h3>NOCLIP MODE</h3>
+            <p>죽지 않음<br>정확도 기록</p>
           </button>
         </div>
       </div>
@@ -193,6 +200,7 @@ const hasSavedCurrentMap = ref(false);
 const showMapPreview = ref(false); // Debug Modal State
 const isPractice = ref(false);
 const isTutorial = ref(false);
+const isNoclip = ref(false);
 const isFirstTime = ref(false);
 
 // Difficulty
@@ -270,10 +278,11 @@ const generateTutorialMap = () => {
   };
 };
 
-const selectMode = async (mode: 'practice' | 'normal' | 'tutorial') => {
+const selectMode = async (mode: 'practice' | 'normal' | 'tutorial' | 'noclip') => {
   showModeSelect.value = false;
-  isPractice.value = mode === 'practice';
+  isPractice.value = mode === 'practice' || mode === 'noclip'; // Noclip uses practice infrastructure
   isTutorial.value = mode === 'tutorial';
+  isNoclip.value = mode === 'noclip';
 
   if (mode === 'tutorial') {
     localStorage.setItem('umm_guide_seen', 'true');
@@ -573,6 +582,7 @@ const handleExit = () => {
     showModeSelect.value = false;
     isPractice.value = false;
     isTutorial.value = false;
+    isNoclip.value = false;
   }
 };
 
@@ -1273,6 +1283,17 @@ const getAudioFromDB = async (mapId: string): Promise<File | undefined> => {
 .mode-btn.normal:hover .mode-icon { animation: pulse 0.5s; }
 .mode-btn.tutorial:hover { border-color: #ff00ff; }
 .mode-btn.tutorial:hover .mode-icon { animation: wiggle 0.5s; }
+.mode-btn.noclip:hover { border-color: #00ff99; }
+.mode-btn.noclip:hover .mode-icon { animation: float 0.5s; }
+.mode-btn.noclip { 
+  border-color: rgba(0, 255, 153, 0.3);
+  background: rgba(0, 255, 153, 0.03);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
 
 .mode-btn.tutorial.recommended {
   border-color: #ff00ff;

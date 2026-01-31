@@ -72,35 +72,42 @@ export default defineEventHandler(async (event) => {
     console.log('[StartGame] musicMeasureLength:', room.musicMeasureLength)
     console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating inline rounds...`)
 
-    // Incremental duration rounds: 10, 20, 30... maxDuration
+    // Incremental duration rounds: 10%, 10*1.1, 10*1.1^2... until maxDuration
     let currentDifficulty = room.difficulty || 10;
+    let currentDuration = 10; // Start at 10 seconds
 
-    for (let d = 10; d <= maxDuration; d += 10) {
-      console.log(`[StartGame] Generating round ${d / 10}: duration=${d}s, difficulty=${currentDifficulty}`)
+    while (currentDuration <= maxDuration) {
+      const roundNumber = rounds.length + 1;
+      const roundDuration = Math.round(currentDuration);
+
+      console.log(`[StartGame] Generating round ${roundNumber}: duration=${roundDuration}s, difficulty=${currentDifficulty}`)
 
       // Increase difficulty each round
       engine.setMapConfig({ difficulty: currentDifficulty })
 
-      engine.generateMap([], [], d, seed, false, 0, room.musicBpm || 120, room.musicMeasureLength || 2.0)
+      engine.generateMap([], [], roundDuration, seed, false, 0, room.musicBpm || 120, room.musicMeasureLength || 2.0)
 
-      console.log(`[StartGame] Round ${d / 10} generated: obstacles=${engine.obstacles?.length}, portals=${engine.portals?.length}`)
+      console.log(`[StartGame] Round ${roundNumber} generated: obstacles=${engine.obstacles?.length}, portals=${engine.portals?.length}`)
 
       // We no longer save to GameMap collection to avoid database bloat.
       // Maps are stored inline within the Room document.
       const mapData = {
         _id: new mongoose.Types.ObjectId(), // Virtual ID for tracking
-        title: `ROOM_${room.title}_ROUND_${d / 10}`,
+        title: `ROOM_${room.title}_ROUND_${roundNumber}`,
         difficulty: currentDifficulty,
         seed,
         engineObstacles: optimizeObstacles(engine.obstacles),
         enginePortals: optimizeObstacles(engine.portals),
-        duration: d,
+        duration: roundDuration,
         audioUrl: room.musicUrl || null,
         isVerified: true,
         createdAt: new Date()
       }
       rounds.push(mapData)
       currentDifficulty++; // Next round is harder
+
+      // Next round is 10% longer
+      currentDuration *= 1.1;
 
       if (rounds.length >= 100) break;
     }
