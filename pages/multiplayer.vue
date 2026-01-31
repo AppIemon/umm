@@ -73,17 +73,29 @@
          <span>PLAYERS: {{ currentRoom?.players.length }} / {{ currentRoom?.maxPlayers }}</span>
       </div>
 
-      <div class="player-grid">
-        <div v-for="pl in currentRoom?.players" :key="pl.userId" class="player-card-lg" :class="{host: pl.isHost}">
-          <div class="avatar-lg">◆</div>
-          <div class="player-name">{{ pl.username }}</div>
-          <span v-if="pl.userId === playerId" class="me-badge">YOU</span>
-          <span v-if="pl.isHost" class="host-badge">HOST</span>
+      <div class="room-content-row">
+        <div class="player-grid">
+          <div v-for="pl in currentRoom?.players" :key="pl.userId" class="player-card-lg" :class="{host: pl.isHost}">
+            <div class="avatar-lg">◆</div>
+            <div class="player-name">{{ pl.username }}</div>
+            <span v-if="pl.userId === playerId" class="me-badge">YOU</span>
+            <span v-if="pl.isHost" class="host-badge">HOST</span>
+          </div>
+          <!-- Placeholders -->
+          <div v-for="i in (currentRoom ? (currentRoom.maxPlayers - currentRoom.players.length) : 0)" :key="`placeholder-${i}`" class="player-card-lg empty">
+            <div class="avatar-lg empty">+</div>
+            <div class="player-name">EMPTY</div>
+          </div>
         </div>
-        <!-- Placeholders -->
-        <div v-for="i in (currentRoom ? (currentRoom.maxPlayers - currentRoom.players.length) : 0)" :key="`placeholder-${i}`" class="player-card-lg empty">
-          <div class="avatar-lg empty">+</div>
-          <div class="player-name">EMPTY</div>
+        
+        <div class="chat-sidebar">
+          <MultiplayerChat 
+            v-if="currentRoomId"
+            :roomId="currentRoomId"
+            :userId="playerId"
+            :username="playerUsername"
+            :messages="currentRoom?.messages || []"
+          />
         </div>
       </div>
 
@@ -364,7 +376,7 @@ async function enterGame(roomData: any) {
   if (!roomData.map) return;
   
   selectedMap.value = roomData.map;
-  timeRemaining.value = roomData.duration;
+  timeRemaining.value = roomData.duration || 60; // Fallback to avoid NaN
   
   // Audio Load
   audioBuffer.value = null; // Reset
@@ -539,9 +551,15 @@ const didIWin = computed(() => {
 .room-view { width: 90%; height: 80vh; }
 .room-header-title { font-size: 2.5rem; margin: 0; color: #fff; }
 .room-header-meta { display: flex; gap: 2rem; color: #888; font-size: 1.2rem; margin-bottom: 2rem; }
+.room-content-row {
+  display: flex; gap: 2rem; width: 100%; flex: 1; min-height: 0;
+}
 .player-grid { 
   display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
-  gap: 1.5rem; width: 100%; margin-bottom: auto; 
+  gap: 1.5rem; flex: 2; margin-bottom: auto; overflow-y: auto;
+}
+.chat-sidebar {
+  flex: 1; min-width: 300px;
 }
 .player-card-lg { 
   background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 12px;

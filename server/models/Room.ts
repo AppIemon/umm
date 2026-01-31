@@ -20,6 +20,12 @@ export interface IRoom extends Document {
     y: number
     lastSeen: Date
   }[]
+  messages: {
+    userId: string
+    username: string
+    text: string
+    timestamp: Date
+  }[]
 
   status: 'waiting' | 'starting' | 'playing' | 'finished'
   winner: string | null
@@ -48,6 +54,12 @@ const roomSchema = new mongoose.Schema<IRoom>({
     progress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
     lastSeen: { type: Date, default: Date.now }
+  }],
+  messages: [{
+    userId: { type: String, required: true },
+    username: { type: String, required: true },
+    text: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now }
   }],
 
   status: {

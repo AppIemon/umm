@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3cf73-33njc0Jx6o2sej+9UaQO1p5dDaY\"",
-    "mtime": "2026-01-31T02:15:42.321Z",
-    "size": 249715,
+    "etag": "\"3d4d3-B1gKNpTaN8iiDQvdU0LAnfHilDM\"",
+    "mtime": "2026-01-31T02:31:58.804Z",
+    "size": 251091,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"ea94a-GWexWbyecJe8bX4BgXLK78+fpG8\"",
-    "mtime": "2026-01-31T02:15:42.324Z",
-    "size": 960842,
+    "etag": "\"eb9be-G3Oo5sGcgctYh06pwFBCjp4tZ6s\"",
+    "mtime": "2026-01-31T02:31:58.807Z",
+    "size": 965054,
     "path": "index.mjs.map"
   }
 };
@@ -1949,6 +1949,7 @@ const _lazy_gy6T5E = () => Promise.resolve().then(function () { return rate_post
 const _lazy_vSvfPH = () => Promise.resolve().then(function () { return record_post$1; });
 const _lazy_tYJqVb = () => Promise.resolve().then(function () { return index_get$3; });
 const _lazy_DwrcjF = () => Promise.resolve().then(function () { return index_post$1; });
+const _lazy_3cvM1k = () => Promise.resolve().then(function () { return chat_post$1; });
 const _lazy_QxYKdS = () => Promise.resolve().then(function () { return start_post$1; });
 const _lazy_wgeVPj = () => Promise.resolve().then(function () { return status_get$1; });
 const _lazy_HdxjLr = () => Promise.resolve().then(function () { return update_post$1; });
@@ -1978,6 +1979,7 @@ const handlers = [
   { route: '/api/maps/:id/record', handler: _lazy_vSvfPH, lazy: true, middleware: false, method: "post" },
   { route: '/api/maps', handler: _lazy_tYJqVb, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps', handler: _lazy_DwrcjF, lazy: true, middleware: false, method: "post" },
+  { route: '/api/rooms/:id/chat', handler: _lazy_3cvM1k, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/:id/start', handler: _lazy_QxYKdS, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/:id/status', handler: _lazy_wgeVPj, lazy: true, middleware: false, method: "get" },
   { route: '/api/rooms/:id/update', handler: _lazy_HdxjLr, lazy: true, middleware: false, method: "post" },
@@ -3362,6 +3364,12 @@ const roomSchema = new mongoose.Schema({
     y: { type: Number, default: 360 },
     lastSeen: { type: Date, default: Date.now }
   }],
+  messages: [{
+    userId: { type: String, required: true },
+    username: { type: String, required: true },
+    text: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now }
+  }],
   status: {
     type: String,
     enum: ["waiting", "starting", "playing", "finished"],
@@ -3376,6 +3384,35 @@ const roomSchema = new mongoose.Schema({
   }
 });
 const Room = mongoose.models.Room || mongoose.model("Room", roomSchema);
+
+const chat_post = defineEventHandler(async (event) => {
+  var _a;
+  const roomId = (_a = event.context.params) == null ? void 0 : _a.id;
+  const body = await readBody(event);
+  const { userId, username, text } = body;
+  if (!userId || !text) {
+    throw createError({ statusCode: 400, statusMessage: "Missing fields" });
+  }
+  const room = await Room.findById(roomId);
+  if (!room) throw createError({ statusCode: 404, statusMessage: "Room not found" });
+  const msg = {
+    userId,
+    username,
+    text,
+    timestamp: /* @__PURE__ */ new Date()
+  };
+  room.messages.push(msg);
+  if (room.messages.length > 50) {
+    room.messages = room.messages.slice(room.messages.length - 50);
+  }
+  await room.save();
+  return { success: true };
+});
+
+const chat_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: chat_post
+}, Symbol.toStringTag, { value: 'Module' }));
 
 const start_post = defineEventHandler(async (event) => {
   var _a;
@@ -3460,8 +3497,10 @@ const status_get = defineEventHandler(async (event) => {
       maxPlayers: room.maxPlayers,
       players: room.players,
       hostId: room.hostId,
-      map: room.map
+      map: room.map,
       // Will be null until generated
+      duration: room.duration,
+      messages: room.messages
     }
   };
 });
@@ -6646,8 +6685,8 @@ class GameEngine {
     const minHitboxSize = 10;
     effectiveWidth = Math.max(effectiveWidth, minHitboxSize);
     effectiveHeight = Math.max(effectiveHeight, minHitboxSize);
-    const hitboxReduction = 4;
-    const planetReduction = 10;
+    const hitboxReduction = 0;
+    const planetReduction = 0;
     let reduction = hitboxReduction;
     if (obs.type === "planet" || obs.type === "star") reduction = planetReduction;
     effectiveWidth = Math.max(10, effectiveWidth - reduction);

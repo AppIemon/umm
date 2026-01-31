@@ -18,6 +18,7 @@ interface _GlobalComponents {
   'GameGuide': typeof import("../../components/GameGuide.vue").default
   'LandscapeOverlay': typeof import("../../components/LandscapeOverlay.vue").default
   'MapPreviewModal': typeof import("../../components/MapPreviewModal.vue").default
+  'MultiplayerChat': typeof import("../../components/MultiplayerChat.vue").default
   'NavBar': typeof import("../../components/NavBar.vue").default
   'SongSelector': typeof import("../../components/SongSelector.vue").default
   'NuxtWelcome': typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue").default
@@ -47,6 +48,7 @@ interface _GlobalComponents {
   'LazyGameGuide': LazyComponent<typeof import("../../components/GameGuide.vue").default>
   'LazyLandscapeOverlay': LazyComponent<typeof import("../../components/LandscapeOverlay.vue").default>
   'LazyMapPreviewModal': LazyComponent<typeof import("../../components/MapPreviewModal.vue").default>
+  'LazyMultiplayerChat': LazyComponent<typeof import("../../components/MultiplayerChat.vue").default>
   'LazyNavBar': LazyComponent<typeof import("../../components/NavBar.vue").default>
   'LazySongSelector': LazyComponent<typeof import("../../components/SongSelector.vue").default>
   'LazyNuxtWelcome': LazyComponent<typeof import("../../node_modules/nuxt/dist/app/components/welcome.vue").default>

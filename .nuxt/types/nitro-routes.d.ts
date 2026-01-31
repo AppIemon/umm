@@ -39,6 +39,9 @@ declare module "nitropack/types" {
       'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/index.get').default>>>>
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/maps/index.post').default>>>>
     }
+    '/api/rooms/:id/chat': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/chat.post').default>>>>
+    }
     '/api/rooms/:id/start': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/start.post').default>>>>
     }

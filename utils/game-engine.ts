@@ -2726,8 +2726,8 @@ export class GameEngine {
     effectiveHeight = Math.max(effectiveHeight, minHitboxSize);
     // Hitbox Reduction (Forgiveness)
     // 히트박스를 시각적 크기보다 약간 작게 만들어 판정을 관대하게 함
-    const hitboxReduction = 4; // Total reduction (2px per side)
-    const planetReduction = 10; // More reduction for planets (circular shapes often feel wider)
+    const hitboxReduction = 0; // Total reduction (2px per side)
+    const planetReduction = 0; // More reduction for planets (circular shapes often feel wider)
 
     let reduction = hitboxReduction;
     if (obs.type === 'planet' || obs.type === 'star') reduction = planetReduction;

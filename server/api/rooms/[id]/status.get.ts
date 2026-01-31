@@ -33,7 +33,9 @@ export default defineEventHandler(async (event) => {
       maxPlayers: room.maxPlayers,
       players: room.players,
       hostId: room.hostId,
-      map: room.map // Will be null until generated
+      map: room.map, // Will be null until generated
+      duration: room.duration,
+      messages: room.messages
     }
   }
 })
