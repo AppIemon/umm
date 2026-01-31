@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3edc6-fsHrA3nwvmS7rUjMEp3WpJ3D71g\"",
-    "mtime": "2026-01-31T03:37:53.476Z",
-    "size": 257478,
+    "etag": "\"3e904-MJMWoK0zj8tL+gHTcc643h1ACAM\"",
+    "mtime": "2026-01-31T03:38:01.435Z",
+    "size": 256260,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f1629-SGYFBVJkWId0XbEmKlV2TC7kDjI\"",
-    "mtime": "2026-01-31T03:37:53.478Z",
-    "size": 988713,
+    "etag": "\"f0428-D/gdyWXIyBIn+IXRq4LsJUsBdZM\"",
+    "mtime": "2026-01-31T03:38:01.465Z",
+    "size": 984104,
     "path": "index.mjs.map"
   }
 };
@@ -5236,10 +5236,6 @@ class GameEngine {
     const seed = fixedSeed || beatTimes.length * 777 + Math.floor(duration * 100);
     this.obstacles = [];
     this.portals = [];
-    if (resumeOptions) {
-      console.log(`[MapGen] Resuming generation from time ${resumeOptions.time.toFixed(2)}s`);
-    }
-    this.beatTimes = beatTimes || [];
     this.beatTimes = beatTimes || [];
     this.trackDuration = duration;
     this.totalLength = duration * this.baseSpeed + 2e3;
@@ -5254,12 +5250,10 @@ class GameEngine {
     if (resumeOptions) {
       const point = this.autoplayLog.find((p) => p.time >= resumeOptions.time);
       if (point) startX = point.x;
-      const keepX = startX;
-      this.obstacles = resumeOptions.obstacles.filter((o) => o.x + o.width <= keepX);
-      this.portals = resumeOptions.portals.filter((p) => p.x + p.width <= keepX);
-    } else {
-      this.obstacles = [];
-      this.portals = [];
+      const oldObstacles = resumeOptions.obstacles.filter((o) => o.x + o.width <= startX);
+      const oldPortals = resumeOptions.portals.filter((p) => p.x + p.width <= startX);
+      this.obstacles = [...oldObstacles, ...this.obstacles];
+      this.portals = [...oldPortals, ...this.portals];
     }
     let pathForGen = this.autoplayLog;
     if (resumeOptions && startX > 0) {
@@ -5293,7 +5287,7 @@ class GameEngine {
     }
     this.obstacles.sort((a, b) => a.x - b.x);
     this.portals.sort((a, b) => a.x - b.x);
-    console.log(`[MapGen] Generated ${this.obstacles.length} obstacles, ${this.portals.length} portals from path`);
+    console.log(`[MapGen] Generated ${this.obstacles.length} obstacles, ${this.portals.length} portals total`);
   }
   /**
    * 동선 기반 맵 생성

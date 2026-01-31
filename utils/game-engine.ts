@@ -721,28 +721,11 @@ export class GameEngine {
     this.measureLength = measureLength;
     const seed = fixedSeed || (beatTimes.length * 777 + Math.floor(duration * 100));
 
-    // Use MapGenerator for procedural generation
-    // Use MapGenerator for procedural generation
+    // 1. Clear current state before generation
     this.obstacles = [];
     this.portals = [];
 
-    // Resume Logic: Restore previous parts
-    if (resumeOptions) {
-      console.log(`[MapGen] Resuming generation from time ${resumeOptions.time.toFixed(2)}s`);
-      // Restore obstacles and portals before the cut-off time (approximate X check)
-      // Since we don't have direct Time-to-X mapping for obstacles easily without log, we assume X ~ Speed * Time
-      // But simpler: We trust the caller passed the correct cutoff.
-      // Actually, obstacles X position is absolute.
-      // We need to know the X corresponding to resumeOptions.time.
-      // Let's approximate X using baseSpeed. Accurate enough for filtering.
-      // Better: The caller should pass the Cutoff X if possible, but Time is what we have for logic.
-      // We will clear this list and let 'generatePathBasedMap' and 'generateFromPath' handle filling?
-      // No, generateFromPath generates full list.
-      // We must Keep them here, and tell generateFromPath to START from resumeX.
-    }
-
-    this.beatTimes = beatTimes || []; // Store beat times
-    this.beatTimes = beatTimes || []; // Store beat times
+    this.beatTimes = beatTimes || [];
     this.trackDuration = duration;
     this.totalLength = duration * this.baseSpeed + 2000;
     this.autoplayLog = [];
@@ -754,48 +737,35 @@ export class GameEngine {
 
     const rng = this.seededRandom(seed + offsetAttempt);
 
-    // 1. Generate path (autoplayLog) based on beats (Simulation)
-    // generatePathBasedMap creates autoplayLog internally and returns state events
+    // 2. Generate path (autoplayLog) based on beats
+    // generatePathBasedMap returns state events and populates this.portals with portals for the NEW part
     const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeOptions);
-    this.lastStateEvents = stateEvents; // Save for next resume
+    this.lastStateEvents = stateEvents;
 
-    // Calculate Resume X based on resumeTime if exists
+    // Calculate Resume X if applicable
     let startX = 0;
     if (resumeOptions) {
-      // Find X at resumeTime from new autoplayLog
       const point = this.autoplayLog.find(p => p.time >= resumeOptions.time);
       if (point) startX = point.x;
 
-      // Restore obstacles/portals before startX
-      // Standardize keepX to avoid gaps at the seam.
-      const keepX = startX;
+      // Restore obstacles and portals from BEFORE the resume point
+      const oldObstacles = resumeOptions.obstacles.filter(o => o.x + o.width <= startX);
+      const oldPortals = resumeOptions.portals.filter(p => p.x + p.width <= startX);
 
-      this.obstacles = resumeOptions.obstacles.filter(o => o.x + o.width <= keepX);
-      this.portals = resumeOptions.portals.filter(p => p.x + p.width <= keepX);
-
-      // Also restore MapGenerator internal state? 
-      // MapGenerator is stateless per call usually.
-      // We just need to tell it to generate AFTER startX.
-    } else {
-      this.obstacles = [];
-      this.portals = [];
+      this.obstacles = [...oldObstacles, ...this.obstacles];
+      this.portals = [...oldPortals, ...this.portals];
     }
 
-    // 2. Generate Terrain & Obstacles along the path
-    // Pass stateEvents so MapGenerator knows when mini mode is active
-    // We filter autoplayLog to only include points >= startX (or passed to generator?)
-    // MapGenerator.generateFromPath starts from path[0].
-
+    // 3. Generate Terrain & Obstacles along the path
     let pathForGen = this.autoplayLog;
     if (resumeOptions && startX > 0) {
-      pathForGen = this.autoplayLog.filter(p => p.x >= startX); // Perfect seam alignment 
+      pathForGen = this.autoplayLog.filter(p => p.x >= startX);
     }
 
     const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
 
-    // 3. Convert MapObjects to Obstacles
+    // 4. Convert MapObjects to Obstacles/Portals
     for (const obj of mapObjects) {
-      // MapObject now uses absolute coordinates (generated from path)
       if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'].includes(obj.type)) {
         this.portals.push({
           x: obj.x,
@@ -824,7 +794,7 @@ export class GameEngine {
     this.obstacles.sort((a, b) => a.x - b.x);
     this.portals.sort((a, b) => a.x - b.x);
 
-    console.log(`[MapGen] Generated ${this.obstacles.length} obstacles, ${this.portals.length} portals from path`);
+    console.log(`[MapGen] Generated ${this.obstacles.length} obstacles, ${this.portals.length} portals total`);
   }
 
   /**
