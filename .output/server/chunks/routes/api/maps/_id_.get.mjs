@@ -20,31 +20,43 @@ const _id__get = defineEventHandler(async (event) => {
     });
   }
   const mapObj = map.toObject();
+  const roundNum = (num, precision = 1) => {
+    if (typeof num !== "number" || isNaN(num)) return 0;
+    const factor = Math.pow(10, precision);
+    return Math.round(num * factor) / factor;
+  };
+  const optimizeObstacles = (obs) => {
+    if (!Array.isArray(obs)) return [];
+    return obs.map((o) => ({
+      ...o,
+      x: roundNum(o.x),
+      y: roundNum(o.y),
+      width: roundNum(o.width),
+      height: roundNum(o.height)
+    }));
+  };
+  const optimizeLog = (log) => {
+    if (!Array.isArray(log) || log.length === 0) return [];
+    return log.map((p) => ({
+      ...p,
+      x: roundNum(p.x),
+      y: roundNum(p.y),
+      time: roundNum(p.time, 3)
+    }));
+  };
   if (mapObj.audioUrl && mapObj.audioUrl.length > 5) {
-    mapObj.audioData = mapObj.audioUrl;
     delete mapObj.audioContentId;
     delete mapObj.audioChunks;
-  } else if (mapObj.audioContentId) {
-    const ac = mapObj.audioContentId;
-    if (ac.chunks && ac.chunks.length > 0) {
-      const validChunks = ac.chunks.filter((c) => c !== null).map((c) => {
-        if (Buffer.isBuffer(c)) return c;
-        if (c && typeof c === "object" && c.buffer && Buffer.isBuffer(c.buffer)) return c.buffer;
-        if (c && c.buffer instanceof ArrayBuffer) return Buffer.from(c.buffer);
-        try {
-          return Buffer.from(c);
-        } catch (e) {
-          console.warn("Failed to convert chunk to Buffer:", c);
-          return Buffer.alloc(0);
-        }
-      });
-      const buffer = Buffer.concat(validChunks);
-      mapObj.audioData = `data:audio/wav;base64,${buffer.toString("base64")}`;
-    }
+    delete mapObj.audioData;
+  } else if (mapObj.audioContentId || mapObj.audioChunks && mapObj.audioChunks.length > 0 || mapObj.audioData && mapObj.audioData.length > 100) {
+    mapObj.audioUrl = `/api/maps/${id}/audio`;
     delete mapObj.audioContentId;
-  } else if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
-    mapObj.audioData = mapObj.audioChunks.join("");
+    delete mapObj.audioChunks;
+    delete mapObj.audioData;
   }
+  if (mapObj.engineObstacles) mapObj.engineObstacles = optimizeObstacles(mapObj.engineObstacles);
+  if (mapObj.enginePortals) mapObj.enginePortals = optimizeObstacles(mapObj.enginePortals);
+  if (mapObj.autoplayLog) mapObj.autoplayLog = optimizeLog(mapObj.autoplayLog);
   delete mapObj.audioChunks;
   return mapObj;
 });

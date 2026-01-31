@@ -550,7 +550,7 @@ const top3Players = computed(() => {
     if ((b.clearCount || 0) !== (a.clearCount || 0)) {
       return (b.clearCount || 0) - (a.clearCount || 0);
     }
-    return b.progress - a.progress;
+    return b.maxProgress - a.maxProgress;
   }).slice(0, 3);
 });
 
@@ -559,7 +559,7 @@ const sortedPlayers = computed(() => {
     if ((b.clearCount || 0) !== (a.clearCount || 0)) {
       return (b.clearCount || 0) - (a.clearCount || 0);
     }
-    return b.progress - a.progress;
+    return b.maxProgress - a.maxProgress;
   });
 });
 

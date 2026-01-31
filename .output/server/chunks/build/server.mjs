@@ -1,5 +1,5 @@
 import process from 'node:process';globalThis._importMeta_=globalThis._importMeta_||{url:"file:///_entry.js",env:process.env};import { toRef, isRef, hasInjectionContext, getCurrentInstance, defineAsyncComponent, defineComponent, h, inject, computed, unref, shallowRef, provide, shallowReactive, createElementBlock, ref, Suspense, Fragment, cloneVNode, useSSRContext, createApp, withCtx, createVNode, onErrorCaptured, onServerPrefetch, resolveDynamicComponent, reactive, effectScope, isReadonly, isShallow, isReactive, toRaw, nextTick, mergeProps, getCurrentScope } from 'vue';
-import { w as hasProtocol, x as isScriptProtocol, y as joinURL, z as withQuery, A as sanitizeStatusCode, B as getContext, $ as $fetch$1, C as createHooks, D as executeAsync, e as createError$1 } from '../_/nitro.mjs';
+import { y as hasProtocol, z as isScriptProtocol, A as joinURL, B as withQuery, C as sanitizeStatusCode, D as getContext, $ as $fetch$1, E as createHooks, F as executeAsync, e as createError$1 } from '../_/nitro.mjs';
 import { b as baseURL } from '../routes/renderer.mjs';
 import { useRouter as useRouter$1, useRoute as useRoute$1, RouterView, createMemoryHistory, createRouter, START_LOCATION } from 'vue-router';
 import { ssrRenderComponent, ssrRenderSuspense, ssrRenderVNode } from 'vue/server-renderer';
@@ -379,18 +379,18 @@ const _routes = [
   {
     name: "maps",
     path: "/maps",
-    component: () => import('./maps-CUEYm6WX.mjs')
+    component: () => import('./maps-RKj1XaTK.mjs')
   },
   {
     name: "play",
     path: "/play",
     meta: __nuxt_page_meta || {},
-    component: () => import('./play-DM148mtf.mjs')
+    component: () => import('./play-D46757xs.mjs')
   },
   {
     name: "guide",
     path: "/guide",
-    component: () => import('./guide-DWWsmAcZ.mjs')
+    component: () => import('./guide-DqFBhWiB.mjs')
   },
   {
     name: "index",
@@ -405,7 +405,7 @@ const _routes = [
   {
     name: "editor",
     path: "/editor",
-    component: () => import('./editor-CsrgrzB5.mjs')
+    component: () => import('./editor-XC9zF8IC.mjs')
   },
   {
     name: "mypage",
@@ -425,7 +425,7 @@ const _routes = [
   {
     name: "multiplayer",
     path: "/multiplayer",
-    component: () => import('./multiplayer-ez-yj-ug.mjs')
+    component: () => import('./multiplayer-BAXdUjhP.mjs')
   }
 ];
 const _wrapInTransition = (props, children) => {
@@ -755,7 +755,7 @@ const plugins = [
   components_plugin_4kY4pyzJIYX99vmMAAIorFf3CnAaptHitJgf7JxiED8
 ];
 const layouts = {
-  default: defineAsyncComponent(() => import('./default-StgJMAOu.mjs').then((m) => m.default || m)),
+  default: defineAsyncComponent(() => import('./default-DROZG8ze.mjs').then((m) => m.default || m)),
   game: defineAsyncComponent(() => import('./game-CvSZ2mdS.mjs').then((m) => m.default || m))
 };
 const LayoutLoader = defineComponent({
@@ -1069,7 +1069,8 @@ const useAuth = () => {
       user.value = userData;
       router.push("/guide");
     } catch (error) {
-      alert(error.statusMessage || "Registration failed");
+      const errorMessage = error.data?.data?.message || error.data?.statusMessage || error.statusMessage || "Registration failed";
+      alert(errorMessage);
     }
   };
   const updateRating = async (newRating, record) => {
@@ -1238,5 +1239,5 @@ let entry;
 }
 const entry_default = (ssrContext) => entry(ssrContext);
 
-export { useAuth as a, useRouter as b, useRuntimeConfig as c, nuxtLinkDefaults as d, entry_default as default, navigateTo as n, resolveRouteObject as r, useNuxtApp as u };
+export { useAuth as a, useRouter as b, useRuntimeConfig as c, nuxtLinkDefaults as d, entry_default as default, useState as e, navigateTo as n, resolveRouteObject as r, useNuxtApp as u };
 //# sourceMappingURL=server.mjs.map

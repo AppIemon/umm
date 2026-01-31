@@ -20,6 +20,7 @@ export interface IRoom extends Document {
     isHost: boolean
     isReady: boolean
     progress: number
+    maxProgress: number
     y: number
     clearCount: number
     lastSeen: Date
@@ -55,6 +56,7 @@ const roomSchema = new mongoose.Schema<IRoom>({
     isHost: { type: Boolean, default: false },
     isReady: { type: Boolean, default: false },
     progress: { type: Number, default: 0 },
+    maxProgress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
     clearCount: { type: Number, default: 0 },
     lastSeen: { type: Date, default: Date.now }

@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"408b2-1kFIRbcpCUKKy/lFFrqXjryhTYI\"",
-    "mtime": "2026-01-31T07:04:53.129Z",
-    "size": 264370,
+    "etag": "\"40a95-a2j3srt7aT3OPUJE3RXQtbj3zkM\"",
+    "mtime": "2026-01-31T07:12:15.496Z",
+    "size": 264853,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f7c01-19lB4RywRZPTPO+jswPwSkgGJLU\"",
-    "mtime": "2026-01-31T07:04:53.132Z",
-    "size": 1014785,
+    "etag": "\"f8307-Jt1+SKn0o5OOyat/X39FPvUBy+A\"",
+    "mtime": "2026-01-31T07:12:15.507Z",
+    "size": 1016583,
     "path": "index.mjs.map"
   }
 };
@@ -3512,6 +3512,7 @@ const roomSchema = new mongoose.Schema({
     isHost: { type: Boolean, default: false },
     isReady: { type: Boolean, default: false },
     progress: { type: Number, default: 0 },
+    maxProgress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
     clearCount: { type: Number, default: 0 },
     lastSeen: { type: Date, default: Date.now }
@@ -3682,6 +3683,7 @@ const start_post = defineEventHandler(async (event) => {
           status: "playing",
           startedAt: /* @__PURE__ */ new Date(),
           "players.$[].progress": 0,
+          "players.$[].maxProgress": 0,
           "players.$[].isReady": false
         }
       },
@@ -3773,12 +3775,18 @@ const update_post = defineEventHandler(async (event) => {
   const updateData = {
     "players.$.lastSeen": /* @__PURE__ */ new Date()
   };
-  if (progress !== void 0) updateData["players.$.progress"] = progress;
+  if (progress !== void 0) {
+    updateData["players.$.progress"] = progress;
+  }
   if (y !== void 0) updateData["players.$.y"] = y;
   if (isReady !== void 0) updateData["players.$.isReady"] = isReady;
+  const updateOp = { $set: updateData };
+  if (progress !== void 0) {
+    updateOp["$max"] = { "players.$.maxProgress": progress };
+  }
   await Room.updateOne(
     { _id: roomId, "players.userId": userId },
-    { $set: updateData }
+    updateOp
   );
   return { success: true };
 });

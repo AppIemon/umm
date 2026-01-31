@@ -1,4 +1,4 @@
-import { c as defineEventHandler, k as getQuery, e as createError, l as setResponseHeader } from '../../_/nitro.mjs';
+import { c as defineEventHandler, m as getQuery, e as createError, n as setResponseHeader } from '../../_/nitro.mjs';
 import 'node:http';
 import 'node:https';
 import 'node:events';

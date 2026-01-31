@@ -10,13 +10,25 @@ export default defineEventHandler(async (event) => {
     'players.$.lastSeen': new Date()
   }
 
-  if (progress !== undefined) updateData['players.$.progress'] = progress
+  if (progress !== undefined) {
+    updateData['players.$.progress'] = progress;
+    // We can't conditionally set maxProgress based on value in a single updateOne without pipeline or finding first.
+    // However, Mongo's $max operator is perfect for this! 
+    // Wait, updateOne with $set AND $max on same doc works fine.
+    // players.$.maxProgress vs progress.
+  }
   if (y !== undefined) updateData['players.$.y'] = y
   if (isReady !== undefined) updateData['players.$.isReady'] = isReady
 
+  const updateOp: any = { $set: updateData };
+  if (progress !== undefined) {
+    // Use $max for maxProgress
+    updateOp['$max'] = { 'players.$.maxProgress': progress };
+  }
+
   await Room.updateOne(
     { _id: roomId, 'players.userId': userId },
-    { $set: updateData }
+    updateOp
   )
 
   return { success: true }

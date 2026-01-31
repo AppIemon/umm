@@ -1,4 +1,4 @@
-import { c as defineEventHandler, k as getQuery, f as connectDB, e as createError, i as getCookie } from '../../_/nitro.mjs';
+import { c as defineEventHandler, m as getQuery, f as connectDB, e as createError, i as getCookie } from '../../_/nitro.mjs';
 import { G as GameMap } from '../../_/Map.mjs';
 import { S as Score } from '../../_/Score.mjs';
 import 'node:http';

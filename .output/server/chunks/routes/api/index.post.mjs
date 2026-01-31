@@ -47,6 +47,17 @@ const index_post = defineEventHandler(async (event) => {
         let ext = ".wav";
         if (mimeType.includes("mpeg") || mimeType.includes("mp3")) ext = ".mp3";
         else if (mimeType.includes("ogg")) ext = ".ogg";
+        const isVercel = !!process.env.VERCEL;
+        if (isVercel) {
+          throw createError({
+            statusCode: 403,
+            statusMessage: "MUSIC_NOT_IN_SERVER",
+            data: {
+              guide: "\uC774 \uACE1\uC740 \uC544\uC9C1 \uC11C\uBC84(GitHub)\uC5D0 \uB4F1\uB85D\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uAD00\uB9AC\uC790\uC5D0\uAC8C \uACE1 \uCD94\uAC00\uB97C \uC694\uCCAD\uD574\uC8FC\uC138\uC694!",
+              contact: "https://open.kakao.com/o/sPXMJgUg"
+            }
+          });
+        }
         const filename = `${hash}${ext}`;
         const musicDir = path.join(process.cwd(), "public", "music");
         if (!fs.existsSync(musicDir)) {
@@ -77,41 +88,54 @@ const index_post = defineEventHandler(async (event) => {
     };
     const optimizeObstacles = (obs) => {
       if (!Array.isArray(obs)) return [];
-      return obs.map((o) => ({
-        ...o,
-        x: round(o.x),
-        y: round(o.y),
-        width: round(o.width),
-        height: round(o.height)
-      }));
+      return obs.map((o) => {
+        const optimized = {
+          type: o.type,
+          x: round(o.x),
+          y: round(o.y)
+        };
+        if (o.width && round(o.width) !== 50) optimized.width = round(o.width);
+        if (o.height && round(o.height) !== 50) optimized.height = round(o.height);
+        if (o.angle && round(o.angle) !== 0) optimized.angle = round(o.angle);
+        if (o.movement && o.movement.type !== "none") {
+          optimized.movement = {
+            type: o.movement.type,
+            range: round(o.movement.range || 0),
+            speed: round(o.movement.speed || 0),
+            phase: round(o.movement.phase || 0)
+          };
+        }
+        if (o.initialY !== void 0 && round(o.initialY) !== round(o.y)) {
+          optimized.initialY = round(o.initialY);
+        }
+        if (o.children && Array.isArray(o.children) && o.children.length > 0) {
+          optimized.children = optimizeObstacles(o.children);
+        }
+        return optimized;
+      });
     };
     const optimizeLog = (log) => {
       if (!log || !Array.isArray(log) || log.length === 0) return [];
       const optimized = [];
-      let last = log[0];
-      if (!last || typeof last.x !== "number") return [];
-      let lastPoint = { ...last, x: round(last.x), y: round(last.y), time: round(last.time, 3) };
-      optimized.push(lastPoint);
+      let lastPoint = log[0];
+      optimized.push(round(lastPoint.x), round(lastPoint.y), lastPoint.holding ? 1 : 0, round(lastPoint.time, 3));
       for (let i = 1; i < log.length; i++) {
         const curr = log[i];
         if (!curr) continue;
-        if (curr.holding !== last.holding) {
-          const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
-          optimized.push(p);
-          last = curr;
-          lastPoint = p;
-          continue;
-        }
-        const distSq = Math.pow(curr.x - last.x, 2) + Math.pow(curr.y - last.y, 2);
-        if (distSq > 900) {
-          const p = { ...curr, x: round(curr.x), y: round(curr.y), time: round(curr.time, 3) };
-          optimized.push(p);
-          last = curr;
-          lastPoint = p;
+        const inputChanged = curr.holding !== lastPoint.holding;
+        const distSq = Math.pow(curr.x - lastPoint.x, 2) + Math.pow(curr.y - lastPoint.y, 2);
+        if (inputChanged || distSq > 1600) {
+          optimized.push(round(curr.x), round(curr.y), curr.holding ? 1 : 0, round(curr.time, 3));
+          lastPoint = curr;
         }
       }
       return optimized;
     };
+    let audioContentIdToSet = null;
+    if (finalAudioUrl && finalAudioUrl.startsWith("audioContentId:")) {
+      audioContentIdToSet = finalAudioUrl.split(":")[1];
+      finalAudioUrl = null;
+    }
     const mapData = {
       title,
       creator: user._id,
@@ -121,8 +145,7 @@ const index_post = defineEventHandler(async (event) => {
       // Clear Base64 data to save space
       audioChunks: [],
       // Clear chunks to save space
-      audioContentId: null,
-      // No longer using AudioContent for new maps
+      audioContentId: audioContentIdToSet,
       difficulty,
       seed: seed || 0,
       beatTimes: beatTimes || [],

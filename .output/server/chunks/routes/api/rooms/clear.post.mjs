@@ -12,22 +12,23 @@ import 'node:url';
 
 const clear_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { matchId, userId } = body;
-  if (!matchId || !userId) {
-    throw createError({ statusCode: 400, statusMessage: "Missing matchId (roomId) or userId" });
+  const { roomId, matchId, userId } = body;
+  const id = roomId || matchId;
+  if (!id || !userId) {
+    throw createError({ statusCode: 400, statusMessage: "Missing roomId or userId" });
   }
-  const room = await Room.findById(matchId);
-  if (!room) {
-    throw createError({ statusCode: 404, statusMessage: "Room not found" });
+  const result = await Room.updateOne(
+    { _id: id, "players.userId": userId },
+    {
+      $inc: { "players.$.clearCount": 1 },
+      $set: { "players.$.lastSeen": /* @__PURE__ */ new Date() }
+    }
+  );
+  if (result.matchedCount === 0) {
+    throw createError({ statusCode: 404, statusMessage: "Room or Player not found" });
   }
-  const player = room.players.find((p) => p.userId === userId);
-  if (!player) {
-    throw createError({ statusCode: 404, statusMessage: "Player not found in room" });
-  }
-  player.clearCount = (player.clearCount || 0) + 1;
-  player.lastSeen = /* @__PURE__ */ new Date();
-  await room.save();
-  return { success: true, clearCount: player.clearCount };
+  console.log(`[Clear] Player ${userId} win recorded in room ${id}`);
+  return { success: true };
 });
 
 export { clear_post as default };

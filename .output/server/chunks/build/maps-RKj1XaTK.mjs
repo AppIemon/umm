@@ -1,0 +1,131 @@
+import { defineComponent, ref, computed, watch, mergeProps, useSSRContext } from 'vue';
+import { ssrRenderAttrs, ssrRenderClass, ssrRenderList, ssrRenderStyle, ssrInterpolate, ssrRenderAttr } from 'vue/server-renderer';
+import { a as useAuth } from './server.mjs';
+import { useRouter } from 'vue-router';
+import { _ as _export_sfc } from './_plugin-vue_export-helper-1tPrXgE0.mjs';
+import '../_/nitro.mjs';
+import 'node:http';
+import 'node:https';
+import 'node:events';
+import 'node:buffer';
+import 'node:fs';
+import 'node:path';
+import 'node:crypto';
+import 'mongoose';
+import 'node:url';
+import '../routes/renderer.mjs';
+import 'vue-bundle-renderer/runtime';
+import 'unhead/server';
+import 'devalue';
+import 'unhead/utils';
+
+const _sfc_main = /* @__PURE__ */ defineComponent({
+  __name: "maps",
+  __ssrInlineRender: true,
+  setup(__props) {
+    const { user } = useAuth();
+    useRouter();
+    const currentTab = ref("my");
+    const maps2 = ref([]);
+    const loading = ref(true);
+    const renamingMap = ref(null);
+    const newTitle = ref("");
+    const ratingMap = ref(null);
+    const newRating = ref(15);
+    const fetchMaps = async () => {
+      loading.value = true;
+      try {
+        const creator = currentTab.value === "my" ? user.value?.username || "Guest" : void 0;
+        const shared = currentTab.value === "shared" ? "true" : void 0;
+        maps2.value = await $fetch("/api/maps", {
+          query: { creator, shared }
+        });
+      } catch (e) {
+        console.error("Fetch maps error:", e);
+      } finally {
+        loading.value = false;
+      }
+    };
+    const filteredMaps = computed(() => maps2.value);
+    const getDiffColor = (d) => {
+      if (d < 8) return "#00ff88";
+      if (d < 16) return "#ffff00";
+      if (d < 24) return "#ff8800";
+      return "#ff4444";
+    };
+    watch(currentTab, fetchMaps);
+    return (_ctx, _push, _parent, _attrs) => {
+      _push(`<div${ssrRenderAttrs(mergeProps({ class: "maps-page" }, _attrs))} data-v-f2959a4b><div class="background-anim" data-v-f2959a4b></div><div class="container" data-v-f2959a4b><header class="page-header" data-v-f2959a4b><h1 class="title" data-v-f2959a4b>MAP_DATABASE</h1><div class="tabs" data-v-f2959a4b><button class="${ssrRenderClass(["tab-btn", { active: currentTab.value === "my" }])}" data-v-f2959a4b> MY_ENTRIES </button><button class="${ssrRenderClass(["tab-btn", { active: currentTab.value === "shared" }])}" data-v-f2959a4b> GLOBAL_UPLOADS </button></div></header>`);
+      if (!loading.value) {
+        _push(`<div class="map-grid" data-v-f2959a4b><!--[-->`);
+        ssrRenderList(filteredMaps.value, (map) => {
+          _push(`<div class="${ssrRenderClass(["map-card", { "is-verified": map.isVerified }])}" data-v-f2959a4b><div class="card-header" data-v-f2959a4b><span class="diff-tag" style="${ssrRenderStyle({ color: getDiffColor(map.difficulty) })}" data-v-f2959a4b> DIFF: ${ssrInterpolate(map.difficulty)}</span>`);
+          if (map.isVerified) {
+            _push(`<span class="verified-tag" data-v-f2959a4b>✓ VERIFIED</span>`);
+          } else {
+            _push(`<!---->`);
+          }
+          if (map.rating > 0) {
+            _push(`<span class="rating-tag" data-v-f2959a4b> RATE: ★${ssrInterpolate(map.rating.toFixed(1))}</span>`);
+          } else {
+            _push(`<span class="rating-tag empty" data-v-f2959a4b> RATE: - </span>`);
+          }
+          _push(`<span class="date" data-v-f2959a4b>${ssrInterpolate(new Date(map.createdAt).toLocaleDateString())}</span></div><h3 class="map-title" data-v-f2959a4b>${ssrInterpolate(map.title)} `);
+          if (map.isVerified) {
+            _push(`<span class="verified-icon" title="Verified Map" data-v-f2959a4b>✓</span>`);
+          } else {
+            _push(`<!---->`);
+          }
+          _push(`</h3><div class="map-info" data-v-f2959a4b><span class="creator" data-v-f2959a4b>BY: ${ssrInterpolate(map.creatorName)}</span><span class="duration" data-v-f2959a4b>${ssrInterpolate(Math.floor(map.duration))}s</span>`);
+          if (map.myBestProgress !== void 0) {
+            _push(`<span class="my-progress" data-v-f2959a4b>MY: ${ssrInterpolate(Math.floor(map.myBestProgress))}%</span>`);
+          } else {
+            _push(`<!---->`);
+          }
+          _push(`</div><div class="actions" data-v-f2959a4b><button class="action-btn play" data-v-f2959a4b>PLAY</button>`);
+          if (currentTab.value === "my") {
+            _push(`<!--[--><button class="action-btn edit" data-v-f2959a4b>EDIT</button><button class="action-btn rename" data-v-f2959a4b>RENAME</button><button class="action-btn share" data-v-f2959a4b>${ssrInterpolate(map.isShared ? "PRIVATE" : "SHARE")}</button><button class="action-btn delete" data-v-f2959a4b>DEL</button><!--]-->`);
+          } else {
+            _push(`<!---->`);
+          }
+          if (currentTab.value === "shared" && map.isVerified) {
+            _push(`<button class="action-btn rate" data-v-f2959a4b>RATE</button>`);
+          } else {
+            _push(`<!---->`);
+          }
+          _push(`</div></div>`);
+        });
+        _push(`<!--]-->`);
+        if (renamingMap.value) {
+          _push(`<div class="rename-modal" data-v-f2959a4b><div class="modal-content glass-panel" data-v-f2959a4b><h3 data-v-f2959a4b>RENAME_ENTRY</h3><input${ssrRenderAttr("value", newTitle.value)} placeholder="Enter new title..." data-v-f2959a4b><div class="modal-actions" data-v-f2959a4b><button class="confirm" data-v-f2959a4b>CONFIRM</button><button class="cancel" data-v-f2959a4b>CANCEL</button></div></div></div>`);
+        } else {
+          _push(`<!---->`);
+        }
+        if (ratingMap.value) {
+          _push(`<div class="rename-modal" data-v-f2959a4b><div class="modal-content glass-panel" data-v-f2959a4b><h3 data-v-f2959a4b>RATE_MAP</h3><p class="rating-info" data-v-f2959a4b>${ssrInterpolate(ratingMap.value.title)}</p><div class="rating-slider-container" data-v-f2959a4b><input type="range" min="1" max="30"${ssrRenderAttr("value", newRating.value)} class="rating-slider" data-v-f2959a4b><span class="rating-value" style="${ssrRenderStyle({ color: getDiffColor(newRating.value) })}" data-v-f2959a4b>${ssrInterpolate(newRating.value)}</span></div><div class="modal-actions" data-v-f2959a4b><button class="confirm" data-v-f2959a4b>SUBMIT</button><button class="cancel" data-v-f2959a4b>CANCEL</button></div></div></div>`);
+        } else {
+          _push(`<!---->`);
+        }
+        if (filteredMaps.value.length === 0) {
+          _push(`<div class="empty-state" data-v-f2959a4b> NO DATA FOUND IN THIS SECTOR </div>`);
+        } else {
+          _push(`<!---->`);
+        }
+        _push(`</div>`);
+      } else {
+        _push(`<div class="loading-state" data-v-f2959a4b> ACCESSING DATABASE... </div>`);
+      }
+      _push(`</div></div>`);
+    };
+  }
+});
+const _sfc_setup = _sfc_main.setup;
+_sfc_main.setup = (props, ctx) => {
+  const ssrContext = useSSRContext();
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("pages/maps.vue");
+  return _sfc_setup ? _sfc_setup(props, ctx) : void 0;
+};
+const maps = /* @__PURE__ */ _export_sfc(_sfc_main, [["__scopeId", "data-v-f2959a4b"]]);
+
+export { maps as default };
+//# sourceMappingURL=maps-RKj1XaTK.mjs.map

@@ -58,9 +58,23 @@ const register_post = defineEventHandler(async (event) => {
     return userData;
   } catch (error) {
     console.error("Registration Error:", error);
+    if (error.name === "ValidationError") {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Validation Error",
+        data: { message: error.message }
+      });
+    }
+    if (error.code === 11e3) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: "Username already exists"
+      });
+    }
     throw createError({
       statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || "Failed to create entity"
+      statusMessage: error.statusMessage || error.message || "Failed to create entity",
+      data: { error: error.message }
     });
   }
 });

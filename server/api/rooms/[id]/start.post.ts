@@ -88,6 +88,7 @@ export default defineEventHandler(async (event) => {
           status: 'playing',
           startedAt: new Date(),
           'players.$[].progress': 0,
+          'players.$[].maxProgress': 0,
           'players.$[].isReady': false
         }
       },

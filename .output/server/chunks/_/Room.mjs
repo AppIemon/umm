@@ -6,13 +6,10 @@ const roomSchema = new mongoose.Schema({
   maxPlayers: { type: Number, required: true, min: 2, max: 10 },
   duration: { type: Number, required: true, default: 60 },
   difficulty: { type: Number, required: true, default: 5 },
-  map: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "GameMap",
-    required: false
-    // May not be assigned initially
-  },
-  mapQueue: [{ type: mongoose.Schema.Types.ObjectId, ref: "GameMap" }],
+  musicUrl: { type: String, default: null },
+  musicTitle: { type: String, default: null },
+  map: { type: mongoose.Schema.Types.Mixed, default: null },
+  mapQueue: { type: [mongoose.Schema.Types.Mixed], default: [] },
   players: [{
     userId: { type: String, required: true },
     username: { type: String, required: true },
@@ -20,7 +17,14 @@ const roomSchema = new mongoose.Schema({
     isReady: { type: Boolean, default: false },
     progress: { type: Number, default: 0 },
     y: { type: Number, default: 360 },
+    clearCount: { type: Number, default: 0 },
     lastSeen: { type: Date, default: Date.now }
+  }],
+  messages: [{
+    userId: { type: String, required: true },
+    username: { type: String, required: true },
+    text: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now }
   }],
   status: {
     type: String,
@@ -28,6 +32,7 @@ const roomSchema = new mongoose.Schema({
     default: "waiting"
   },
   winner: { type: String, default: null },
+  startedAt: { type: Date, default: null },
   createdAt: {
     type: Date,
     default: Date.now,

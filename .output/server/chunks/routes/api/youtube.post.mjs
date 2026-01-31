@@ -1,4 +1,4 @@
-import { c as defineEventHandler, r as readBody, e as createError, l as setResponseHeader, m as sendStream } from '../../_/nitro.mjs';
+import { c as defineEventHandler, r as readBody, e as createError, n as setResponseHeader, o as sendStream } from '../../_/nitro.mjs';
 import { Readable } from 'stream';
 import 'node:http';
 import 'node:https';
