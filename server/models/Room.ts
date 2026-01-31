@@ -8,6 +8,8 @@ export interface IRoom extends Document {
   maxPlayers: number
   duration: number // Game duration in seconds
   difficulty: number
+  musicUrl?: string
+  musicTitle?: string
 
   map: Types.ObjectId
 
@@ -38,6 +40,8 @@ const roomSchema = new mongoose.Schema<IRoom>({
   maxPlayers: { type: Number, required: true, min: 2, max: 10 },
   duration: { type: Number, required: true, default: 60 },
   difficulty: { type: Number, required: true, default: 5 },
+  musicUrl: { type: String, default: null },
+  musicTitle: { type: String, default: null },
 
   map: {
     type: mongoose.Schema.Types.ObjectId,

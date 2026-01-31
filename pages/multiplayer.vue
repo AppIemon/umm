@@ -57,6 +57,20 @@
            />
            <div class="duration-hint">30s (30sec) ~ 1800s (30min)</div>
          </div>
+
+         <div class="form-group">
+           <label>DIFFICULTY: {{ newRoomDifficulty }}</label>
+           <input type="range" v-model.number="newRoomDifficulty" min="1" max="10" class="range-slider" />
+         </div>
+
+         <div class="form-group">
+            <label>MUSIC</label>
+            <select v-model="newRoomMusic" class="input-field select-field">
+                <option v-for="track in sampleTracks" :key="track.id" :value="track">
+                    {{ track.name }}
+                </option>
+            </select>
+         </div>
        </div>
 
        <div class="action-row">
@@ -70,6 +84,8 @@
       <h2 class="room-header-title">{{ currentRoom?.title }}</h2>
       <div class="room-header-meta">
          <span>TIME: {{ currentRoom?.duration }}s</span>
+         <span>DIFF: {{ currentRoom?.difficulty }}</span>
+         <span>MUSIC: {{ currentRoom?.musicTitle || 'Random' }}</span>
          <span>PLAYERS: {{ currentRoom?.players.length }} / {{ currentRoom?.maxPlayers }}</span>
       </div>
 
@@ -144,6 +160,7 @@
 
       <GameCanvas
         v-if="audioBuffer"
+        :key="currentMapIndex"
         :audioBuffer="audioBuffer"
         :obstacles="obstacles"
         :sections="sections"
@@ -174,11 +191,26 @@ const step = ref<Step>('LOBBY');
 const rooms = ref<any[]>([]);
 const newRoomTitle = ref('New Room');
 const newRoomMaxPlayers = ref(4);
-const newRoomDuration = ref(60);
+const newRoomDuration = ref(120);
+const newRoomDifficulty = ref(5);
+const newRoomMusic = ref<any>(null);
+
+const sampleTracks = [
+  { id: '1', name: "God Chang-seop (신창섭) '바로 리부트 정상화' MV", url: '/audio/samples/God Chang-seop (신창섭) \'바로 리부트 정상화\' MV.mp3' },
+  { id: '2', name: 'I Love You', url: '/audio/samples/I Love You.mp3' },
+  { id: '3', name: 'Nyan Cat! [Official]', url: '/audio/samples/Nyan Cat! [Official].mp3' },
+  { id: 'random', name: 'Random Sample', url: null }
+];
+onMounted(() => {
+    newRoomMusic.value = sampleTracks[3]; // Default Random
+});
 
 // Room State
 const currentRoom = ref<any>(null);
 const currentRoomId = ref<string | null>(null);
+const currentMapIndex = ref(0); // Track progress in stages
+
+
 const playerId = computed(() => user.value?._id || sessionStorage.getItem('umm_player_id') || ('guest_' + Math.random().toString(36).substr(2,9)));
 const playerUsername = computed(() => user.value?.displayName || user.value?.username || 'Guest');
 const isHost = computed(() => currentRoom.value?.hostId === playerId.value);
@@ -248,10 +280,13 @@ async function loadNextMap() {
     
     if (res.map) {
       selectedMap.value = res.map;
-      obstacles.value = res.map.beatTimes || [];
+      currentMapIndex.value = res.mapIndex;
+      obstacles.value = res.map.engineObstacles || [];
       sections.value = res.map.sections || [];
-      bestPlayerProgress.value = 0;
-      playerProgress.value = 0;
+      myProgress.value = 0;
+      // Audio buffer needs update if url changed?
+      // But we are sharing same audio (rounds). Assuming same audio.
+      // If duration changed, GameCanvas handles it via map duration.
     }
   } catch (e) {
     console.error('Failed to load next map', e);
@@ -270,6 +305,17 @@ async function refreshRooms() {
 
 async function createRoom() {
   if (!newRoomTitle.value) return;
+
+  let finalMusicUrl = newRoomMusic.value?.url;
+  let finalMusicTitle = newRoomMusic.value?.name;
+
+  if (!newRoomMusic.value || newRoomMusic.value.id === 'random') {
+    const realTracks = sampleTracks.filter(t => t.id !== 'random');
+    const randomTrack = realTracks[Math.floor(Math.random() * realTracks.length)];
+    finalMusicUrl = randomTrack.url;
+    finalMusicTitle = randomTrack.name;
+  }
+
   try {
     const res: any = await $fetch('/api/rooms/create', {
       method: 'POST',
@@ -278,7 +324,10 @@ async function createRoom() {
         maxPlayers: newRoomMaxPlayers.value,
         duration: newRoomDuration.value,
         userId: playerId.value,
-        username: playerUsername.value
+        username: playerUsername.value,
+        difficulty: newRoomDifficulty.value,
+        musicUrl: finalMusicUrl,
+        musicTitle: finalMusicTitle
       }
     });
     if (res.success) {
@@ -382,11 +431,20 @@ async function enterGame(roomData: any) {
   audioBuffer.value = null; // Reset
   try {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    // Use dummy buffer if no audio url (or system gen map)
-    // System gen maps usually don't have audio uploads yet, so silent buffer
-    const bufferLength = audioCtx.sampleRate * timeRemaining.value;
-    audioBuffer.value = audioCtx.createBuffer(1, bufferLength, audioCtx.sampleRate);
-  } catch (e) {}
+    
+    if (selectedMap.value.audioUrl) {
+      // Decode real audio
+      const response = await fetch(selectedMap.value.audioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffer.value = await audioCtx.decodeAudioData(arrayBuffer);
+    } else {
+      // Use dummy buffer if no audio url (or system gen map)
+      const bufferLength = audioCtx.sampleRate * timeRemaining.value;
+      audioBuffer.value = audioCtx.createBuffer(1, bufferLength, audioCtx.sampleRate);
+    }
+  } catch (e) {
+    console.error("Audio Load Error", e);
+  }
 
   obstacles.value = selectedMap.value.engineObstacles || [];
   // Need to convert objects if they are raw? GameEngine takes specific format?
@@ -413,8 +471,12 @@ function updateMyProgress(data: any) {
 
 function handleRoundFinish(data: any) {
   // Check if player completed the map
-  if (data?.outcome === 'complete' || myProgress.value >= 100) {
+  if (data?.outcome === 'win'/* || myProgress.value >= 100*/) {
     handlePlayerClear();
+    // After clear, load next stage
+    setTimeout(() => {
+       loadNextMap();
+    }, 2000); // 2 seconds delay to show "Complete"
   }
   // If crashed (outcome !== complete), we just respawn or wait.
   // In this mode, GameCanvas might auto-restart or we can just stay.
@@ -538,6 +600,20 @@ const didIWin = computed(() => {
 .form-container { width: 100%; display: flex; flex-direction: column; gap: 1.5rem; max-width: 500px; }
 .form-group { display: flex; flex-direction: column; gap: 0.5rem; text-align: left; }
 .input-field { padding: 1rem; background: rgba(0,0,0,0.5); border: 1px solid #444; color: #fff; border-radius: 8px; font-size: 1.2rem; }
+.select-field {
+  appearance: none;
+  background-color: rgba(0,0,0,0.5);
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1.5em;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+.select-field option {
+  background: #333;
+  color: white;
+}
 .duration-opts { display: flex; gap: 1rem; }
 .duration-opts button { flex: 1; padding: 1rem; background: #222; border: 1px solid #444; color: #888; border-radius: 8px; cursor: pointer; }
 .duration-opts button.active { background: #00ffff; color: #000; font-weight: bold; border-color: #00ffff; }

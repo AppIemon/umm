@@ -22,7 +22,11 @@ export default defineEventHandler(async (event) => {
 
   // If we need a new map (index is beyond current queue)
   if (mapIndex >= room.mapQueue.length) {
-    // Get a random verified map
+    // If we need a new map (index is beyond current queue) -> But we pre-generated all!
+    // So this case should technically not happen if we respect the rounds.
+    // However, if we need to support infinite mode or fallback:
+
+    // Find verified maps?
     const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true })
     if (verifiedCount > 0) {
       const skip = Math.floor(Math.random() * verifiedCount)
@@ -34,35 +38,8 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // Fallback: generate new map
-    const { GameEngine } = await import('~/utils/game-engine')
-    const engine = new GameEngine({ difficulty: 7, density: 1.0, portalFrequency: 0.15 })
-    const duration = 60
-    const seed = `multi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
-    // Pass a numeric seed for procedural generation
-    engine.generateMap([], [], duration, Math.floor(Math.random() * 100000), false, 0, 120, 2.0)
-    // Note: generateMap signature might vary, check GameEngine.ts
-
-    const newMap = await GameMap.create({
-      title: `MULTI_MAP_${Date.now()}`,
-      difficulty: 7,
-      seed,
-      creatorName: 'SYSTEM',
-      creatorId: null,
-      beatTimes: [],
-      sections: [],
-      engineObstacles: engine.obstacles,
-      enginePortals: engine.portals,
-      autoplayLog: engine.autoplayLog,
-      duration,
-      isShared: true,
-      isVerified: true,
-      isAiVerified: true
-    })
-
-    room.mapQueue.push(newMap._id)
-    await room.save()
-    return { map: newMap, mapIndex }
+    // ... Fallback logic if needed, but for now just return null
+    return { map: null, mapIndex }
   }
 
   // Return existing map from queue

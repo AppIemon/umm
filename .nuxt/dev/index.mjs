@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3d4d3-B1gKNpTaN8iiDQvdU0LAnfHilDM\"",
-    "mtime": "2026-01-31T02:31:58.804Z",
-    "size": 251091,
+    "etag": "\"3d430-CLLQCexPTzNA4ZQJaqpHX47ANlY\"",
+    "mtime": "2026-01-31T02:43:12.191Z",
+    "size": 250928,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"eb9be-G3Oo5sGcgctYh06pwFBCjp4tZ6s\"",
-    "mtime": "2026-01-31T02:31:58.807Z",
-    "size": 965054,
+    "etag": "\"eb567-QRxZRD7qS+RndDyjBdzd3wbuH94\"",
+    "mtime": "2026-01-31T02:43:12.194Z",
+    "size": 963943,
     "path": "index.mjs.map"
   }
 };
@@ -3348,6 +3348,8 @@ const roomSchema = new mongoose.Schema({
   maxPlayers: { type: Number, required: true, min: 2, max: 10 },
   duration: { type: Number, required: true, default: 60 },
   difficulty: { type: Number, required: true, default: 5 },
+  musicUrl: { type: String, default: null },
+  musicTitle: { type: String, default: null },
   map: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "GameMap",
@@ -3427,23 +3429,40 @@ const start_post = defineEventHandler(async (event) => {
   if (room.status !== "waiting") {
     return { success: true };
   }
-  const verifiedMapCount = await GameMap.countDocuments({ isShared: true, isVerified: true });
-  let selectedMapId = null;
-  if (verifiedMapCount > 0) {
-    const skip = Math.floor(Math.random() * verifiedMapCount);
-    const m = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip).select("_id");
-    selectedMapId = m == null ? void 0 : m._id;
-  }
-  if (!selectedMapId) {
-    const { GameEngine } = await Promise.resolve().then(function () { return gameEngine; });
-    const engine = new GameEngine({ difficulty: room.difficulty || 5 });
-    const seed = Math.floor(Math.random() * 1e6);
-    engine.generateMap([], [], room.duration || 60, seed, false);
-    const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId);
-    const creatorId = hostIsRegistered ? room.hostId : new mongoose.Types.ObjectId("000000000000000000000000");
-    const hostPlayer = room.players.find((p) => p.isHost);
+  const { GameEngine } = await Promise.resolve().then(function () { return gameEngine; });
+  const engine = new GameEngine({ difficulty: room.difficulty || 5 });
+  const seed = Math.floor(Math.random() * 1e6);
+  const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId);
+  const creatorId = hostIsRegistered ? room.hostId : new mongoose.Types.ObjectId("000000000000000000000000");
+  const hostPlayer = room.players.find((p) => p.isHost);
+  const maxDuration = room.duration || 60;
+  const rounds = [];
+  let startD = 10;
+  for (let d = startD; d <= maxDuration; d += 10) {
+    engine.generateMap([], [], d, seed, false);
     const newMap = await GameMap.create({
-      title: `ROOM_${room.title}`,
+      title: `ROOM_${room.title}_ROUND_${d / 10}`,
+      difficulty: room.difficulty || 5,
+      seed,
+      creator: creatorId,
+      creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
+      beatTimes: [],
+      sections: [],
+      engineObstacles: JSON.parse(JSON.stringify(engine.obstacles)),
+      enginePortals: JSON.parse(JSON.stringify(engine.portals)),
+      autoplayLog: [],
+      audioUrl: room.musicUrl || null,
+      duration: d,
+      // Increasing duration
+      isShared: false,
+      isVerified: true
+    });
+    rounds.push(newMap._id);
+  }
+  if (rounds.length === 0) {
+    engine.generateMap([], [], maxDuration, seed, false);
+    const newMap = await GameMap.create({
+      title: `ROOM_${room.title}_ROUND_1`,
       difficulty: room.difficulty || 5,
       seed,
       creator: creatorId,
@@ -3453,20 +3472,22 @@ const start_post = defineEventHandler(async (event) => {
       engineObstacles: engine.obstacles,
       enginePortals: engine.portals,
       autoplayLog: [],
-      duration: room.duration || 60,
+      audioUrl: room.musicUrl || null,
+      duration: maxDuration,
       isShared: false,
       isVerified: true
     });
-    selectedMapId = newMap._id;
+    rounds.push(newMap._id);
   }
-  room.map = selectedMapId;
+  room.map = rounds[0];
+  room.mapQueue = rounds;
   room.status = "playing";
   room.players.forEach((p) => {
     p.progress = 0;
     p.isReady = false;
   });
   await room.save();
-  return { success: true, mapId: selectedMapId };
+  return { success: true, mapId: rounds[0] };
 });
 
 const start_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
@@ -3560,7 +3581,7 @@ const clear_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProper
 
 const create_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { title, maxPlayers, duration, userId, username: passedUsername } = body;
+  const { title, maxPlayers, duration, userId, username: passedUsername, difficulty, musicUrl, musicTitle } = body;
   if (!userId || !title) {
     throw createError({ statusCode: 400, statusMessage: "Missing required fields" });
   }
@@ -3572,6 +3593,9 @@ const create_post = defineEventHandler(async (event) => {
     hostId: userId,
     maxPlayers: maxPlayers || 4,
     duration: duration || 60,
+    difficulty: difficulty || 5,
+    musicUrl: musicUrl || null,
+    musicTitle: musicTitle || null,
     players: [{
       userId,
       username,
@@ -3673,37 +3697,14 @@ const nextMap_post = defineEventHandler(async (event) => {
     const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true });
     if (verifiedCount > 0) {
       const skip = Math.floor(Math.random() * verifiedCount);
-      const newMap2 = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip);
-      if (newMap2) {
-        room.mapQueue.push(newMap2._id);
+      const newMap = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip);
+      if (newMap) {
+        room.mapQueue.push(newMap._id);
         await room.save();
-        return { map: newMap2, mapIndex };
+        return { map: newMap, mapIndex };
       }
     }
-    const { GameEngine } = await Promise.resolve().then(function () { return gameEngine; });
-    const engine = new GameEngine({ difficulty: 7, density: 1, portalFrequency: 0.15 });
-    const duration = 60;
-    const seed = `multi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-    engine.generateMap([], [], duration, Math.floor(Math.random() * 1e5), false, 0, 120, 2);
-    const newMap = await GameMap.create({
-      title: `MULTI_MAP_${Date.now()}`,
-      difficulty: 7,
-      seed,
-      creatorName: "SYSTEM",
-      creatorId: null,
-      beatTimes: [],
-      sections: [],
-      engineObstacles: engine.obstacles,
-      enginePortals: engine.portals,
-      autoplayLog: engine.autoplayLog,
-      duration,
-      isShared: true,
-      isVerified: true,
-      isAiVerified: true
-    });
-    room.mapQueue.push(newMap._id);
-    await room.save();
-    return { map: newMap, mapIndex };
+    return { map: null, mapIndex };
   }
   const existingMapId = room.mapQueue[mapIndex];
   const existingMap = await GameMap.findById(existingMapId);
