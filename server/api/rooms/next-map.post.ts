@@ -1,6 +1,23 @@
 import { GameMap } from '~/server/models/Map'
 import { Room } from '~/server/models/Room'
 
+const roundNum = (num: number, precision: number = 1) => {
+  if (typeof num !== 'number' || isNaN(num)) return 0
+  const factor = Math.pow(10, precision)
+  return Math.round(num * factor) / factor
+}
+
+const optimizeObstacles = (obs: any[]) => {
+  if (!Array.isArray(obs)) return []
+  return obs.map(o => ({
+    ...o,
+    x: roundNum(o.x),
+    y: roundNum(o.y),
+    width: roundNum(o.width),
+    height: roundNum(o.height)
+  }))
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { roomId, userId, mapIndex } = body
@@ -21,12 +38,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // If we need a new map (index is beyond current queue)
-  if (mapIndex >= room.mapQueue.length) {
-    // If we need a new map (index is beyond current queue) -> But we pre-generated all!
-    // So this case should technically not happen if we respect the rounds.
-    // However, if we need to support infinite mode or fallback:
-
-    // Find verified maps?
+  if (mapIndex >= (room.mapQueue?.length || 0)) {
+    // Find verified maps as fallback
     const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true })
     if (verifiedCount > 0) {
       const skip = Math.floor(Math.random() * verifiedCount)
@@ -34,16 +47,26 @@ export default defineEventHandler(async (event) => {
       if (newMap) {
         room.mapQueue.push(newMap._id)
         await room.save()
-        return { map: newMap, mapIndex }
+
+        const mObj = newMap.toObject()
+        mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles)
+        mObj.enginePortals = optimizeObstacles(mObj.enginePortals)
+        return { map: mObj, mapIndex }
       }
     }
-
-    // ... Fallback logic if needed, but for now just return null
     return { map: null, mapIndex }
   }
 
   // Return existing map from queue
   const existingMapId = room.mapQueue[mapIndex]
   const existingMap = await GameMap.findById(existingMapId)
-  return { map: existingMap, mapIndex }
+
+  if (existingMap) {
+    const mObj = existingMap.toObject()
+    mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles)
+    mObj.enginePortals = optimizeObstacles(mObj.enginePortals)
+    return { map: mObj, mapIndex }
+  }
+
+  return { map: null, mapIndex }
 })

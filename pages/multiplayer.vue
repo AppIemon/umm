@@ -169,6 +169,7 @@
         :opponentY="bestOpponent?.y || 360"
         :opponentProgress="bestOpponent?.progress || 0"
         @exit="handleRoundFinish" 
+        @complete="handleRoundFinish({ outcome: 'win' })"
         @progress-update="updateMyProgress"
       />
     </div>
@@ -227,6 +228,7 @@ const statusInterval = ref<any>(null);
 // In-game State
 const myProgress = ref(0);
 const myY = ref(360);
+const playerClearCount = ref(0);
 const allPlayers = ref<any[]>([]); // Synced via poll
 
 onMounted(() => {
@@ -254,19 +256,18 @@ async function handlePlayerClear() {
     await $fetch('/api/rooms/clear', {
       method: 'POST',
       body: {
-        roomId: currentRoomId.value,
+        matchId: currentRoomId.value, // Backend expects 'matchId'
         userId: playerId.value
       }
     });
-  } catch (e) {}
-  
-  // 다음 맵 로드
-  await loadNextMap();
+  } catch (e) {
+    console.error('Failed to notify clear', e);
+  }
 }
 
 // 다음 맵 로드
 async function loadNextMap() {
-  currentMapIndex.value++;
+  const nextIndex = currentMapIndex.value + 1;
   
   try {
     const res: any = await $fetch('/api/rooms/next-map', {
@@ -274,19 +275,16 @@ async function loadNextMap() {
       body: {
         roomId: currentRoomId.value,
         userId: playerId.value,
-        mapIndex: currentMapIndex.value
+        mapIndex: nextIndex
       }
     });
     
     if (res.map) {
       selectedMap.value = res.map;
-      currentMapIndex.value = res.mapIndex;
+      currentMapIndex.value = res.mapIndex; // Update index ONLY after successful fetch
       obstacles.value = res.map.engineObstacles || [];
       sections.value = res.map.sections || [];
       myProgress.value = 0;
-      // Audio buffer needs update if url changed?
-      // But we are sharing same audio (rounds). Assuming same audio.
-      // If duration changed, GameCanvas handles it via map duration.
     }
   } catch (e) {
     console.error('Failed to load next map', e);
@@ -414,8 +412,9 @@ async function startRoomGame() {
       method: 'POST',
       body: { userId: playerId.value }
     });
-  } catch (e) {
-    alert("Failed to start");
+  } catch (e: any) {
+    const errorMsg = e.data?.statusMessage || e.statusMessage || e.message || "Unknown error";
+    alert("Failed to start: " + errorMsg);
   }
 }
 
@@ -471,22 +470,12 @@ function updateMyProgress(data: any) {
 
 function handleRoundFinish(data: any) {
   // Check if player completed the map
-  if (data?.outcome === 'win'/* || myProgress.value >= 100*/) {
+  if (data?.outcome === 'win') {
     handlePlayerClear();
-    // After clear, load next stage
+    // After clear, load next stage after a short delay
     setTimeout(() => {
        loadNextMap();
-    }, 2000); // 2 seconds delay to show "Complete"
-  }
-  // If crashed (outcome !== complete), we just respawn or wait.
-  // In this mode, GameCanvas might auto-restart or we can just stay.
-  // If we want immediate restart on death:
-  if (data?.outcome !== 'complete') {
-    // Optionally restart immediately
-    // startGame(); // But startGame resets timer? No.
-    // actually step 'PLAY' re-mounts GameCanvas? No.
-    // We can increment key to re-mount or just let GameCanvas handle retry.
-    // GameCanvas has @retry event?
+    }, 1500); // 1.5 seconds delay to show "Complete"
   }
 }
 

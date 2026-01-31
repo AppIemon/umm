@@ -12,6 +12,7 @@ export interface IRoom extends Document {
   musicTitle?: string
 
   map: Types.ObjectId
+  mapQueue: Types.ObjectId[]
 
   players: {
     userId: string

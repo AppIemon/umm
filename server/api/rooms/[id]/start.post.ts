@@ -2,6 +2,27 @@ import { Room } from '~/server/models/Room'
 import { GameMap } from '~/server/models/Map'
 import mongoose from 'mongoose'
 
+const roundNum = (num: number, precision: number = 1) => {
+  if (typeof num !== 'number' || isNaN(num)) return 0
+  const factor = Math.pow(10, precision)
+  return Math.round(num * factor) / factor
+}
+
+const optimizeObstacles = (obs: any[]) => {
+  if (!Array.isArray(obs)) return []
+  return obs.map(o => {
+    const optimized: any = {
+      ...o,
+      x: roundNum(o.x),
+      y: roundNum(o.y),
+      width: roundNum(o.width),
+      height: roundNum(o.height)
+    }
+    if (o.children) optimized.children = optimizeObstacles(o.children)
+    return optimized
+  })
+}
+
 export default defineEventHandler(async (event) => {
   const roomId = event.context.params?.id
   const body = await readBody(event)
@@ -18,84 +39,90 @@ export default defineEventHandler(async (event) => {
     return { success: true } // Already started
   }
 
-  // 1. Generate/Select Map
-  // Use existing map generation logic or find a verified map
-  // For simplicity, let's generate a new system map for this room
+  try {
+    const { GameEngine } = await import('~/utils/game-engine')
+    const engine = new GameEngine({ difficulty: room.difficulty || 5 })
 
-  // 1. Generate Progressive Maps
+    const seed = Math.floor(Math.random() * 1000000)
 
-  const { GameEngine } = await import('~/utils/game-engine')
-  const engine = new GameEngine({ difficulty: room.difficulty || 5 })
+    // Ensure creatorId is a valid ObjectId
+    const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId)
+    const creatorId = hostIsRegistered ? new mongoose.Types.ObjectId(room.hostId) : new mongoose.Types.ObjectId("000000000000000000000000")
 
-  const seed = Math.floor(Math.random() * 1000000)
-  const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId)
-  const creatorId = hostIsRegistered ? room.hostId : new mongoose.Types.ObjectId("000000000000000000000000") // Fallback valid ID
-  const hostPlayer = room.players.find((p: any) => p.isHost)
+    const hostPlayer = room.players.find((p: any) => p.isHost)
 
-  const maxDuration = room.duration || 60
-  const rounds = []
+    const maxDuration = room.duration || 60
+    const rounds = []
 
-  // First map is 20s minimum (to avoid too short rounds), then +10s
-  // User asked: "First 10s -> +10s"
-  let startD = 10;
+    // Incremental duration rounds: 10, 20, 30... maxDuration
+    let startD = 10;
 
-  for (let d = startD; d <= maxDuration; d += 10) {
-    engine.generateMap([], [], d, seed, false)
+    console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating rounds...`)
 
-    const newMap = await GameMap.create({
-      title: `ROOM_${room.title}_ROUND_${d / 10}`,
-      difficulty: room.difficulty || 5,
-      seed,
-      creator: creatorId,
-      creatorName: hostPlayer?.username || 'SYSTEM',
-      beatTimes: [],
-      sections: [],
-      engineObstacles: JSON.parse(JSON.stringify(engine.obstacles)),
-      enginePortals: JSON.parse(JSON.stringify(engine.portals)),
-      autoplayLog: [],
-      audioUrl: room.musicUrl || null,
-      duration: d, // Increasing duration
-      isShared: false,
-      isVerified: true
+    for (let d = startD; d <= maxDuration; d += 10) {
+      engine.generateMap([], [], d, seed, false)
+
+      const newMap = await GameMap.create({
+        title: `ROOM_${room.title}_ROUND_${d / 10}`,
+        difficulty: room.difficulty || 5,
+        seed,
+        creator: creatorId,
+        creatorName: hostPlayer?.username || 'SYSTEM',
+        beatTimes: [],
+        sections: [],
+        engineObstacles: optimizeObstacles(engine.obstacles),
+        enginePortals: optimizeObstacles(engine.portals),
+        autoplayLog: [],
+        audioUrl: room.musicUrl || null,
+        duration: d,
+        isShared: false,
+        isVerified: true
+      })
+      rounds.push(newMap._id)
+
+      // Safety cap to avoid document size issues or extreme loops
+      if (rounds.length >= 200) break;
+    }
+
+    if (rounds.length === 0) {
+      engine.generateMap([], [], maxDuration, seed, false)
+      const newMap = await GameMap.create({
+        title: `ROOM_${room.title}_ROUND_1`,
+        difficulty: room.difficulty || 5,
+        seed,
+        creator: creatorId,
+        creatorName: hostPlayer?.username || 'SYSTEM',
+        beatTimes: [],
+        sections: [],
+        engineObstacles: optimizeObstacles(engine.obstacles),
+        enginePortals: optimizeObstacles(engine.portals),
+        autoplayLog: [],
+        audioUrl: room.musicUrl || null,
+        duration: maxDuration,
+        isShared: false,
+        isVerified: true
+      })
+      rounds.push(newMap._id)
+    }
+
+    // Update Room state
+    room.map = rounds[0]
+    room.mapQueue = rounds as any // Cast because of Mongoose types
+    room.status = 'playing'
+    room.players.forEach((p: any) => {
+      p.progress = 0
+      p.isReady = false
     })
-    rounds.push(newMap._id)
-  }
 
-  // If loop didn't run (e.g. duration < 10), make one full map
-  if (rounds.length === 0) {
-    engine.generateMap([], [], maxDuration, seed, false)
-    const newMap = await GameMap.create({
-      title: `ROOM_${room.title}_ROUND_1`,
-      difficulty: room.difficulty || 5,
-      seed,
-      creator: creatorId,
-      creatorName: hostPlayer?.username || 'SYSTEM',
-      beatTimes: [],
-      sections: [],
-      engineObstacles: engine.obstacles,
-      enginePortals: engine.portals,
-      autoplayLog: [],
-      audioUrl: room.musicUrl || null,
-      duration: maxDuration,
-      isShared: false,
-      isVerified: true
+    await room.save()
+    console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} rounds.`)
+
+    return { success: true, mapId: rounds[0] }
+  } catch (err: any) {
+    console.error('[StartGame] Fatal error:', err)
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Failed to start: ${err.message || 'Unknown error'}`
     })
-    rounds.push(newMap._id)
   }
-
-  // 2. Start Game
-  room.map = rounds[0]
-  room.mapQueue = rounds
-  room.status = 'playing'
-  room.players.forEach((p: any) => {
-    p.progress = 0
-    p.isReady = false
-  })
-
-  await room.save()
-
-  // Return first map
-  return { success: true, mapId: rounds[0] }
-
-
 })

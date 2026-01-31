@@ -15,14 +15,38 @@ export default defineEventHandler(async (event) => {
   // Convert mongoose document to object to modify it
   const mapObj = map.toObject();
 
+  // Data Optimization Helpers (Ensures older unoptimized maps don't break Vercel/SessionStorage)
+  const roundNum = (num: number, precision: number = 1) => {
+    if (typeof num !== 'number' || isNaN(num)) return 0
+    const factor = Math.pow(10, precision)
+    return Math.round(num * factor) / factor
+  }
+
+  const optimizeObstacles = (obs: any[]) => {
+    if (!Array.isArray(obs)) return []
+    return obs.map(o => ({
+      ...o,
+      x: roundNum(o.x),
+      y: roundNum(o.y),
+      width: roundNum(o.width),
+      height: roundNum(o.height)
+    }))
+  }
+
+  const optimizeLog = (log: any[]) => {
+    if (!Array.isArray(log) || log.length === 0) return []
+    // Round to 3 decimal places for time, 1 for coords
+    return log.map(p => ({
+      ...p,
+      x: roundNum(p.x),
+      y: roundNum(p.y),
+      time: roundNum(p.time, 3)
+    }))
+  }
+
   // 0. Prefer Static URL (New System)
   if (mapObj.audioUrl && mapObj.audioUrl.length > 5) {
-    // If we have a URL, use it directly.
-    // The frontend expects `audioData` to be fetchable (Data URI or URL).
-    // We map audioUrl to audioData so the frontend code works without change.
     mapObj.audioData = mapObj.audioUrl;
-
-    // Clear legacy fields just in case they exist (cleanup)
     delete mapObj.audioContentId;
     delete mapObj.audioChunks;
   }
@@ -60,7 +84,12 @@ export default defineEventHandler(async (event) => {
     mapObj.audioData = mapObj.audioChunks.join('');
   }
 
-  // Remove chunks from response to save bandwidth
+  // 2. Optimization on the fly (Prevents Vercel/SessionStorage limits)
+  if (mapObj.engineObstacles) mapObj.engineObstacles = optimizeObstacles(mapObj.engineObstacles);
+  if (mapObj.enginePortals) mapObj.enginePortals = optimizeObstacles(mapObj.enginePortals);
+  if (mapObj.autoplayLog) mapObj.autoplayLog = optimizeLog(mapObj.autoplayLog);
+
+  // Remove chunks to save bandwidth
   delete mapObj.audioChunks;
 
   return mapObj

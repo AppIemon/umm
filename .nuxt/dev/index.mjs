@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3d430-CLLQCexPTzNA4ZQJaqpHX47ANlY\"",
-    "mtime": "2026-01-31T02:43:12.191Z",
-    "size": 250928,
+    "etag": "\"3e5b4-xP+sox71YPOF6JPWAksqBAcvKJo\"",
+    "mtime": "2026-01-31T02:54:20.068Z",
+    "size": 255412,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"eb567-QRxZRD7qS+RndDyjBdzd3wbuH94\"",
-    "mtime": "2026-01-31T02:43:12.194Z",
-    "size": 963943,
+    "etag": "\"efc04-D6yzScR1Okjy4JWLNMpSZMvzw2o\"",
+    "mtime": "2026-01-31T02:54:20.069Z",
+    "size": 982020,
     "path": "index.mjs.map"
   }
 };
@@ -2451,7 +2451,7 @@ mapSchema.index({ createdAt: -1 });
 mapSchema.index({ difficulty: 1 });
 mapSchema.index({ rating: -1 });
 mapSchema.index({ isShared: 1, createdAt: -1 });
-const GameMap = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
+const GameMap$1 = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
 
 const audioContentSchema = new mongoose.Schema({
   hash: {
@@ -2485,7 +2485,7 @@ const optimize_get = defineEventHandler(async (event) => {
     errors: []
   };
   try {
-    const maps = await GameMap.find({
+    const maps = await GameMap$1.find({
       $or: [
         { audioData: { $ne: null } },
         { audioChunks: { $not: { $size: 0 } } }
@@ -2811,7 +2811,7 @@ const updateStats_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.define
 
 const _id__delete = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
-  const deletedMap = await GameMap.findByIdAndDelete(id);
+  const deletedMap = await GameMap$1.findByIdAndDelete(id);
   if (!deletedMap) {
     throw createError({
       statusCode: 404,
@@ -2828,7 +2828,7 @@ const _id__delete$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePrope
 
 const _id__get = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
-  const map = await GameMap.findById(id).populate("audioContentId");
+  const map = await GameMap$1.findById(id).populate("audioContentId");
   if (!map) {
     throw createError({
       statusCode: 404,
@@ -2836,6 +2836,30 @@ const _id__get = defineEventHandler(async (event) => {
     });
   }
   const mapObj = map.toObject();
+  const roundNum = (num, precision = 1) => {
+    if (typeof num !== "number" || isNaN(num)) return 0;
+    const factor = Math.pow(10, precision);
+    return Math.round(num * factor) / factor;
+  };
+  const optimizeObstacles = (obs) => {
+    if (!Array.isArray(obs)) return [];
+    return obs.map((o) => ({
+      ...o,
+      x: roundNum(o.x),
+      y: roundNum(o.y),
+      width: roundNum(o.width),
+      height: roundNum(o.height)
+    }));
+  };
+  const optimizeLog = (log) => {
+    if (!Array.isArray(log) || log.length === 0) return [];
+    return log.map((p) => ({
+      ...p,
+      x: roundNum(p.x),
+      y: roundNum(p.y),
+      time: roundNum(p.time, 3)
+    }));
+  };
   if (mapObj.audioUrl && mapObj.audioUrl.length > 5) {
     mapObj.audioData = mapObj.audioUrl;
     delete mapObj.audioContentId;
@@ -2861,6 +2885,9 @@ const _id__get = defineEventHandler(async (event) => {
   } else if (!mapObj.audioData && mapObj.audioChunks && mapObj.audioChunks.length > 0) {
     mapObj.audioData = mapObj.audioChunks.join("");
   }
+  if (mapObj.engineObstacles) mapObj.engineObstacles = optimizeObstacles(mapObj.engineObstacles);
+  if (mapObj.enginePortals) mapObj.enginePortals = optimizeObstacles(mapObj.enginePortals);
+  if (mapObj.autoplayLog) mapObj.autoplayLog = optimizeLog(mapObj.autoplayLog);
   delete mapObj.audioChunks;
   return mapObj;
 });
@@ -2906,7 +2933,7 @@ const _id__patch = defineEventHandler(async (event) => {
   if (isShared !== void 0) updateData.isShared = isShared;
   if (bpm !== void 0) updateData.bpm = bpm;
   if (measureLength !== void 0) updateData.measureLength = measureLength;
-  const updatedMap = await GameMap.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+  const updatedMap = await GameMap$1.findByIdAndUpdate(id, { $set: updateData }, { new: true });
   if (!updatedMap) {
     throw createError({
       statusCode: 404,
@@ -2928,32 +2955,55 @@ const audioChunk_post = defineEventHandler(async (event) => {
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "Missing ID" });
   }
-  if (chunkIndex === void 0 || !chunkData || !totalChunks) {
-    throw createError({ statusCode: 400, statusMessage: "Missing chunk data" });
+  if (chunkIndex === void 0 || !chunkData || totalChunks === void 0) {
+    throw createError({ statusCode: 400, statusMessage: "Missing chunk info" });
   }
-  const map = await GameMap.findById(id);
+  const map = await GameMap$1.findById(id);
   if (!map) {
     throw createError({ statusCode: 404, statusMessage: "Map not found" });
   }
+  const tempDir = path.join(process.cwd(), "public", "music", "_temp_chunks", id);
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
   const binaryChunk = Buffer.from(chunkData, "base64");
-  let audioContent;
-  if (map.audioContentId) {
-    audioContent = await AudioContent.findById(map.audioContentId);
-  }
-  if (!audioContent) {
-    audioContent = await AudioContent.create({
-      hash: `map_${id}_temp`,
-      chunks: new Array(totalChunks).fill(null),
-      size: 0
-    });
-    map.audioContentId = audioContent._id;
+  const chunkPath = path.join(tempDir, `chunk_${chunkIndex}.bin`);
+  fs.writeFileSync(chunkPath, binaryChunk);
+  const files = fs.readdirSync(tempDir);
+  const uploadedCount = files.filter((f) => f.startsWith("chunk_") && f.endsWith(".bin")).length;
+  if (uploadedCount >= totalChunks) {
+    console.log(`[Audio] All chunks received for map ${id}. Merging...`);
+    const mergedData = Buffer.alloc(files.reduce((acc, f) => acc + fs.statSync(path.join(tempDir, f)).size, 0));
+    let offset = 0;
+    for (let i = 0; i < totalChunks; i++) {
+      const cPath = path.join(tempDir, `chunk_${i}.bin`);
+      if (!fs.existsSync(cPath)) {
+        throw createError({ statusCode: 500, statusMessage: `Missing chunk ${i} during merge` });
+      }
+      const data = fs.readFileSync(cPath);
+      data.copy(mergedData, offset);
+      offset += data.length;
+    }
+    const hash = crypto$1.createHash("sha256").update(mergedData).digest("hex");
+    const finalFilename = `${hash}.wav`;
+    const musicDir = path.join(process.cwd(), "public", "music");
+    const finalPath = path.join(musicDir, finalFilename);
+    if (!fs.existsSync(finalPath)) {
+      fs.writeFileSync(finalPath, mergedData);
+    }
+    map.audioUrl = `/music/${finalFilename}`;
+    map.audioData = null;
+    map.audioChunks = [];
+    map.audioContentId = null;
     await map.save();
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {
+      console.error(`[Audio] Cleanup failed for ${tempDir}`, e);
+    }
+    return { success: true, finished: true, url: map.audioUrl };
   }
-  await AudioContent.updateOne(
-    { _id: audioContent._id },
-    { $set: { [`chunks.${chunkIndex}`]: binaryChunk } }
-  );
-  return { success: true, index: chunkIndex };
+  return { success: true, finished: false, index: chunkIndex };
 });
 
 const audioChunk_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
@@ -2971,7 +3021,7 @@ const rate_post = defineEventHandler(async (event) => {
       statusMessage: "Invalid rating. Must be between 1 and 30."
     });
   }
-  const map = await GameMap.findById(mapId);
+  const map = await GameMap$1.findById(mapId);
   if (!map) {
     throw createError({
       statusCode: 404,
@@ -3062,7 +3112,7 @@ const record_post = defineEventHandler(async (event) => {
   if (id === "tutorial_mode") {
     mapTitle = "TUTORIAL";
   } else {
-    map = await GameMap.findById(id);
+    map = await GameMap$1.findById(id);
     if (!map) {
       throw createError({
         statusCode: 404,
@@ -3165,7 +3215,7 @@ const index_get$2 = defineEventHandler(async (event) => {
   const authUser = userCookie ? JSON.parse(userCookie) : null;
   const userId = (authUser == null ? void 0 : authUser._id) || (authUser == null ? void 0 : authUser.id);
   try {
-    const maps = await GameMap.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50).allowDiskUse(true);
+    const maps = await GameMap$1.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50).allowDiskUse(true);
     if (userId) {
       const mapIds = maps.map((m) => m._id);
       const userScores = await Score.find({
@@ -3322,10 +3372,10 @@ const index_post = defineEventHandler(async (event) => {
       measureLength: measureLength || 2
     };
     if (_id) {
-      const updated = await GameMap.findByIdAndUpdate(_id, mapData, { new: true });
+      const updated = await GameMap$1.findByIdAndUpdate(_id, mapData, { new: true });
       return updated;
     } else {
-      const newMap = await GameMap.create(mapData);
+      const newMap = await GameMap$1.create(mapData);
       return newMap;
     }
   } catch (error) {
@@ -3416,6 +3466,25 @@ const chat_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePropert
   default: chat_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
+const roundNum$1 = (num, precision = 1) => {
+  if (typeof num !== "number" || isNaN(num)) return 0;
+  const factor = Math.pow(10, precision);
+  return Math.round(num * factor) / factor;
+};
+const optimizeObstacles$1 = (obs) => {
+  if (!Array.isArray(obs)) return [];
+  return obs.map((o) => {
+    const optimized = {
+      ...o,
+      x: roundNum$1(o.x),
+      y: roundNum$1(o.y),
+      width: roundNum$1(o.width),
+      height: roundNum$1(o.height)
+    };
+    if (o.children) optimized.children = optimizeObstacles$1(o.children);
+    return optimized;
+  });
+};
 const start_post = defineEventHandler(async (event) => {
   var _a;
   const roomId = (_a = event.context.params) == null ? void 0 : _a.id;
@@ -3429,65 +3498,75 @@ const start_post = defineEventHandler(async (event) => {
   if (room.status !== "waiting") {
     return { success: true };
   }
-  const { GameEngine } = await Promise.resolve().then(function () { return gameEngine; });
-  const engine = new GameEngine({ difficulty: room.difficulty || 5 });
-  const seed = Math.floor(Math.random() * 1e6);
-  const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId);
-  const creatorId = hostIsRegistered ? room.hostId : new mongoose.Types.ObjectId("000000000000000000000000");
-  const hostPlayer = room.players.find((p) => p.isHost);
-  const maxDuration = room.duration || 60;
-  const rounds = [];
-  let startD = 10;
-  for (let d = startD; d <= maxDuration; d += 10) {
-    engine.generateMap([], [], d, seed, false);
-    const newMap = await GameMap.create({
-      title: `ROOM_${room.title}_ROUND_${d / 10}`,
-      difficulty: room.difficulty || 5,
-      seed,
-      creator: creatorId,
-      creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
-      beatTimes: [],
-      sections: [],
-      engineObstacles: JSON.parse(JSON.stringify(engine.obstacles)),
-      enginePortals: JSON.parse(JSON.stringify(engine.portals)),
-      autoplayLog: [],
-      audioUrl: room.musicUrl || null,
-      duration: d,
-      // Increasing duration
-      isShared: false,
-      isVerified: true
+  try {
+    const { GameEngine } = await Promise.resolve().then(function () { return gameEngine; });
+    const engine = new GameEngine({ difficulty: room.difficulty || 5 });
+    const seed = Math.floor(Math.random() * 1e6);
+    const hostIsRegistered = mongoose.Types.ObjectId.isValid(room.hostId);
+    const creatorId = hostIsRegistered ? new mongoose.Types.ObjectId(room.hostId) : new mongoose.Types.ObjectId("000000000000000000000000");
+    const hostPlayer = room.players.find((p) => p.isHost);
+    const maxDuration = room.duration || 60;
+    const rounds = [];
+    let startD = 10;
+    console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating rounds...`);
+    for (let d = startD; d <= maxDuration; d += 10) {
+      engine.generateMap([], [], d, seed, false);
+      const newMap = await GameMap$1.create({
+        title: `ROOM_${room.title}_ROUND_${d / 10}`,
+        difficulty: room.difficulty || 5,
+        seed,
+        creator: creatorId,
+        creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
+        beatTimes: [],
+        sections: [],
+        engineObstacles: optimizeObstacles$1(engine.obstacles),
+        enginePortals: optimizeObstacles$1(engine.portals),
+        autoplayLog: [],
+        audioUrl: room.musicUrl || null,
+        duration: d,
+        isShared: false,
+        isVerified: true
+      });
+      rounds.push(newMap._id);
+      if (rounds.length >= 200) break;
+    }
+    if (rounds.length === 0) {
+      engine.generateMap([], [], maxDuration, seed, false);
+      const newMap = await GameMap$1.create({
+        title: `ROOM_${room.title}_ROUND_1`,
+        difficulty: room.difficulty || 5,
+        seed,
+        creator: creatorId,
+        creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
+        beatTimes: [],
+        sections: [],
+        engineObstacles: optimizeObstacles$1(engine.obstacles),
+        enginePortals: optimizeObstacles$1(engine.portals),
+        autoplayLog: [],
+        audioUrl: room.musicUrl || null,
+        duration: maxDuration,
+        isShared: false,
+        isVerified: true
+      });
+      rounds.push(newMap._id);
+    }
+    room.map = rounds[0];
+    room.mapQueue = rounds;
+    room.status = "playing";
+    room.players.forEach((p) => {
+      p.progress = 0;
+      p.isReady = false;
     });
-    rounds.push(newMap._id);
-  }
-  if (rounds.length === 0) {
-    engine.generateMap([], [], maxDuration, seed, false);
-    const newMap = await GameMap.create({
-      title: `ROOM_${room.title}_ROUND_1`,
-      difficulty: room.difficulty || 5,
-      seed,
-      creator: creatorId,
-      creatorName: (hostPlayer == null ? void 0 : hostPlayer.username) || "SYSTEM",
-      beatTimes: [],
-      sections: [],
-      engineObstacles: engine.obstacles,
-      enginePortals: engine.portals,
-      autoplayLog: [],
-      audioUrl: room.musicUrl || null,
-      duration: maxDuration,
-      isShared: false,
-      isVerified: true
+    await room.save();
+    console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} rounds.`);
+    return { success: true, mapId: rounds[0] };
+  } catch (err) {
+    console.error("[StartGame] Fatal error:", err);
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Failed to start: ${err.message || "Unknown error"}`
     });
-    rounds.push(newMap._id);
   }
-  room.map = rounds[0];
-  room.mapQueue = rounds;
-  room.status = "playing";
-  room.players.forEach((p) => {
-    p.progress = 0;
-    p.isReady = false;
-  });
-  await room.save();
-  return { success: true, mapId: rounds[0] };
 });
 
 const start_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
@@ -3510,6 +3589,28 @@ const status_get = defineEventHandler(async (event) => {
   if (!room) {
     throw createError({ statusCode: 404, statusMessage: "Room not found" });
   }
+  const roundNum = (num, precision = 1) => {
+    if (typeof num !== "number" || isNaN(num)) return 0;
+    const factor = Math.pow(10, precision);
+    return Math.round(num * factor) / factor;
+  };
+  const optimizeObstacles = (obs) => {
+    if (!Array.isArray(obs)) return [];
+    return obs.map((o) => ({
+      ...o,
+      x: roundNum(o.x),
+      y: roundNum(o.y),
+      width: roundNum(o.width),
+      height: roundNum(o.height)
+    }));
+  };
+  let optimizedMap = room.map;
+  if (optimizedMap && optimizedMap.engineObstacles) {
+    const mObj = optimizedMap.toObject ? optimizedMap.toObject() : optimizedMap;
+    mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
+    mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
+    optimizedMap = mObj;
+  }
   return {
     room: {
       _id: room._id,
@@ -3518,8 +3619,7 @@ const status_get = defineEventHandler(async (event) => {
       maxPlayers: room.maxPlayers,
       players: room.players,
       hostId: room.hostId,
-      map: room.map,
-      // Will be null until generated
+      map: optimizedMap,
       duration: room.duration,
       messages: room.messages
     }
@@ -3679,7 +3779,23 @@ const join_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePropert
   default: join_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
+const roundNum = (num, precision = 1) => {
+  if (typeof num !== "number" || isNaN(num)) return 0;
+  const factor = Math.pow(10, precision);
+  return Math.round(num * factor) / factor;
+};
+const optimizeObstacles = (obs) => {
+  if (!Array.isArray(obs)) return [];
+  return obs.map((o) => ({
+    ...o,
+    x: roundNum(o.x),
+    y: roundNum(o.y),
+    width: roundNum(o.width),
+    height: roundNum(o.height)
+  }));
+};
 const nextMap_post = defineEventHandler(async (event) => {
+  var _a;
   const body = await readBody(event);
   const { roomId, userId, mapIndex } = body;
   if (!roomId || !userId) {
@@ -3693,22 +3809,31 @@ const nextMap_post = defineEventHandler(async (event) => {
     room.mapQueue = [];
     if (room.map) room.mapQueue.push(room.map);
   }
-  if (mapIndex >= room.mapQueue.length) {
-    const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true });
+  if (mapIndex >= (((_a = room.mapQueue) == null ? void 0 : _a.length) || 0)) {
+    const verifiedCount = await GameMap$1.countDocuments({ isShared: true, isVerified: true });
     if (verifiedCount > 0) {
       const skip = Math.floor(Math.random() * verifiedCount);
-      const newMap = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip);
+      const newMap = await GameMap$1.findOne({ isShared: true, isVerified: true }).skip(skip);
       if (newMap) {
         room.mapQueue.push(newMap._id);
         await room.save();
-        return { map: newMap, mapIndex };
+        const mObj = newMap.toObject();
+        mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
+        mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
+        return { map: mObj, mapIndex };
       }
     }
     return { map: null, mapIndex };
   }
   const existingMapId = room.mapQueue[mapIndex];
-  const existingMap = await GameMap.findById(existingMapId);
-  return { map: existingMap, mapIndex };
+  const existingMap = await GameMap$1.findById(existingMapId);
+  if (existingMap) {
+    const mObj = existingMap.toObject();
+    mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
+    mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
+    return { map: mObj, mapIndex };
+  }
+  return { map: null, mapIndex };
 });
 
 const nextMap_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
