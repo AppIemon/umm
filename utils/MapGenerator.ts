@@ -43,7 +43,9 @@ export class MapGenerator {
       baseGap = 180 - (difficulty - 24) * 15;
     }
 
-    baseGap = Math.max(50, baseGap) * safetyMultiplier; // Apply safety multiplier
+    // Safety Multiplier relaxation: On high retries, ensure a minimum passable gap even on Impossible
+    const minGap = (difficulty >= 24) ? 120 : 160;
+    baseGap = Math.max(minGap / safetyMultiplier, baseGap) * safetyMultiplier;
 
     // Mini Portal: 간격 1.5배 (유지)
     return isMini ? baseGap * 1.5 : baseGap;
@@ -191,31 +193,33 @@ export class MapGenerator {
 
       // Floor stepping
       const floorDiff = targetFloorY - currentFloorY;
-      if (isMini) {
-        if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (floorDiff < -floorContractThreshold) stepY = -blockSize;
-        else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
-      } else {
-        if (floorDiff < -floorContractThreshold) stepY = -blockSize;
-        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
+      // Allow terrain to follow path much more aggressively on Hard/Impossible (High Speeds)
+      // Max step increased to blockSize * 5 (250px) to handle 78-degree mini slopes
+      const maxStep = blockSize * 5;
+
+      if (Math.abs(floorDiff) > floorExpandThreshold) {
+        stepY = Math.sign(floorDiff) * Math.min(maxStep, Math.abs(floorDiff));
+        // Snap to blockSize for cleaner look if not too extreme
+        if (Math.abs(stepY) < blockSize * 1.5) stepY = Math.sign(stepY) * blockSize;
       }
 
       // CEILING stepping
       const ceilDiff = targetCeilY - currentCeilY;
-      if (isMini) {
-        if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
-        else if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;
-        else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
-        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
-      } else {
-        if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;
-        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
+      if (Math.abs(ceilDiff) > ceilExpandThreshold) {
+        ceilStepY = Math.sign(ceilDiff) * Math.min(maxStep, Math.abs(ceilDiff));
+        if (Math.abs(ceilStepY) < blockSize * 1.5) ceilStepY = Math.sign(ceilStepY) * blockSize;
       }
 
       // FINAL SAFETY OVERRIDE
-      if (stepY < 0 && currentFloorY + stepY < floorBoundary) stepY = 0;
-      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) ceilStepY = 0;
+      if (stepY < 0 && currentFloorY + stepY < floorBoundary) {
+        // Attempt to shrink step instead of zeroing out
+        stepY = floorBoundary - currentFloorY;
+        if (stepY > 0) stepY = 0;
+      }
+      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) {
+        ceilStepY = ceilBoundary - currentCeilY;
+        if (ceilStepY < 0) ceilStepY = 0;
+      }
 
       // Store boundary for filtering
       boundaryMap.set(currentX, { floorY: currentFloorY, ceilY: currentCeilY });
@@ -291,7 +295,7 @@ export class MapGenerator {
               y: currentFloorY - spikeH,
               width: blockSize,
               height: spikeH,
-              movement: this.getRandomMovement(type as ObstacleType, 0.4)
+              movement: this.getRandomMovement(type as ObstacleType, 0.4 / safetyMultiplier, safetyMultiplier)
             });
           }
         } else {
@@ -310,7 +314,7 @@ export class MapGenerator {
               width: blockSize,
               height: spikeH,
               rotation: 180,
-              movement: this.getRandomMovement(type as ObstacleType, 0.4)
+              movement: this.getRandomMovement(type as ObstacleType, 0.4 / safetyMultiplier, safetyMultiplier)
             });
           }
         }
@@ -342,7 +346,7 @@ export class MapGenerator {
           rotation: obsType === 'laser_beam' ? 90 : 0,
           children,
           customData,
-          movement: this.getRandomMovement(obsType as ObstacleType, 0.6)
+          movement: this.getRandomMovement(obsType as ObstacleType, 0.6 / safetyMultiplier, safetyMultiplier)
         });
       }
 
@@ -357,30 +361,65 @@ export class MapGenerator {
       }
     }
 
-    // Final Post-Process: Remove obstacles that are outside the playable tunnel
-    // 바닥과 천장 밖으로 나간 장애물 제거
-    return objects.filter(obj => {
-      // 1. Keep terrain and portals
+    // Final Post-Process: 
+    // 1. Filter out-of-bounds
+    const filtered = objects.filter(obj => {
       if (['block', 'triangle', 'steep_triangle'].includes(obj.type)) return true;
       if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green', 'teleport_in', 'teleport_out'].includes(obj.type)) return true;
       if (obj.type === 'orb') return true;
 
-      // 2. Check hazard boundaries
       const bounds = boundaryMap.get(Math.floor(obj.x / blockSize) * blockSize);
       if (!bounds) return true;
 
       const top = obj.y;
       const bottom = obj.y + (obj.height || 0);
 
-      // Completely outside CEILING (Above it)
       if (bottom <= bounds.ceilY - 5) return false;
-      // Completely outside FLOOR (Below it)
       if (top >= bounds.floorY + 5) return false;
-
-      // Partially overlapping is fine, but if most of it is buried, we could remove it.
-      // For now, "completely outside" is a safe bet for removal.
       return true;
     });
+
+    // 2. CONSOLIDATE BLOCKS (Optimization: Merge adjacent blocks)
+    return this.consolidateBlocks(filtered);
+  }
+
+  /**
+   * Merges adjacent blocks with same Y and Height into single wide blocks
+   */
+  private consolidateBlocks(objects: MapObject[]): MapObject[] {
+    const terrain = objects.filter(o => o.type === 'block');
+    const others = objects.filter(o => o.type !== 'block');
+
+    if (terrain.length < 2) return objects;
+
+    const mergedTerrain: MapObject[] = [];
+    // Sort by type (decoration vs real), Y, Height, then X
+    terrain.sort((a, b) => {
+      if (a.isHitbox !== b.isHitbox) return a.isHitbox ? 1 : -1;
+      if (a.y !== b.y) return a.y - b.y;
+      if (a.height !== b.height) return (a.height || 0) - (b.height || 0);
+      return a.x - b.x;
+    });
+
+    let current = terrain[0]!;
+    for (let i = 1; i < terrain.length; i++) {
+      const next = terrain[i]!;
+      const isAdjacent = Math.abs((current.x + (current.width || 0)) - next.x) < 0.1;
+      const sameY = current.y === next.y;
+      const sameH = current.height === next.height;
+      const sameMeta = current.isHitbox === next.isHitbox;
+
+      if (isAdjacent && sameY && sameH && sameMeta) {
+        // Merge
+        current.width = (current.width || 0) + (next.width || 0);
+      } else {
+        mergedTerrain.push(current);
+        current = next;
+      }
+    }
+    mergedTerrain.push(current);
+
+    return [...mergedTerrain, ...others];
   }
 
 
@@ -428,24 +467,28 @@ export class MapGenerator {
     }
   }
 
-  private getRandomMovement(type: ObstacleType, prob: number): ObstacleMovement | undefined {
+  private getRandomMovement(type: ObstacleType, prob: number, safetyMultiplier: number = 1.0): ObstacleMovement | undefined {
     if (Math.random() > prob) return undefined;
 
     const useRotate = ['saw', 'mine', 'spike_ball', 'rotor', 'cannon', 'spark_mine', 'planet', 'star'].includes(type);
     const useUpDown = !useRotate || Math.random() < 0.3;
 
+    // Movement range and speed are relaxed as safetyMultiplier increases
+    const rangeFactor = 1.0 / safetyMultiplier;
+    const speedFactor = 1.0 / safetyMultiplier;
+
     if (useRotate && !useUpDown) {
       return {
         type: 'rotate',
-        speed: 1.0 + Math.random() * 2.0,
+        speed: (1.0 + Math.random() * 2.0) * speedFactor,
         range: 360,
         phase: Math.random() * Math.PI * 2
       };
     } else {
       return {
         type: 'updown',
-        speed: 1.5 + Math.random() * 2.5,
-        range: 30 + Math.random() * 70,
+        speed: (1.5 + Math.random() * 2.5) * speedFactor,
+        range: (30 + Math.random() * 70) * rangeFactor,
         phase: Math.random() * Math.PI * 2
       };
     }

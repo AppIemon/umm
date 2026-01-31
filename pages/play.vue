@@ -428,9 +428,9 @@ const handleSongSelect = async (input: File | { type: string, data: any }) => {
          const failTime = point ? point.time : (failX / 350); // Fallback speed
          
          // Resume strategy:
-         // For Hard/Impossible: Short lookback (keep rhythm, just fix the specific trap) -> 8s
-         // For Easy/Normal: Long lookback (rewrite whole section) -> 30s
-         const safeBuffer = (adjustedDifficulty >= 16) ? 8.0 : 30.0;
+         // For Hard/Impossible: Medium lookback -> 15s (increased from 8s)
+         // For Easy/Normal: Long lookback -> 30s
+         const safeBuffer = (adjustedDifficulty >= 16) ? 15.0 : 30.0;
          const resumeTime = Math.max(0, failTime - safeBuffer);
          
          console.log(`[SmartGen] Resuming from ${resumeTime.toFixed(2)}s (Fail at ${failTime.toFixed(2)}s)`);

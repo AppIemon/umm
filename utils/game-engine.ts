@@ -675,7 +675,7 @@ export class GameEngine {
     if (!mapData) return;
 
     // Helper for restoring default values in optimized objects
-    const restoreObjects = (list: any[]) => {
+    const restoreObjects = (list: any[]): any[] => {
       if (!list || !Array.isArray(list)) return [];
       return list.map((o: any) => ({
         ...o,
@@ -765,8 +765,8 @@ export class GameEngine {
 
     // Safety Multiplier: Increase gap size as retries increase (Max 1.5x)
     const safetyMultiplier = 1.0 + Math.min(0.5, offsetAttempt * 0.05);
-    // Hazard Threshold Multiplier: Decrease obstacle density as retries increase (Min 0.4x)
-    const hazardMultiplier = Math.max(0.4, 1.0 - offsetAttempt * 0.1);
+    // Hazard Threshold Multiplier: Decrease obstacle density as retries increase (Min 0.1x)
+    const hazardMultiplier = Math.max(0.1, 1.0 - offsetAttempt * 0.1);
 
     console.log(`[MapGen] Seed: ${seed}, Attempt: ${offsetAttempt}, Safety: ${safetyMultiplier.toFixed(2)}, Hazard: ${hazardMultiplier.toFixed(2)}`);
 
@@ -2200,9 +2200,9 @@ export class GameEngine {
         }
       }
 
-      // USER REQUEST: "falling spike에서 자꾸 tutorial mode가 죽음. 최대한 위로 가라." -> Revised: "Try Low first, then High"
+      // USER REQUEST: "튜토리얼 모드(autoplay)는 falling spike를 지나갈때 최대한 위로 가도록."
       // Falling Spike Strategy Override:
-      // Try 'Low' first (Release in Normal, Hold in Inverted)
+      // Try 'High' first (Hold in Normal, Release in Inverted)
       const scanEnd = nX + 400;
       let fallingSpikeAhead = false;
 
@@ -2216,7 +2216,7 @@ export class GameEngine {
       }
 
       if (fallingSpikeAhead) {
-        preferHold = !nG; // Normal(F): false(Release/Low). Inverted(T): true(Hold/Low).
+        preferHold = !nG; // Normal(F): true(Hold/High). Inverted(T): false(Release/High).
       }
 
       // 1. If currently violating CPS limit, FORCE keeping same state if safe.
@@ -2439,7 +2439,7 @@ export class GameEngine {
       }
 
       const isColliding = points.some(p =>
-        p.x >= portal.x && p.x <= portal.x + portal.width &&
+        p && p.x >= portal.x && p.x <= portal.x + portal.width &&
         p.y >= portal.y && p.y <= portal.y + portal.height
       );
 
@@ -2884,7 +2884,7 @@ export class GameEngine {
 
           // Check collision with Child (Planet)
           const childSize = child.width ? child.width / 2 : 14;
-          const distToChildSq = (points[4].x - childX) ** 2 + (points[4].y - childY) ** 2;
+          const distToChildSq = (points[4]?.x - childX) ** 2 + (points[4]?.y - childY) ** 2;
           if (distToChildSq < (childSize + pSize - 2) ** 2) return true;
 
           // Check Child's Moons (Moon orbiting Planet)
@@ -2898,7 +2898,7 @@ export class GameEngine {
               const mx = childX + Math.cos(mTheta) * moonDist;
               const my = childY + Math.sin(mTheta) * moonDist;
 
-              const distToMoonSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
+              const distToMoonSq = (points[4]?.x - mx) ** 2 + (points[4]?.y - my) ** 2;
               if (distToMoonSq < (8 + pSize - 2) ** 2) return true;
             }
           }

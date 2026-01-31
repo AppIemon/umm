@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3ed46-BLjU6YbO0eeBcihcg6+SY4/vTL4\"",
-    "mtime": "2026-01-31T05:39:15.881Z",
-    "size": 257350,
+    "etag": "\"3f7e0-k0CbxLz1ut48josef4EY9KiyqxI\"",
+    "mtime": "2026-01-31T05:51:41.098Z",
+    "size": 260064,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f14b6-vUCLKsPEoinutTs4c1QUd6vUdys\"",
-    "mtime": "2026-01-31T05:39:15.883Z",
-    "size": 988342,
+    "etag": "\"f428c-3zsd4GO9E0WuYA0eQOHm+0+P1xY\"",
+    "mtime": "2026-01-31T05:51:41.100Z",
+    "size": 1000076,
     "path": "index.mjs.map"
   }
 };
@@ -4384,7 +4384,8 @@ class MapGenerator {
     } else {
       baseGap = 180 - (difficulty - 24) * 15;
     }
-    baseGap = Math.max(50, baseGap) * safetyMultiplier;
+    const minGap = difficulty >= 24 ? 120 : 160;
+    baseGap = Math.max(minGap / safetyMultiplier, baseGap) * safetyMultiplier;
     return isMini ? baseGap * 1.5 : baseGap;
   }
   /**
@@ -4477,29 +4478,26 @@ class MapGenerator {
       const floorBoundary = segMaxY + pSize + genSafety;
       const ceilBoundary = segMinY - pSize - genSafety;
       const floorExpandThreshold = 10;
-      const ceilContractThreshold = 35;
+      const ceilExpandThreshold = 10;
       const floorDiff = targetFloorY - currentFloorY;
-      if (isMini) {
-        if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (floorDiff < -35) stepY = -blockSize;
-        else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
-      } else {
-        if (floorDiff < -35) stepY = -blockSize;
-        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
+      const maxStep = blockSize * 5;
+      if (Math.abs(floorDiff) > floorExpandThreshold) {
+        stepY = Math.sign(floorDiff) * Math.min(maxStep, Math.abs(floorDiff));
+        if (Math.abs(stepY) < blockSize * 1.5) stepY = Math.sign(stepY) * blockSize;
       }
       const ceilDiff = targetCeilY - currentCeilY;
-      if (isMini) {
-        if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
-        else if (ceilDiff < -10) ceilStepY = -blockSize;
-        else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
-        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
-      } else {
-        if (ceilDiff < -10) ceilStepY = -blockSize;
-        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
+      if (Math.abs(ceilDiff) > ceilExpandThreshold) {
+        ceilStepY = Math.sign(ceilDiff) * Math.min(maxStep, Math.abs(ceilDiff));
+        if (Math.abs(ceilStepY) < blockSize * 1.5) ceilStepY = Math.sign(ceilStepY) * blockSize;
       }
-      if (stepY < 0 && currentFloorY + stepY < floorBoundary) stepY = 0;
-      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) ceilStepY = 0;
+      if (stepY < 0 && currentFloorY + stepY < floorBoundary) {
+        stepY = floorBoundary - currentFloorY;
+        if (stepY > 0) stepY = 0;
+      }
+      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) {
+        ceilStepY = ceilBoundary - currentCeilY;
+        if (ceilStepY < 0) ceilStepY = 0;
+      }
       boundaryMap.set(currentX, { floorY: currentFloorY, ceilY: currentCeilY });
       if (stepY < 0) {
         const isSteep = stepY === -blockSize * 2;
@@ -4561,7 +4559,7 @@ class MapGenerator {
               y: currentFloorY - spikeH,
               width: blockSize,
               height: spikeH,
-              movement: this.getRandomMovement(type, 0.4)
+              movement: this.getRandomMovement(type, 0.4 / safetyMultiplier, safetyMultiplier)
             });
           }
         } else {
@@ -4579,7 +4577,7 @@ class MapGenerator {
               width: blockSize,
               height: spikeH,
               rotation: 180,
-              movement: this.getRandomMovement(type, 0.4)
+              movement: this.getRandomMovement(type, 0.4 / safetyMultiplier, safetyMultiplier)
             });
           }
         }
@@ -4606,7 +4604,7 @@ class MapGenerator {
           rotation: obsType === "laser_beam" ? 90 : 0,
           children,
           customData,
-          movement: this.getRandomMovement(obsType, 0.6)
+          movement: this.getRandomMovement(obsType, 0.6 / safetyMultiplier, safetyMultiplier)
         });
       }
       while (beatIdx < beatTimes.length && beatTimes[beatIdx] < currentPoint.time) beatIdx++;
@@ -4618,7 +4616,7 @@ class MapGenerator {
         beatIdx++;
       }
     }
-    return objects.filter((obj) => {
+    const filtered = objects.filter((obj) => {
       if (["block", "triangle", "steep_triangle"].includes(obj.type)) return true;
       if (["gravity_yellow", "gravity_blue", "speed_0.25", "speed_0.5", "speed_1", "speed_2", "speed_3", "speed_4", "mini_pink", "mini_green", "teleport_in", "teleport_out"].includes(obj.type)) return true;
       if (obj.type === "orb") return true;
@@ -4630,6 +4628,38 @@ class MapGenerator {
       if (top >= bounds.floorY + 5) return false;
       return true;
     });
+    return this.consolidateBlocks(filtered);
+  }
+  /**
+   * Merges adjacent blocks with same Y and Height into single wide blocks
+   */
+  consolidateBlocks(objects) {
+    const terrain = objects.filter((o) => o.type === "block");
+    const others = objects.filter((o) => o.type !== "block");
+    if (terrain.length < 2) return objects;
+    const mergedTerrain = [];
+    terrain.sort((a, b) => {
+      if (a.isHitbox !== b.isHitbox) return a.isHitbox ? 1 : -1;
+      if (a.y !== b.y) return a.y - b.y;
+      if (a.height !== b.height) return (a.height || 0) - (b.height || 0);
+      return a.x - b.x;
+    });
+    let current = terrain[0];
+    for (let i = 1; i < terrain.length; i++) {
+      const next = terrain[i];
+      const isAdjacent = Math.abs(current.x + (current.width || 0) - next.x) < 0.1;
+      const sameY = current.y === next.y;
+      const sameH = current.height === next.height;
+      const sameMeta = current.isHitbox === next.isHitbox;
+      if (isAdjacent && sameY && sameH && sameMeta) {
+        current.width = (current.width || 0) + (next.width || 0);
+      } else {
+        mergedTerrain.push(current);
+        current = next;
+      }
+    }
+    mergedTerrain.push(current);
+    return [...mergedTerrain, ...others];
   }
   fillBelow(objects, x, startY, size) {
     const mapBottom = 1e3;
@@ -4660,22 +4690,24 @@ class MapGenerator {
       });
     }
   }
-  getRandomMovement(type, prob) {
+  getRandomMovement(type, prob, safetyMultiplier = 1) {
     if (Math.random() > prob) return void 0;
     const useRotate = ["saw", "mine", "spike_ball", "rotor", "cannon", "spark_mine", "planet", "star"].includes(type);
     const useUpDown = !useRotate || Math.random() < 0.3;
+    const rangeFactor = 1 / safetyMultiplier;
+    const speedFactor = 1 / safetyMultiplier;
     if (useRotate && !useUpDown) {
       return {
         type: "rotate",
-        speed: 1 + Math.random() * 2,
+        speed: (1 + Math.random() * 2) * speedFactor,
         range: 360,
         phase: Math.random() * Math.PI * 2
       };
     } else {
       return {
         type: "updown",
-        speed: 1.5 + Math.random() * 2.5,
-        range: 30 + Math.random() * 70,
+        speed: (1.5 + Math.random() * 2.5) * speedFactor,
+        range: (30 + Math.random() * 70) * rangeFactor,
         phase: Math.random() * Math.PI * 2
       };
     }
@@ -5256,7 +5288,7 @@ class GameEngine {
     const generator = new MapGenerator();
     const difficulty = this.mapConfig.difficulty;
     const safetyMultiplier = 1 + Math.min(0.5, offsetAttempt * 0.05);
-    const hazardMultiplier = Math.max(0.4, 1 - offsetAttempt * 0.1);
+    const hazardMultiplier = Math.max(0.1, 1 - offsetAttempt * 0.1);
     console.log(`[MapGen] Seed: ${seed}, Attempt: ${offsetAttempt}, Safety: ${safetyMultiplier.toFixed(2)}, Hazard: ${hazardMultiplier.toFixed(2)}`);
     const rng = this.seededRandom(seed + offsetAttempt);
     let resumeState = null;
@@ -6556,7 +6588,7 @@ class GameEngine {
         });
       }
       const isColliding = points.some(
-        (p) => p.x >= portal.x && p.x <= portal.x + portal.width && p.y >= portal.y && p.y <= portal.y + portal.height
+        (p) => p && p.x >= portal.x && p.x <= portal.x + portal.width && p.y >= portal.y && p.y <= portal.y + portal.height
       );
       if (isColliding) {
         portal.activated = true;
@@ -6829,7 +6861,7 @@ class GameEngine {
    * 전역 회전 지원: 플레이어 점들을 역회전시켜 AABB와 체크
    */
   checkObstacleCollision(obs, px, py, pSize, simTime, simSpeedMultiplier) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
     let obsY = obs.y;
     let obsAngle = obs.angle || 0;
     if (simTime !== void 0 && obs.movement) {
@@ -6900,26 +6932,26 @@ class GameEngine {
           const childX = cx + Math.cos(theta) * dist;
           const childY = cy + Math.sin(theta) * dist;
           const childSize = child.width ? child.width / 2 : 14;
-          const distToChildSq = (points[4].x - childX) ** 2 + (points[4].y - childY) ** 2;
+          const distToChildSq = (((_f = points[4]) == null ? void 0 : _f.x) - childX) ** 2 + (((_g = points[4]) == null ? void 0 : _g.y) - childY) ** 2;
           if (distToChildSq < (childSize + pSize - 2) ** 2) return true;
           if (child.type === "planet") {
-            const moonCount = (_g = (_f = child.customData) == null ? void 0 : _f.orbitCount) != null ? _g : 2;
-            const moonSpeed = (_i = (_h = child.customData) == null ? void 0 : _h.orbitSpeed) != null ? _i : 2;
-            const moonDist = (_k = (_j = child.customData) == null ? void 0 : _j.orbitDistance) != null ? _k : child.width * 0.8;
+            const moonCount = (_i = (_h = child.customData) == null ? void 0 : _h.orbitCount) != null ? _i : 2;
+            const moonSpeed = (_k = (_j = child.customData) == null ? void 0 : _j.orbitSpeed) != null ? _k : 2;
+            const moonDist = (_m = (_l = child.customData) == null ? void 0 : _l.orbitDistance) != null ? _m : child.width * 0.8;
             for (let j = 0; j < moonCount; j++) {
               const mTheta = time * moonSpeed + j * (Math.PI * 2 / moonCount);
               const mx = childX + Math.cos(mTheta) * moonDist;
               const my = childY + Math.sin(mTheta) * moonDist;
-              const distToMoonSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
+              const distToMoonSq = (((_n = points[4]) == null ? void 0 : _n.x) - mx) ** 2 + (((_o = points[4]) == null ? void 0 : _o.y) - my) ** 2;
               if (distToMoonSq < (8 + pSize - 2) ** 2) return true;
             }
           }
         }
       } else {
-        const count = (_m = (_l = obs.customData) == null ? void 0 : _l.orbitCount) != null ? _m : obs.type === "star" ? 0 : 2;
+        const count = (_q = (_p = obs.customData) == null ? void 0 : _p.orbitCount) != null ? _q : obs.type === "star" ? 0 : 2;
         if (count === 0 && obs.type === "star") ; else {
-          const speed = (_o = (_n = obs.customData) == null ? void 0 : _n.orbitSpeed) != null ? _o : 1;
-          const dist = (_q = (_p = obs.customData) == null ? void 0 : _p.orbitDistance) != null ? _q : obs.width * 0.8;
+          const speed = (_s = (_r = obs.customData) == null ? void 0 : _r.orbitSpeed) != null ? _s : 1;
+          const dist = (_u = (_t = obs.customData) == null ? void 0 : _t.orbitDistance) != null ? _u : obs.width * 0.8;
           for (let i = 0; i < count; i++) {
             const theta = time * speed + i * (Math.PI * 2 / count);
             const mx = cx + Math.cos(theta) * dist;
@@ -6927,7 +6959,7 @@ class GameEngine {
             const moonRadius = obs.type === "star" ? 20 : 10;
             const mDistSq = (points[4].x - mx) ** 2 + (points[4].y - my) ** 2;
             if (mDistSq < (moonRadius + pSize - 2) ** 2) return true;
-            if (obs.type === "star" && ((_r = obs.customData) == null ? void 0 : _r.nestedOrbit)) {
+            if (obs.type === "star" && ((_v = obs.customData) == null ? void 0 : _v.nestedOrbit)) {
               const subMoonCount = 2;
               const subDist = 25;
               const subSpeed = speed * 2.5;
