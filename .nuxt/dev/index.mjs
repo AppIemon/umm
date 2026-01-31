@@ -5,8 +5,8 @@ import crypto$1 from 'node:crypto';
 import { parentPort, threadId } from 'node:worker_threads';
 import { defineEventHandler, handleCacheHeaders, splitCookiesString, createEvent, fetchWithEvent, isEvent, eventHandler, setHeaders, sendRedirect, proxyRequest, getRequestHeader, setResponseHeaders, setResponseStatus, send, getRequestHeaders, setResponseHeader, appendResponseHeader, getRequestURL, getResponseHeader, removeResponseHeader, createError, getQuery as getQuery$1, readBody, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getResponseStatus, getRouterParam, setCookie, deleteCookie, getCookie, sendStream, getResponseStatusText } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/h3/dist/index.mjs';
 import { escapeHtml } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/@vue/shared/dist/shared.cjs.js';
-import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
 import fs, { promises } from 'node:fs';
+import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
 import { Readable } from 'node:stream';
 import { createRenderer, getRequestDependencies, getPreloadLinks, getPrefetchLinks } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { parseURL, withoutBase, joinURL, getQuery, withQuery, withTrailingSlash, decodePath, withLeadingSlash, withoutTrailingSlash, joinRelativeURL } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/ufo/dist/index.mjs';
@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3e904-MJMWoK0zj8tL+gHTcc643h1ACAM\"",
-    "mtime": "2026-01-31T03:38:01.435Z",
-    "size": 256260,
+    "etag": "\"3ec54-cpj2mIRaalEspYNNz0BmlsDBpaY\"",
+    "mtime": "2026-01-31T05:28:14.720Z",
+    "size": 257108,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f0428-D/gdyWXIyBIn+IXRq4LsJUsBdZM\"",
-    "mtime": "2026-01-31T03:38:01.465Z",
-    "size": 984104,
+    "etag": "\"f0e05-z42V/UJL4yjxvEejl7CuH3iJGyA\"",
+    "mtime": "2026-01-31T05:28:14.724Z",
+    "size": 986629,
     "path": "index.mjs.map"
   }
 };
@@ -2964,46 +2964,59 @@ const audioChunk_post = defineEventHandler(async (event) => {
   if (!map) {
     throw createError({ statusCode: 404, statusMessage: "Map not found" });
   }
-  const tempDir = path.join(process.cwd(), "public", "music", "_temp_chunks", id);
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-  const binaryChunk = Buffer.from(chunkData, "base64");
-  const chunkPath = path.join(tempDir, `chunk_${chunkIndex}.bin`);
-  fs.writeFileSync(chunkPath, binaryChunk);
-  const files = fs.readdirSync(tempDir);
-  const uploadedCount = files.filter((f) => f.startsWith("chunk_") && f.endsWith(".bin")).length;
+  if (!map.audioChunks) map.audioChunks = [];
+  map.audioChunks[chunkIndex] = chunkData;
+  map.markModified("audioChunks");
+  await map.save();
+  const uploadedCount = map.audioChunks.filter((c) => !!c).length;
   if (uploadedCount >= totalChunks) {
     console.log(`[Audio] All chunks received for map ${id}. Merging...`);
-    const mergedData = Buffer.alloc(files.reduce((acc, f) => acc + fs.statSync(path.join(tempDir, f)).size, 0));
-    let offset = 0;
-    for (let i = 0; i < totalChunks; i++) {
-      const cPath = path.join(tempDir, `chunk_${i}.bin`);
-      if (!fs.existsSync(cPath)) {
-        throw createError({ statusCode: 500, statusMessage: `Missing chunk ${i} during merge` });
-      }
-      const data = fs.readFileSync(cPath);
-      data.copy(mergedData, offset);
-      offset += data.length;
-    }
+    const buffers = map.audioChunks.map((c) => Buffer.from(c, "base64"));
+    const mergedData = Buffer.concat(buffers);
     const hash = crypto$1.createHash("sha256").update(mergedData).digest("hex");
-    const finalFilename = `${hash}.wav`;
-    const musicDir = path.join(process.cwd(), "public", "music");
-    const finalPath = path.join(musicDir, finalFilename);
-    if (!fs.existsSync(finalPath)) {
-      fs.writeFileSync(finalPath, mergedData);
+    const isVercel = !!process.env.VERCEL;
+    if (isVercel) {
+      let audioContent = await AudioContent.findOne({ hash });
+      if (!audioContent) {
+        audioContent = await AudioContent.create({
+          hash,
+          chunks: buffers,
+          size: mergedData.length
+        });
+      }
+      map.audioUrl = null;
+      map.audioContentId = audioContent._id;
+    } else {
+      try {
+        const finalFilename = `${hash}.wav`;
+        const musicDir = path.join(process.cwd(), "public", "music");
+        if (!fs.existsSync(musicDir)) {
+          fs.mkdirSync(musicDir, { recursive: true });
+        }
+        const finalPath = path.join(musicDir, finalFilename);
+        if (!fs.existsSync(finalPath)) {
+          fs.writeFileSync(finalPath, mergedData);
+        }
+        map.audioUrl = `/music/${finalFilename}`;
+        map.audioContentId = null;
+      } catch (err) {
+        console.error("[Audio] FS Merge failed, falling back to DB:", err);
+        let audioContent = await AudioContent.findOne({ hash });
+        if (!audioContent) {
+          audioContent = await AudioContent.create({
+            hash,
+            chunks: buffers,
+            size: mergedData.length
+          });
+        }
+        map.audioUrl = null;
+        map.audioContentId = audioContent._id;
+      }
     }
-    map.audioUrl = `/music/${finalFilename}`;
     map.audioData = null;
     map.audioChunks = [];
-    map.audioContentId = null;
     await map.save();
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch (e) {
-      console.error(`[Audio] Cleanup failed for ${tempDir}`, e);
-    }
-    return { success: true, finished: true, url: map.audioUrl };
+    return { success: true, finished: true, url: map.audioUrl, audioContentId: map.audioContentId };
   }
   return { success: true, finished: false, index: chunkIndex };
 });
@@ -3283,19 +3296,46 @@ const index_post = defineEventHandler(async (event) => {
         let ext = ".wav";
         if (mimeType.includes("mpeg") || mimeType.includes("mp3")) ext = ".mp3";
         else if (mimeType.includes("ogg")) ext = ".ogg";
-        const filename = `${hash}${ext}`;
-        const musicDir = path.join(process.cwd(), "public", "music");
-        if (!fs.existsSync(musicDir)) {
-          fs.mkdirSync(musicDir, { recursive: true });
-        }
-        const filePath = path.join(musicDir, filename);
-        if (!fs.existsSync(filePath)) {
-          fs.writeFileSync(filePath, binaryData);
-          console.log(`[Audio] Saved new music file: ${filename}`);
+        const isVercel = !!process.env.VERCEL;
+        if (isVercel) {
+          let audioContent = await AudioContent.findOne({ hash });
+          if (!audioContent) {
+            audioContent = await AudioContent.create({
+              hash,
+              chunks: [binaryData],
+              size: binaryData.length
+            });
+            console.log(`[Audio] Saved new music to MongoDB: ${hash}`);
+          }
+          finalAudioUrl = `audioContentId:${audioContent._id}`;
         } else {
-          console.log(`[Audio] Music file exists, skipping write: ${filename}`);
+          try {
+            const filename = `${hash}${ext}`;
+            const musicDir = path.join(process.cwd(), "public", "music");
+            if (!fs.existsSync(musicDir)) {
+              fs.mkdirSync(musicDir, { recursive: true });
+            }
+            const filePath = path.join(musicDir, filename);
+            if (!fs.existsSync(filePath)) {
+              fs.writeFileSync(filePath, binaryData);
+              console.log(`[Audio] Saved new music file: ${filename}`);
+            } else {
+              console.log(`[Audio] Music file exists, skipping write: ${filename}`);
+            }
+            finalAudioUrl = `/music/${filename}`;
+          } catch (fsError) {
+            console.error("[Audio] Local save failed, falling back to MongoDB:", fsError.message);
+            let audioContent = await AudioContent.findOne({ hash });
+            if (!audioContent) {
+              audioContent = await AudioContent.create({
+                hash,
+                chunks: [binaryData],
+                size: binaryData.length
+              });
+            }
+            finalAudioUrl = `audioContentId:${audioContent._id}`;
+          }
         }
-        finalAudioUrl = `/music/${filename}`;
       }
     }
     let user = await User.findOne({ username: (creatorName == null ? void 0 : creatorName.toLowerCase()) || "guest" });
@@ -3348,6 +3388,11 @@ const index_post = defineEventHandler(async (event) => {
       }
       return optimized;
     };
+    let audioContentIdToSet = null;
+    if (finalAudioUrl && finalAudioUrl.startsWith("audioContentId:")) {
+      audioContentIdToSet = finalAudioUrl.split(":")[1];
+      finalAudioUrl = null;
+    }
     const mapData = {
       title,
       creator: user._id,
@@ -3357,8 +3402,7 @@ const index_post = defineEventHandler(async (event) => {
       // Clear Base64 data to save space
       audioChunks: [],
       // Clear chunks to save space
-      audioContentId: null,
-      // No longer using AudioContent for new maps
+      audioContentId: audioContentIdToSet,
       difficulty,
       seed: seed || 0,
       beatTimes: beatTimes || [],
@@ -3508,22 +3552,22 @@ const leave_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProper
   default: leave_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
-const roundNum$1 = (num, precision = 1) => {
+const roundNum = (num, precision = 1) => {
   if (typeof num !== "number" || isNaN(num)) return 0;
   const factor = Math.pow(10, precision);
   return Math.round(num * factor) / factor;
 };
-const optimizeObstacles$1 = (obs) => {
+const optimizeObstacles = (obs) => {
   if (!Array.isArray(obs)) return [];
   return obs.map((o) => {
     const optimized = {
       ...o,
-      x: roundNum$1(o.x),
-      y: roundNum$1(o.y),
-      width: roundNum$1(o.width),
-      height: roundNum$1(o.height)
+      x: roundNum(o.x),
+      y: roundNum(o.y),
+      width: roundNum(o.width),
+      height: roundNum(o.height)
     };
-    if (o.children) optimized.children = optimizeObstacles$1(o.children);
+    if (o.children) optimized.children = optimizeObstacles(o.children);
     return optimized;
   });
 };
@@ -3556,8 +3600,8 @@ const start_post = defineEventHandler(async (event) => {
         title: `ROOM_${room.title}_ROUND_${d / 10}`,
         difficulty: room.difficulty || 10,
         seed,
-        engineObstacles: optimizeObstacles$1(engine.obstacles),
-        enginePortals: optimizeObstacles$1(engine.portals),
+        engineObstacles: optimizeObstacles(engine.obstacles),
+        enginePortals: optimizeObstacles(engine.portals),
         duration: d,
         audioUrl: room.musicUrl || null,
         isVerified: true,
@@ -4337,7 +4381,7 @@ class MapGenerator {
    * Difficulty based gap calculation
    * 난이도가 높을수록 좁아짐
    */
-  calculateGap(difficulty, isMini) {
+  calculateGap(difficulty, isMini, safetyMultiplier = 1) {
     let baseGap;
     if (difficulty <= 7) {
       baseGap = 580 - (difficulty - 1) * 20;
@@ -4348,7 +4392,7 @@ class MapGenerator {
     } else {
       baseGap = 180 - (difficulty - 24) * 15;
     }
-    baseGap = Math.max(50, baseGap);
+    baseGap = Math.max(50, baseGap) * safetyMultiplier;
     return isMini ? baseGap * 1.5 : baseGap;
   }
   /**
@@ -4357,39 +4401,43 @@ class MapGenerator {
    * - Saw-filled Walls (Nine Circles)
    * - Rhythm-synced Decorations
    */
-  generateFromPath(path, difficulty, beatTimes, stateEvents = []) {
+  generateFromPath(path, difficulty, beatTimes, stateEvents = [], safetyMultiplier = 1) {
     if (!path || path.length < 2) return [];
     const objects = [];
     const blockSize = 50;
-    const baseGapVal = this.calculateGap(difficulty, false);
+    const baseGapVal = this.calculateGap(difficulty, false, safetyMultiplier);
     const startX = Math.floor(path[0].x / blockSize) * blockSize;
     const endX = path[path.length - 1].x;
     if (isNaN(startX) || isNaN(endX) || endX <= startX) return [];
-    const SEGMENT_COUNT = 10;
     const poolFloor = ["spike", "piston_v", "hammer", "growing_spike", "cannon", "crusher_jaw"];
     const poolCeil = ["spike", "falling_spike", "hammer", "swing_blade", "piston_v", "crusher_jaw"];
     const poolFloat = ["mine", "rotor", "spark_mine", "laser_beam", "planet", "star"];
-    const createSegmentSets = (pool, count, minPerSeg) => {
-      let sets = Array(count).fill([]).map(() => []);
+    const createBag = (pool) => {
       let bag = [...pool];
-      const targetTotal = count * minPerSeg;
-      while (bag.length < targetTotal) {
-        bag.push(pool[Math.floor(Math.random() * pool.length)]);
-      }
-      for (let i = bag.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [bag[i], bag[j]] = [bag[j], bag[i]];
-      }
-      for (let i = 0; i < count; i++) {
-        sets[i] = bag.slice(i * minPerSeg, (i + 1) * minPerSeg);
-      }
-      return sets;
+      let idx = 0;
+      const shuffle = () => {
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [bag[i], bag[j]] = [bag[j], bag[i]];
+        }
+        idx = 0;
+      };
+      shuffle();
+      return {
+        next: () => {
+          const val = bag[idx];
+          idx++;
+          if (idx >= bag.length) shuffle();
+          return val;
+        }
+      };
     };
-    const segmentFloor = createSegmentSets(poolFloor, SEGMENT_COUNT, 2);
-    const segmentCeil = createSegmentSets(poolCeil, SEGMENT_COUNT, 2);
-    const segmentFloat = createSegmentSets(poolFloat, SEGMENT_COUNT, 2);
+    const floorBag = createBag(poolFloor);
+    const ceilBag = createBag(poolCeil);
+    const floatBag = createBag(poolFloat);
     let currentFloorY = Math.floor((path[0].y + baseGapVal / 2) / blockSize) * blockSize;
     let currentCeilY = Math.floor((path[0].y - baseGapVal / 2) / blockSize) * blockSize;
+    const boundaryMap = /* @__PURE__ */ new Map();
     let pathIdx = 0;
     let beatIdx = 0;
     beatTimes.sort((a, b) => a - b);
@@ -4458,40 +4506,23 @@ class MapGenerator {
         if (ceilDiff < -10) ceilStepY = -blockSize;
         else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
       }
-      if (stepY < 0 && currentFloorY + stepY < floorBoundary) {
-        stepY = 0;
-      }
-      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) {
-        ceilStepY = 0;
-      }
+      if (stepY < 0 && currentFloorY + stepY < floorBoundary) stepY = 0;
+      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) ceilStepY = 0;
+      boundaryMap.set(currentX, { floorY: currentFloorY, ceilY: currentCeilY });
       if (stepY < 0) {
         const isSteep = stepY === -blockSize * 2;
         const slopeType = isSteep ? "steep_triangle" : "triangle";
         const slopeHeight = Math.abs(stepY);
         currentFloorY += stepY;
         const blockY = currentFloorY;
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: 0
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 0 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
       } else if (stepY > 0) {
         const isSteep = stepY === blockSize * 2;
         const slopeType = isSteep ? "steep_triangle" : "triangle";
         const slopeHeight = Math.abs(stepY);
         const blockY = currentFloorY;
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: 90
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 90 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
         currentFloorY += stepY;
       } else {
@@ -4505,28 +4536,14 @@ class MapGenerator {
         const slopeHeight = Math.abs(ceilStepY);
         currentCeilY += ceilStepY;
         const blockY = currentCeilY;
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: 180
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 180 });
         this.fillAbove(objects, currentX, blockY, blockSize);
       } else if (ceilStepY > 0) {
         const isSteep = ceilStepY === blockSize * 2;
         const slopeType = isSteep ? "steep_triangle" : "triangle";
         const slopeHeight = Math.abs(ceilStepY);
         const blockY = currentCeilY;
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: -90
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: -90 });
         this.fillAbove(objects, currentX, blockY, blockSize);
         currentCeilY += ceilStepY;
       } else {
@@ -4536,80 +4553,56 @@ class MapGenerator {
       }
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
       const hazardThreshold = 0.2 + difficulty / 30 * 0.35;
-      if (stepY === 0 && currentGap > 100 && rand < hazardThreshold) {
-        let spikeH = 40;
-        if (difficulty <= 5) spikeH = 20;
-        else if (difficulty <= 10) spikeH = 30;
-        if (difficulty > 15) spikeH = 45;
-        if (difficulty > 25) spikeH = 50;
-        const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
-        const segIdx = Math.floor(progress * SEGMENT_COUNT);
-        const currentFloorOptions = segmentFloor[segIdx];
-        const currentCeilOptions = segmentCeil[segIdx];
-        let floorType = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || "spike";
-        let ceilType = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || "spike";
-        if (floorType === "spike" && difficulty <= 8) floorType = "mini_spike";
-        if (ceilType === "spike" && difficulty <= 8) ceilType = "mini_spike";
-        if (rand < 0.1) {
-          if (currentPoint.y < currentFloorY - spikeH - 40 && currentFloorY - spikeH > currentCeilY + 40) {
+      if (stepY === 0 && ceilStepY === 0 && currentGap > 120 && rand < hazardThreshold) {
+        const sizeVariance = 0.8 + Math.random() * 0.4;
+        let baseH = 40;
+        if (difficulty <= 5) baseH = 25;
+        else if (difficulty > 20) baseH = 50;
+        const spikeH = baseH * sizeVariance;
+        const isFloor = currentX / blockSize % 2 === 0;
+        if (isFloor) {
+          const type = floorBag.next();
+          if (currentPoint.y < currentFloorY - spikeH - 20) {
             objects.push({
-              type: floorType,
+              type: type === "spike" && difficulty <= 8 ? "mini_spike" : type,
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
               height: spikeH,
-              movement: this.getRandomMovement(floorType, 0.25)
+              movement: this.getRandomMovement(type, 0.4)
             });
           }
         } else {
+          const type = ceilBag.next();
           let adjustedCeilY = currentCeilY;
-          if (ceilType === "falling_spike") {
+          if (type === "falling_spike") {
             const dist = currentPoint.y - currentCeilY;
-            if (dist > 250) {
-              adjustedCeilY = currentPoint.y - 250;
-            }
+            if (dist > 250) adjustedCeilY = currentPoint.y - 250;
           }
-          if (currentPoint.y > adjustedCeilY + spikeH + 40 && adjustedCeilY + spikeH < currentFloorY - 40) {
+          if (currentPoint.y > adjustedCeilY + spikeH + 20) {
             objects.push({
-              type: ceilType,
+              type: type === "spike" && difficulty <= 8 ? "mini_spike" : type,
               x: currentX,
               y: adjustedCeilY,
               width: blockSize,
               height: spikeH,
               rotation: 180,
-              movement: this.getRandomMovement(ceilType, 0.25)
+              movement: this.getRandomMovement(type, 0.4)
             });
           }
         }
       }
-      if (rand > 0.95 && currentGap > 200) {
-        const mineSize = difficulty <= 7 ? 20 : 30;
+      if (rand > 0.94 && currentGap > 220) {
+        const mineSize = (difficulty <= 7 ? 20 : 35) * (0.9 + Math.random() * 0.2);
         const midY = (currentFloorY + currentCeilY) / 2;
-        let pY = midY;
-        if (currentPoint.y < midY) {
-          pY = midY + (currentFloorY - midY) * 0.5;
-        } else {
-          pY = midY - (midY - currentCeilY) * 0.5;
-        }
-        const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
-        const segIdx = Math.floor(progress * SEGMENT_COUNT);
-        const currentFloatOptions = segmentFloat[segIdx];
-        const chosenFloat = currentFloatOptions[Math.floor(Math.random() * currentFloatOptions.length)] || "mine";
-        const obsType = chosenFloat;
+        let pY = currentPoint.y < midY ? midY + (currentFloorY - midY) * 0.5 : midY - (midY - currentCeilY) * 0.5;
+        const obsType = floatBag.next();
         let children = void 0;
         let customData = void 0;
-        if (obsType === "planet") {
-          customData = { orbitSpeed: 1.5, orbitDistance: mineSize * 0.8, orbitCount: 2 };
-          children = [];
-          for (let k = 0; k < 2; k++) {
-            children.push({ type: "planet", x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true });
-          }
-        } else if (obsType === "star") {
-          customData = { orbitSpeed: 1, orbitDistance: mineSize * 0.8, orbitCount: 3 };
-          children = [];
-          for (let k = 0; k < 3; k++) {
-            children.push({ type: "planet", x: 0, y: 0, width: mineSize * 0.5, height: mineSize * 0.5, isHitbox: true });
-          }
+        if (obsType === "planet" || obsType === "star") {
+          const count = obsType === "planet" ? 2 : 3;
+          customData = { orbitSpeed: 1 + Math.random(), orbitDistance: mineSize * 0.8, orbitCount: count };
+          children = Array(count).fill(0).map(() => ({ type: "moon", x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true }));
         }
         objects.push({
           type: obsType,
@@ -4621,30 +4614,28 @@ class MapGenerator {
           rotation: obsType === "laser_beam" ? 90 : 0,
           children,
           customData,
-          movement: this.getRandomMovement(obsType, 0.5)
+          movement: this.getRandomMovement(obsType, 0.6)
         });
       }
-      while (beatIdx < beatTimes.length && beatTimes[beatIdx] < currentPoint.time) {
-        beatIdx++;
-      }
+      while (beatIdx < beatTimes.length && beatTimes[beatIdx] < currentPoint.time) beatIdx++;
       while (beatIdx < beatTimes.length && beatTimes[beatIdx] <= nextPoint.time) {
         const beatY = (currentFloorY + currentCeilY) / 2 - 40;
         if (beatY >= currentCeilY && beatY + 80 <= currentFloorY) {
-          objects.push({
-            type: "orb",
-            x: currentX + 25,
-            y: beatY,
-            width: 80,
-            height: 80,
-            isHitbox: false
-          });
+          objects.push({ type: "orb", x: currentX + 25, y: beatY, width: 80, height: 80, isHitbox: false });
         }
         beatIdx++;
       }
     }
     return objects.filter((obj) => {
-      if (["gravity_yellow", "gravity_blue", "speed_0.25", "speed_0.5", "speed_1", "speed_2", "speed_3", "speed_4", "mini_pink", "mini_green"].includes(obj.type)) return true;
-      if (obj.isHitbox === true) return true;
+      if (["block", "triangle", "steep_triangle"].includes(obj.type)) return true;
+      if (["gravity_yellow", "gravity_blue", "speed_0.25", "speed_0.5", "speed_1", "speed_2", "speed_3", "speed_4", "mini_pink", "mini_green", "teleport_in", "teleport_out"].includes(obj.type)) return true;
+      if (obj.type === "orb") return true;
+      const bounds = boundaryMap.get(Math.floor(obj.x / blockSize) * blockSize);
+      if (!bounds) return true;
+      const top = obj.y;
+      const bottom = obj.y + (obj.height || 0);
+      if (bottom <= bounds.ceilY - 5) return false;
+      if (top >= bounds.floorY + 5) return false;
       return true;
     });
   }
@@ -5234,6 +5225,7 @@ class GameEngine {
     this.bpm = bpm;
     this.measureLength = measureLength;
     const seed = fixedSeed || beatTimes.length * 777 + Math.floor(duration * 100);
+    const prevLog = [...this.autoplayLog];
     this.obstacles = [];
     this.portals = [];
     this.beatTimes = beatTimes || [];
@@ -5242,24 +5234,38 @@ class GameEngine {
     this.autoplayLog = [];
     const generator = new MapGenerator();
     const difficulty = this.mapConfig.difficulty;
-    console.log(`[MapGen] Procedural Generation with seed: ${seed}, Difficulty: ${difficulty}`);
+    const safetyMultiplier = 1 + Math.min(0.5, offsetAttempt * 0.05);
+    const hazardMultiplier = Math.max(0.4, 1 - offsetAttempt * 0.1);
+    console.log(`[MapGen] Seed: ${seed}, Attempt: ${offsetAttempt}, Safety: ${safetyMultiplier.toFixed(2)}, Hazard: ${hazardMultiplier.toFixed(2)}`);
     const rng = this.seededRandom(seed + offsetAttempt);
-    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeOptions);
+    let resumeState = null;
+    if (resumeOptions) {
+      const point = prevLog.find((p) => p.time >= resumeOptions.time);
+      if (point) {
+        resumeState = {
+          time: resumeOptions.time,
+          x: point.x,
+          y: point.y,
+          stateEvents: resumeOptions.stateEvents,
+          beatActions: resumeOptions.beatActions
+        };
+      }
+    }
+    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeState);
     this.lastStateEvents = stateEvents;
     let startX = 0;
-    if (resumeOptions) {
-      const point = this.autoplayLog.find((p) => p.time >= resumeOptions.time);
-      if (point) startX = point.x;
+    if (resumeState) {
+      startX = resumeState.x;
       const oldObstacles = resumeOptions.obstacles.filter((o) => o.x + o.width <= startX);
       const oldPortals = resumeOptions.portals.filter((p) => p.x + p.width <= startX);
       this.obstacles = [...oldObstacles, ...this.obstacles];
       this.portals = [...oldPortals, ...this.portals];
     }
     let pathForGen = this.autoplayLog;
-    if (resumeOptions && startX > 0) {
+    if (startX > 0) {
       pathForGen = this.autoplayLog.filter((p) => p.x >= startX);
     }
-    const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
+    const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents, safetyMultiplier);
     for (const obj of mapObjects) {
       if (["gravity_yellow", "gravity_blue", "speed_0.25", "speed_0.5", "speed_1", "speed_2", "speed_3", "speed_4", "mini_pink", "mini_green"].includes(obj.type)) {
         this.portals.push({
@@ -5271,6 +5277,9 @@ class GameEngine {
           activated: false
         });
       } else {
+        if (!["block", "triangle", "steep_triangle"].includes(obj.type)) {
+          if (rng() > hazardMultiplier) continue;
+        }
         this.obstacles.push({
           x: obj.x,
           y: obj.y,
@@ -5474,20 +5483,26 @@ class GameEngine {
     let simAngle = 45;
     let beatActionIdx = 0;
     let stateEventIdx = 0;
+    if (resumeOptions && resumeOptions.time > 0) {
+      simTime = resumeOptions.time;
+      simX = resumeOptions.x || 200;
+      simY = resumeOptions.y || 360;
+    }
+    while (stateEventIdx < stateEvents.length && stateEvents[stateEventIdx].time <= simTime) {
+      const se = stateEvents[stateEventIdx];
+      simSpeed = this.getSpeedMultiplierFromType(se.speedType);
+      simGravity = se.isInverted;
+      simMini = se.isMini;
+      simAngle = this.getEffectiveAngle(simMini, simSpeed);
+      stateEventIdx++;
+    }
+    while (beatActionIdx < beatActions.length && beatActions[beatActionIdx].time <= simTime) {
+      const ba = beatActions[beatActionIdx];
+      simHolding = ba.action === "click";
+      beatActionIdx++;
+    }
+    if (resumeOptions && resumeOptions.time > 0) ;
     while (simTime < this.trackDuration + 1) {
-      while (stateEventIdx < stateEvents.length && stateEvents[stateEventIdx].time <= simTime) {
-        const se = stateEvents[stateEventIdx];
-        simSpeed = this.getSpeedMultiplierFromType(se.speedType);
-        simGravity = se.isInverted;
-        simMini = se.isMini;
-        simAngle = this.getEffectiveAngle(simMini, simSpeed);
-        stateEventIdx++;
-      }
-      while (beatActionIdx < beatActions.length && beatActions[beatActionIdx].time <= simTime) {
-        const ba = beatActions[beatActionIdx];
-        simHolding = ba.action === "click";
-        beatActionIdx++;
-      }
       const spd = this.baseSpeed * simSpeed;
       const amp = spd * Math.tan(simAngle * Math.PI / 180);
       let vy;
@@ -5541,6 +5556,8 @@ class GameEngine {
     const portalWidth = 64;
     const portalHeight = 240;
     const horizontalSpacing = 80;
+    const diff = this.mapConfig.difficulty;
+    const safetyMargin = diff >= 24 ? 40 : 20;
     types.forEach((type, horizontalIndex) => {
       const currentX = xPos + horizontalIndex * (portalWidth + horizontalSpacing);
       const portalY = pathY - portalHeight / 2;
@@ -5553,7 +5570,7 @@ class GameEngine {
         activated: false
       });
       if (this.mapConfig.difficulty <= 2) return;
-      const topWallHeight = portalY - this.minY - 20;
+      const topWallHeight = portalY - this.minY - safetyMargin;
       if (topWallHeight > 20) {
         this.obstacles.push({
           x: currentX - 5,
@@ -5564,7 +5581,7 @@ class GameEngine {
           initialY: this.minY
         });
       }
-      const bottomWallStart = portalY + portalHeight + 20;
+      const bottomWallStart = portalY + portalHeight + safetyMargin;
       const bottomWallHeight = this.maxY - bottomWallStart;
       if (bottomWallHeight > 20) {
         this.obstacles.push({

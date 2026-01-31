@@ -721,7 +721,8 @@ export class GameEngine {
     this.measureLength = measureLength;
     const seed = fixedSeed || (beatTimes.length * 777 + Math.floor(duration * 100));
 
-    // 1. Clear current state before generation
+    // 1. Clear current state before generation (But keep autoplayLog for resume lookup)
+    const prevLog = [...this.autoplayLog];
     this.obstacles = [];
     this.portals = [];
 
@@ -733,24 +734,41 @@ export class GameEngine {
     const generator = new MapGenerator();
     const difficulty = this.mapConfig.difficulty;
 
-    console.log(`[MapGen] Procedural Generation with seed: ${seed}, Difficulty: ${difficulty}`);
+    // Safety Multiplier: Increase gap size as retries increase (Max 1.5x)
+    const safetyMultiplier = 1.0 + Math.min(0.5, offsetAttempt * 0.05);
+    // Hazard Threshold Multiplier: Decrease obstacle density as retries increase (Min 0.4x)
+    const hazardMultiplier = Math.max(0.4, 1.0 - offsetAttempt * 0.1);
+
+    console.log(`[MapGen] Seed: ${seed}, Attempt: ${offsetAttempt}, Safety: ${safetyMultiplier.toFixed(2)}, Hazard: ${hazardMultiplier.toFixed(2)}`);
 
     const rng = this.seededRandom(seed + offsetAttempt);
 
     // 2. Generate path (autoplayLog) based on beats
-    // generatePathBasedMap returns state events and populates this.portals with portals for the NEW part
-    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeOptions);
+    // Pass previous state if resuming
+    let resumeState: any = null;
+    if (resumeOptions) {
+      const point = prevLog.find(p => p.time >= resumeOptions.time);
+      if (point) {
+        resumeState = {
+          time: resumeOptions.time,
+          x: point.x,
+          y: point.y,
+          stateEvents: resumeOptions.stateEvents,
+          beatActions: resumeOptions.beatActions
+        };
+      }
+    }
+
+    const stateEvents = this.generatePathBasedMap(beatTimes, sections, rng, volumeProfile, resumeState);
     this.lastStateEvents = stateEvents;
 
-    // Calculate Resume X if applicable
+    // Calculate Resume X
     let startX = 0;
-    if (resumeOptions) {
-      const point = this.autoplayLog.find(p => p.time >= resumeOptions.time);
-      if (point) startX = point.x;
+    if (resumeState) {
+      startX = resumeState.x;
 
-      // Restore obstacles and portals from BEFORE the resume point
-      const oldObstacles = resumeOptions.obstacles.filter(o => o.x + o.width <= startX);
-      const oldPortals = resumeOptions.portals.filter(p => p.x + p.width <= startX);
+      const oldObstacles = resumeOptions!.obstacles.filter(o => o.x + o.width <= startX);
+      const oldPortals = resumeOptions!.portals.filter(p => p.x + p.width <= startX);
 
       this.obstacles = [...oldObstacles, ...this.obstacles];
       this.portals = [...oldPortals, ...this.portals];
@@ -758,11 +776,12 @@ export class GameEngine {
 
     // 3. Generate Terrain & Obstacles along the path
     let pathForGen = this.autoplayLog;
-    if (resumeOptions && startX > 0) {
+    if (startX > 0) {
       pathForGen = this.autoplayLog.filter(p => p.x >= startX);
     }
 
-    const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents);
+    // Pass safety information to MapGenerator
+    const mapObjects = generator.generateFromPath(pathForGen, difficulty, beatTimes, stateEvents, safetyMultiplier);
 
     // 4. Convert MapObjects to Obstacles/Portals
     for (const obj of mapObjects) {
@@ -776,6 +795,11 @@ export class GameEngine {
           activated: false
         });
       } else {
+        // Apply hazard multiplier to non-terrain objects
+        if (!['block', 'triangle', 'steep_triangle'].includes(obj.type)) {
+          if (rng() > hazardMultiplier) continue; // Skip some obstacles on retry
+        }
+
         this.obstacles.push({
           x: obj.x,
           y: obj.y,
@@ -1086,23 +1110,37 @@ export class GameEngine {
     let beatActionIdx = 0;
     let stateEventIdx = 0;
 
-    while (simTime < this.trackDuration + 1) {
-      // 상태 이벤트 처리 (시간 기반)
-      while (stateEventIdx < stateEvents.length && stateEvents[stateEventIdx]!.time <= simTime) {
-        const se = stateEvents[stateEventIdx]!;
-        simSpeed = this.getSpeedMultiplierFromType(se.speedType);
-        simGravity = se.isInverted;
-        simMini = se.isMini;
-        simAngle = this.getEffectiveAngle(simMini, simSpeed);
-        stateEventIdx++;
-      }
+    // Resume: Start from resume point
+    if (resumeOptions && resumeOptions.time > 0) {
+      simTime = resumeOptions.time;
+      simX = resumeOptions.x || 200;
+      simY = resumeOptions.y || 360;
+    }
 
-      // 비트 액션 처리
-      while (beatActionIdx < beatActions.length && beatActions[beatActionIdx]!.time <= simTime) {
-        const ba = beatActions[beatActionIdx]!;
-        simHolding = ba.action === 'click';
-        beatActionIdx++;
-      }
+    // Re-check state events and beat actions up to simTime to sync initial sim state
+    while (stateEventIdx < stateEvents.length && stateEvents[stateEventIdx]!.time <= simTime) {
+      const se = stateEvents[stateEventIdx]!;
+      simSpeed = this.getSpeedMultiplierFromType(se.speedType);
+      simGravity = se.isInverted;
+      simMini = se.isMini;
+      simAngle = this.getEffectiveAngle(simMini, simSpeed);
+      stateEventIdx++;
+    }
+    while (beatActionIdx < beatActions.length && beatActions[beatActionIdx]!.time <= simTime) {
+      const ba = beatActions[beatActionIdx]!;
+      simHolding = ba.action === 'click';
+      beatActionIdx++;
+    }
+
+    // Attempt to find X, Y from previous log if available
+    if (resumeOptions && resumeOptions.time > 0) {
+      // Find the closest point in the PREVIOUS log
+      // But we don't have the previous log here easily.
+      // Let's assume the caller will provide a proper starting state if we extend resumeOptions.
+      // For now, let's just use the time sync.
+    }
+
+    while (simTime < this.trackDuration + 1) {
 
       // 물리 시뮬레이션
       const spd = this.baseSpeed * simSpeed;
@@ -1180,8 +1218,14 @@ export class GameEngine {
    */
   private generatePathAlignedPortals(xPos: number, pathY: number, types: PortalType[]) {
     const portalWidth = 64;
-    const portalHeight = 240; // Increased to 240 for better forcing
+    const portalHeight = 240;
     const horizontalSpacing = 80;
+
+    // Retries can relax the portal walls
+    // Since we don't have easy access to offsetAttempt here, we can infer it or pass it.
+    // For now, let's use a simpler heuristic or just make them safer at high difficulty.
+    const diff = this.mapConfig.difficulty;
+    const safetyMargin = diff >= 24 ? 40 : 20; // More room at impossible difficulty
 
     types.forEach((type, horizontalIndex) => {
       const currentX = xPos + horizontalIndex * (portalWidth + horizontalSpacing);
@@ -1202,11 +1246,8 @@ export class GameEngine {
       if (this.mapConfig.difficulty <= 2) return;
 
       // 포탈 위아래에 블록 벽 배치 (강제 통과)
-      const wallThickness = 70;
-      const gapSize = portalHeight + 40; // Larger gap for larger portal
-
       // 위쪽 벽
-      const topWallHeight = portalY - this.minY - 20;
+      const topWallHeight = portalY - this.minY - safetyMargin;
       if (topWallHeight > 20) {
         this.obstacles.push({
           x: currentX - 5,
@@ -1219,7 +1260,7 @@ export class GameEngine {
       }
 
       // 아래쪽 벽
-      const bottomWallStart = portalY + portalHeight + 20;
+      const bottomWallStart = portalY + portalHeight + safetyMargin;
       const bottomWallHeight = this.maxY - bottomWallStart;
       if (bottomWallHeight > 20) {
         this.obstacles.push({

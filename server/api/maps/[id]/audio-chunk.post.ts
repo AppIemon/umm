@@ -1,4 +1,5 @@
 import { GameMap } from '~/server/models/Map'
+import { AudioContent } from '~/server/models/AudioContent'
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
@@ -21,63 +22,77 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Map not found' })
   }
 
-  // Temporary Directory for chunks
-  const tempDir = path.join(process.cwd(), 'public', 'music', '_temp_chunks', id)
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true })
-  }
-
-  // Save this chunk binary
-  const binaryChunk = Buffer.from(chunkData, 'base64')
-  const chunkPath = path.join(tempDir, `chunk_${chunkIndex}.bin`)
-  fs.writeFileSync(chunkPath, binaryChunk)
+  // Intermediate Storage: use the map document's audioChunks array
+  // This avoids filesystem issues on Vercel
+  if (!map.audioChunks) map.audioChunks = [];
+  map.audioChunks[chunkIndex] = chunkData;
+  map.markModified('audioChunks');
+  await map.save();
 
   // Check if all chunks are uploaded
-  const files = fs.readdirSync(tempDir)
-  const uploadedCount = files.filter(f => f.startsWith('chunk_') && f.endsWith('.bin')).length
+  const uploadedCount = map.audioChunks.filter(c => !!c).length;
 
   if (uploadedCount >= totalChunks) {
-    console.log(`[Audio] All chunks received for map ${id}. Merging...`)
+    console.log(`[Audio] All chunks received for map ${id}. Merging...`);
 
-    // Merge all files in order
-    const mergedData = Buffer.alloc(files.reduce((acc, f) => acc + fs.statSync(path.join(tempDir, f)).size, 0))
-    let offset = 0
-    for (let i = 0; i < totalChunks; i++) {
-      const cPath = path.join(tempDir, `chunk_${i}.bin`)
-      if (!fs.existsSync(cPath)) {
-        throw createError({ statusCode: 500, statusMessage: `Missing chunk ${i} during merge` })
-      }
-      const data = fs.readFileSync(cPath)
-      data.copy(mergedData, offset)
-      offset += data.length
-    }
+    // Reconstruction
+    const buffers = map.audioChunks.map(c => Buffer.from(c, 'base64'));
+    const mergedData = Buffer.concat(buffers);
 
     // Generate Hash for final filename
-    const hash = crypto.createHash('sha256').update(mergedData).digest('hex')
-    const finalFilename = `${hash}.wav` // Assuming WAV from editor
-    const musicDir = path.join(process.cwd(), 'public', 'music')
-    const finalPath = path.join(musicDir, finalFilename)
+    const hash = crypto.createHash('sha256').update(mergedData).digest('hex');
+    const isVercel = !!process.env.VERCEL;
 
-    if (!fs.existsSync(finalPath)) {
-      fs.writeFileSync(finalPath, mergedData)
+    if (isVercel) {
+      // Save to MongoDB AudioContent
+      let audioContent = await AudioContent.findOne({ hash });
+      if (!audioContent) {
+        audioContent = await AudioContent.create({
+          hash,
+          chunks: buffers,
+          size: mergedData.length
+        });
+      }
+      map.audioUrl = null;
+      map.audioContentId = audioContent._id;
+    } else {
+      // Local FS Strategy
+      try {
+        const finalFilename = `${hash}.wav`;
+        const musicDir = path.join(process.cwd(), 'public', 'music');
+
+        if (!fs.existsSync(musicDir)) {
+          fs.mkdirSync(musicDir, { recursive: true });
+        }
+
+        const finalPath = path.join(musicDir, finalFilename);
+        if (!fs.existsSync(finalPath)) {
+          fs.writeFileSync(finalPath, mergedData);
+        }
+        map.audioUrl = `/music/${finalFilename}`;
+        map.audioContentId = null;
+      } catch (err) {
+        console.error("[Audio] FS Merge failed, falling back to DB:", err);
+        let audioContent = await AudioContent.findOne({ hash });
+        if (!audioContent) {
+          audioContent = await AudioContent.create({
+            hash,
+            chunks: buffers,
+            size: mergedData.length
+          });
+        }
+        map.audioUrl = null;
+        map.audioContentId = audioContent._id;
+      }
     }
 
-    // Update Map
-    map.audioUrl = `/music/${finalFilename}`
-    map.audioData = null
-    map.audioChunks = []
-    map.audioContentId = null // We don't use MongoDB AudioContent anymore
-    await map.save()
+    // Finalize Map
+    map.audioData = null;
+    map.audioChunks = []; // Clear intermediate chunks
+    await map.save();
 
-    // Clean up temp dir
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true })
-    } catch (e) {
-      console.error(`[Audio] Cleanup failed for ${tempDir}`, e)
-    }
-
-    return { success: true, finished: true, url: map.audioUrl }
+    return { success: true, finished: true, url: map.audioUrl, audioContentId: map.audioContentId };
   }
 
-  return { success: true, finished: false, index: chunkIndex }
+  return { success: true, finished: false, index: chunkIndex };
 })

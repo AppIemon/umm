@@ -597,36 +597,69 @@ const restoreCheckpoint = () => {
 const validateMapInBackground = async () => {
   if (props.multiplayerMode) return;
   
-  // 이미 검증된 경로가 있으면 건너뜜
   if (engine.value.autoplayLog.length > 0) {
     isMapValidated.value = true;
     return;
   }
 
   isMapValidated.value = false;
-  // 불필요한 UI 노출 방지: 이미 로그가 있으면 리턴(상단에서 체크됨), 없으면 연산 시작
   isComputingPath.value = true;
   computingProgress.value = 0;
 
-  for (let retry = 0; ; retry++) {
+  // Partial Fix Logic
+  let resumeTime = 0;
+  let sectionRetries = 0;
+  let totalRetries = 0;
+
+  for (let attempt = 0; attempt < 100; attempt++) {
+    totalRetries = attempt;
     try {
-      if (retry > 0) {
-        console.log(`[Validation] Retry ${retry + 1}: Regenerating map with updated offsets...`);
-        // 더 넓은 간격으로 맵 다시 생성
-        engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false, retry);
+      if (attempt > 0) {
+        // Find where it failed
+        const failure = engine.value.validationFailureInfo;
+        if (failure && failure.x > 0) {
+          // Find time from X
+          const failPoint = engine.value.autoplayLog.find(p => p.x >= failure.x - 500);
+          const newResumeTime = failPoint ? failPoint.time : 0;
+          
+          if (Math.abs(newResumeTime - resumeTime) < 0.1) {
+            sectionRetries++;
+          } else {
+            resumeTime = newResumeTime;
+            sectionRetries = 0;
+          }
+          
+          console.log(`[Validation] Fixing impossible part at X=${failure.x.toFixed(0)} (T=${resumeTime.toFixed(2)}s). Section retry: ${sectionRetries}`);
+          
+          const resumeOptions = {
+            time: resumeTime,
+            stateEvents: engine.value.lastStateEvents,
+            beatActions: engine.value.lastBeatActions,
+            obstacles: engine.value.obstacles,
+            portals: engine.value.portals
+          };
+          
+          // Regenerate from resume point with increased safety for this section
+          engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false, sectionRetries, 120, 2.0, undefined, resumeOptions);
+        } else {
+          // Total failure or no info, restart everything with new seed
+          console.log(`[Validation] No failure info. Restarting full generation. Attempt ${attempt}`);
+          engine.value.generateMap(props.obstacles, props.sections, props.audioBuffer.duration, undefined, false, attempt);
+          resumeTime = 0;
+          sectionRetries = 0;
+        }
       }
 
       const success = await engine.value.computeAutoplayLogAsync(engine.value.playerX, engine.value.playerY, (p) => {
-        computingProgress.value = p * 100;
+        // Overall progress calculation: (resumed part + current search) / total
+        const resumeProgress = (resumeTime / props.audioBuffer!.duration) * 100;
+        const currentSearchProgress = p * (100 - resumeProgress);
+        computingProgress.value = resumeProgress + currentSearchProgress;
       });
       
       if (success) {
-        console.log(`[Validation] Path found on Attempt ${retry + 1}!`);
+        console.log(`[Validation] Path found after ${attempt} total fixes!`);
         isMapValidated.value = true;
-        // emitMapData(); // 이제 자동으로 저장하지 않음
-        break;
-      } else if (retry > 100) {
-        console.error("[Validation] Safeguard triggered: Stopped after 100 failed retries.");
         break;
       }
     } catch (e) {

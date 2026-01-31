@@ -33,25 +33,56 @@ export default defineEventHandler(async (event) => {
         if (mimeType.includes('mpeg') || mimeType.includes('mp3')) ext = '.mp3';
         else if (mimeType.includes('ogg')) ext = '.ogg';
 
-        const filename = `${hash}${ext}`;
-        const musicDir = path.join(process.cwd(), 'public', 'music');
+        // Process audio saving strategy
+        const isVercel = !!process.env.VERCEL;
 
-        // Ensure directory exists
-        if (!fs.existsSync(musicDir)) {
-          fs.mkdirSync(musicDir, { recursive: true });
-        }
-
-        const filePath = path.join(musicDir, filename);
-
-        // Write file if it doesn't exist
-        if (!fs.existsSync(filePath)) {
-          fs.writeFileSync(filePath, binaryData);
-          console.log(`[Audio] Saved new music file: ${filename}`);
+        if (isVercel) {
+          // On Vercel, we can't write to public/music. Use AudioContent in DB.
+          let audioContent = await AudioContent.findOne({ hash });
+          if (!audioContent) {
+            audioContent = await AudioContent.create({
+              hash,
+              chunks: [binaryData],
+              size: binaryData.length
+            });
+            console.log(`[Audio] Saved new music to MongoDB: ${hash}`);
+          }
+          finalAudioUrl = `audioContentId:${audioContent._id}`;
         } else {
-          console.log(`[Audio] Music file exists, skipping write: ${filename}`);
-        }
+          try {
+            const filename = `${hash}${ext}`;
+            const musicDir = path.join(process.cwd(), 'public', 'music');
 
-        finalAudioUrl = `/music/${filename}`;
+            // Ensure directory exists
+            if (!fs.existsSync(musicDir)) {
+              fs.mkdirSync(musicDir, { recursive: true });
+            }
+
+            const filePath = path.join(musicDir, filename);
+
+            // Write file if it doesn't exist
+            if (!fs.existsSync(filePath)) {
+              fs.writeFileSync(filePath, binaryData);
+              console.log(`[Audio] Saved new music file: ${filename}`);
+            } else {
+              console.log(`[Audio] Music file exists, skipping write: ${filename}`);
+            }
+
+            finalAudioUrl = `/music/${filename}`;
+          } catch (fsError: any) {
+            console.error("[Audio] Local save failed, falling back to MongoDB:", fsError.message);
+            // Fallback to MongoDB even locally if FS fails
+            let audioContent = await AudioContent.findOne({ hash });
+            if (!audioContent) {
+              audioContent = await AudioContent.create({
+                hash,
+                chunks: [binaryData],
+                size: binaryData.length
+              });
+            }
+            finalAudioUrl = `audioContentId:${audioContent._id}`;
+          }
+        }
       }
     }
     // Handle chunked upload (legacy or if client still uses it, but we prefer single string now. 
@@ -130,6 +161,13 @@ export default defineEventHandler(async (event) => {
       return optimized;
     };
 
+    // Process final audio fields
+    let audioContentIdToSet = null;
+    if (finalAudioUrl && finalAudioUrl.startsWith('audioContentId:')) {
+      audioContentIdToSet = finalAudioUrl.split(':')[1];
+      finalAudioUrl = null; // Clear URL as we're using the ID reference
+    }
+
     const mapData = {
       title,
       creator: user._id,
@@ -137,7 +175,7 @@ export default defineEventHandler(async (event) => {
       audioUrl: finalAudioUrl,
       audioData: null, // Clear Base64 data to save space
       audioChunks: [], // Clear chunks to save space
-      audioContentId: null, // No longer using AudioContent for new maps
+      audioContentId: audioContentIdToSet,
       difficulty,
       seed: seed || 0,
       beatTimes: beatTimes || [],

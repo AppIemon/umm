@@ -720,7 +720,8 @@ const deleteSelected = () => {
 };
 
 const updateTotalLength = () => {
-  totalLength.value = mapData.value.duration * 350 + 500;
+  const baseSpeed = engine.getDynamicBaseSpeed();
+  totalLength.value = mapData.value.duration * baseSpeed + 500;
 };
 
 // Automaticaly adjust finish line (duration) based on obstacles
@@ -738,14 +739,12 @@ const updateMapDurationIndices = () => {
       if (right > maxX) maxX = right;
    }
    
-   // Buffer: ~4-5 seconds (1500px)
-   // Minimum: 20 seconds
+   const baseSpeed = engine.getDynamicBaseSpeed();
+   // Buffer: ~4-5 seconds
    const buffer = 1500;
    const targetLength = Math.max(2000, maxX + buffer);
    
-   // Calculate duration (duration * 350 + 500 = totalLength)
-   // duration = (totalLength - 500) / 350
-   const newDuration = Math.max(10, Math.ceil((targetLength - 500) / 350));
+   const newDuration = Math.max(10, Math.ceil((targetLength - 500) / baseSpeed));
    
    if (mapData.value.duration !== newDuration) {
       mapData.value.duration = newDuration;
@@ -756,10 +755,12 @@ const updateMapDurationIndices = () => {
 watch(
   [
     () => mapData.value.engineObstacles,
-    () => mapData.value.enginePortals
+    () => mapData.value.enginePortals,
+    () => mapData.value.difficulty
   ],
   () => {
     updateMapDurationIndices();
+    updateTotalLength();
   },
   { deep: true }
 );
@@ -780,6 +781,23 @@ const handleAudioUpload = (e: Event) => {
     
   };
   reader.readAsDataURL(file);
+};
+
+const startPreviewAudio = () => {
+  if (!previewAudioBuffer || !previewAudioCtx) return;
+  stopPreviewAudio();
+  
+  previewAudioSource = previewAudioCtx.createBufferSource();
+  previewAudioSource.buffer = previewAudioBuffer;
+  previewAudioSource.connect(previewAudioCtx.destination);
+  previewAudioSource.start(0);
+};
+
+const stopPreviewAudio = () => {
+  if (previewAudioSource) {
+    try { previewAudioSource.stop(); } catch(e) {}
+    previewAudioSource = null;
+  }
 };
 
 const togglePreview = async () => {
@@ -805,7 +823,7 @@ const togglePreview = async () => {
   }
 
   // Generate autoplay for safety if possible
-  const tempEngine = new GameEngine();
+  const tempEngine = new GameEngine({ difficulty: mapData.value.difficulty });
   tempEngine.obstacles = [...mapData.value.engineObstacles];
   tempEngine.portals = [...mapData.value.enginePortals];
   tempEngine.totalLength = totalLength.value;
@@ -824,23 +842,6 @@ const togglePreview = async () => {
   startPreviewAudio();
 };
 
-const startPreviewAudio = () => {
-  if (!previewAudioBuffer || !previewAudioCtx) return;
-  stopPreviewAudio();
-  
-  previewAudioSource = previewAudioCtx.createBufferSource();
-  previewAudioSource.buffer = previewAudioBuffer;
-  previewAudioSource.connect(previewAudioCtx.destination);
-  previewAudioSource.start(0);
-};
-
-const stopPreviewAudio = () => {
-  if (previewAudioSource) {
-    try { previewAudioSource.stop(); } catch(e) {}
-    previewAudioSource = null;
-  }
-};
-
 const testMap = async () => {
   if (isTesting.value) return;
   isTesting.value = true;
@@ -848,7 +849,7 @@ const testMap = async () => {
 
   try {
     // Generate autoplay for safety if possible
-    const tempEngine = new GameEngine();
+    const tempEngine = new GameEngine({ difficulty: mapData.value.difficulty });
     tempEngine.obstacles = [...mapData.value.engineObstacles];
     tempEngine.portals = [...mapData.value.enginePortals];
     tempEngine.totalLength = totalLength.value;
@@ -1170,23 +1171,20 @@ const draw = () => {
       const dt = now - lastPreviewFrameTime;
       lastPreviewFrameTime = now;
 
-      // Advance preview time strictly at 1.0x
+      // Advance preview time
       previewTime.value += dt;
       
-      // Calculate where player SHOULD be based on time
-      const targetX = 200 + previewTime.value * 350; 
+      // Find current position in autoplay log efficiently (Binary Search or Linear)
+      let currentPoint: any = log[0];
       
-      // Find current position in autoplay log efficiently
-      let currentPoint = log[0];
-      // Autoplay log is sorted by X. We can find the segment.
       for (let i = 0; i < log.length; i++) {
-        if (log[i].x >= targetX) {
+        if (log[i].time >= previewTime.value) {
           if (i > 0) {
             const p1 = log[i-1];
             const p2 = log[i];
-            const t = (targetX - p1.x) / (p2.x - p1.x);
+            const t = (previewTime.value - p1.time) / (p2.time - p1.time);
             currentPoint = {
-              x: targetX,
+              x: p1.x + (p2.x - p1.x) * t,
               y: p1.y + (p2.y - p1.y) * t,
               holding: p1.holding
             };

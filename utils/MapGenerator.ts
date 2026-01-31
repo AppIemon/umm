@@ -23,7 +23,7 @@ export class MapGenerator {
    * Difficulty based gap calculation
    * 난이도가 높을수록 좁아짐
    */
-  private calculateGap(difficulty: number, isMini: boolean): number {
+  private calculateGap(difficulty: number, isMini: boolean, safetyMultiplier: number = 1.0): number {
     // 1~30 난이도 재조정 (User request: Normal/Hard is too hard)
     // 넓어진 간격으로 조정
     let baseGap: number;
@@ -43,7 +43,7 @@ export class MapGenerator {
       baseGap = 180 - (difficulty - 24) * 15;
     }
 
-    baseGap = Math.max(50, baseGap); // Minimum gap even tighter (50px)
+    baseGap = Math.max(50, baseGap) * safetyMultiplier; // Apply safety multiplier
 
     // Mini Portal: 간격 1.5배 (유지)
     return isMini ? baseGap * 1.5 : baseGap;
@@ -59,7 +59,8 @@ export class MapGenerator {
     path: { x: number, y: number, holding: boolean, time: number }[],
     difficulty: number,
     beatTimes: number[],
-    stateEvents: { time: number, isMini: boolean }[] = []
+    stateEvents: { time: number, isMini: boolean }[] = [],
+    safetyMultiplier: number = 1.0
   ): MapObject[] {
     // Safety check: Empty path
     if (!path || path.length < 2) return [];
@@ -68,50 +69,50 @@ export class MapGenerator {
     const blockSize = 50;
 
     // Base Calculation (Calculated once per difficulty)
-    const baseGapVal = this.calculateGap(difficulty, false);
+    const baseGapVal = this.calculateGap(difficulty, false, safetyMultiplier);
 
     const startX = Math.floor(path[0]!.x / blockSize) * blockSize;
     const endX = path[path.length - 1]!.x;
     if (isNaN(startX) || isNaN(endX) || endX <= startX) return [];
 
     // --- Segmented Generation Setups ---
-    const SEGMENT_COUNT = 10;
     const poolFloor: ObstacleType[] = ['spike', 'piston_v', 'hammer', 'growing_spike', 'cannon', 'crusher_jaw'];
     const poolCeil: ObstacleType[] = ['spike', 'falling_spike', 'hammer', 'swing_blade', 'piston_v', 'crusher_jaw'];
     const poolFloat: ObstacleType[] = ['mine', 'rotor', 'spark_mine', 'laser_beam', 'planet', 'star'];
 
-    // Helper: Distribute types across segments ensuring full coverage
-    const createSegmentSets = (pool: ObstacleType[], count: number, minPerSeg: number) => {
-      let sets: ObstacleType[][] = Array(count).fill([]).map(() => []);
+    // Balanced Bag Helper
+    const createBag = (pool: ObstacleType[]) => {
       let bag = [...pool];
-
-      // Fill remainder to reach target count
-      const targetTotal = count * minPerSeg;
-      while (bag.length < targetTotal) {
-        bag.push(pool[Math.floor(Math.random() * pool.length)]!);
-      }
-
-      // Shuffle
-      for (let i = bag.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [bag[i], bag[j]] = [bag[j]!, bag[i]!];
-      }
-
-      // Distribute
-      for (let i = 0; i < count; i++) {
-        sets[i] = bag.slice(i * minPerSeg, (i + 1) * minPerSeg);
-      }
-      return sets;
+      let idx = 0;
+      const shuffle = () => {
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [bag[i], bag[j]] = [bag[j]!, bag[i]!];
+        }
+        idx = 0;
+      };
+      shuffle();
+      return {
+        next: () => {
+          const val = bag[idx]!;
+          idx++;
+          if (idx >= bag.length) shuffle();
+          return val;
+        }
+      };
     };
 
-    const segmentFloor = createSegmentSets(poolFloor, SEGMENT_COUNT, 2);
-    const segmentCeil = createSegmentSets(poolCeil, SEGMENT_COUNT, 2);
-    const segmentFloat = createSegmentSets(poolFloat, SEGMENT_COUNT, 2);
+    const floorBag = createBag(poolFloor);
+    const ceilBag = createBag(poolCeil);
+    const floatBag = createBag(poolFloat);
     // -----------------------------------
 
     // Initial Y Snap
     let currentFloorY = Math.floor((path[0]!.y + baseGapVal / 2) / blockSize) * blockSize;
     let currentCeilY = Math.floor((path[0]!.y - baseGapVal / 2) / blockSize) * blockSize;
+
+    // Trackers for post-filtering (Map X to floor/ceil Y)
+    const boundaryMap: Map<number, { floorY: number, ceilY: number }> = new Map();
 
     // Trackers
     let pathIdx = 0;
@@ -145,13 +146,9 @@ export class MapGenerator {
       }
 
       // Dynamic Gap Calculation
-      // User Request: Normal -> 1.4x Narrower ( * 0.71)
-      //               Mini -> 1.3x Wider
       if (isMini) {
         currentGap = baseGapVal * 1.3;
       } else {
-        // User Update: "Don't shrink map width, show it as is."
-        // Reverted the 1.4x narrowing factor.
         currentGap = baseGapVal;
       }
 
@@ -174,7 +171,6 @@ export class MapGenerator {
       let ceilStepY = 0;
 
       // NEW: Safety Segment Check
-      // Scan all path points in this block's X-range to find vertical peaks
       let segMinY = Infinity;
       let segMaxY = -Infinity;
       for (let i = pathIdx; i <= nextPathIdx; i++) {
@@ -184,16 +180,12 @@ export class MapGenerator {
       }
 
       const pSize = isMini ? 7.5 : 15;
-      const genSafety = 5; // 5px extra buffer during generation
+      const genSafety = 5;
       const floorBoundary = segMaxY + pSize + genSafety;
       const ceilBoundary = segMinY - pSize - genSafety;
 
-      // Asymmetric Thresholds for Safety
-      // We want walls to be "lazy" when moving towards the player (Contracting)
-      // and "eager" when moving away (Expanding) to ensure safe gaps.
       const floorContractThreshold = 35;
       const floorExpandThreshold = 10;
-
       const ceilContractThreshold = 35;
       const ceilExpandThreshold = 10;
 
@@ -201,78 +193,52 @@ export class MapGenerator {
       const floorDiff = targetFloorY - currentFloorY;
       if (isMini) {
         if (floorDiff < -blockSize * 1.5) stepY = -blockSize * 2;
-        else if (floorDiff < -floorContractThreshold) stepY = -blockSize; // Move UP (Contract)
+        else if (floorDiff < -floorContractThreshold) stepY = -blockSize;
         else if (floorDiff > blockSize * 1.5) stepY = blockSize * 2;
-        else if (floorDiff > floorExpandThreshold) stepY = blockSize;     // Move DOWN (Expand)
+        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
       } else {
-        if (floorDiff < -floorContractThreshold) stepY = -blockSize;      // Move UP (Contract)
-        else if (floorDiff > floorExpandThreshold) stepY = blockSize;     // Move DOWN (Expand)
+        if (floorDiff < -floorContractThreshold) stepY = -blockSize;
+        else if (floorDiff > floorExpandThreshold) stepY = blockSize;
       }
 
       // CEILING stepping
       const ceilDiff = targetCeilY - currentCeilY;
       if (isMini) {
         if (ceilDiff < -blockSize * 1.5) ceilStepY = -blockSize * 2;
-        else if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;    // Move UP (Expand)
+        else if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;
         else if (ceilDiff > blockSize * 1.5) ceilStepY = blockSize * 2;
-        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;    // Move DOWN (Contract)
+        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
       } else {
-        if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;         // Move UP (Expand)
-        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;    // Move DOWN (Contract)
+        if (ceilDiff < -ceilExpandThreshold) ceilStepY = -blockSize;
+        else if (ceilDiff > ceilContractThreshold) ceilStepY = blockSize;
       }
 
-      // FINAL SAFETY OVERRIDE: Prevent stepping into path
-      // If Floor wants to move UP, ensure it doesn't cross floorBoundary
-      if (stepY < 0 && currentFloorY + stepY < floorBoundary) {
-        stepY = 0; // Force stay flat
-      }
-      // If Floor wants to move DOWN, it's always safe (Expanding)
+      // FINAL SAFETY OVERRIDE
+      if (stepY < 0 && currentFloorY + stepY < floorBoundary) stepY = 0;
+      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) ceilStepY = 0;
 
-      // If Ceiling wants to move DOWN, ensure it doesn't cross ceilBoundary
-      if (ceilStepY > 0 && currentCeilY + ceilStepY > ceilBoundary) {
-        ceilStepY = 0; // Force stay flat
-      }
-      // If Ceiling wants to move UP, it's always safe (Expanding)
+      // Store boundary for filtering
+      boundaryMap.set(currentX, { floorY: currentFloorY, ceilY: currentCeilY });
 
       // 3. Terrain Generation
       // --- FLOOR ---
       if (stepY < 0) {
-        // UP Slope ◢
         const isSteep = stepY === -blockSize * 2;
         const slopeType = isSteep ? 'steep_triangle' : 'triangle';
         const slopeHeight = Math.abs(stepY);
-
-        currentFloorY += stepY; // stepY is negative, so we move UP
+        currentFloorY += stepY;
         const blockY = currentFloorY;
-
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: 0
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 0 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
       } else if (stepY > 0) {
-        // DOWN Slope ◤
         const isSteep = stepY === blockSize * 2;
         const slopeType = isSteep ? 'steep_triangle' : 'triangle';
         const slopeHeight = Math.abs(stepY);
-
         const blockY = currentFloorY;
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: 90
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 90 });
         this.fillBelow(objects, currentX, blockY + slopeHeight, blockSize);
         currentFloorY += stepY;
       } else {
-        // FLAT ■
         const blockY = currentFloorY;
         objects.push({ type: 'block', x: currentX, y: blockY, width: blockSize, height: blockSize });
         this.fillBelow(objects, currentX, blockY + blockSize, blockSize);
@@ -280,171 +246,90 @@ export class MapGenerator {
 
       // --- CEILING ---
       if (ceilStepY < 0) {
-        // UP Slope ◥
         const isSteep = ceilStepY === -blockSize * 2;
         const slopeType = isSteep ? 'steep_triangle' : 'triangle';
         const slopeHeight = Math.abs(ceilStepY);
-
-        currentCeilY += ceilStepY; // Move UP
+        currentCeilY += ceilStepY;
         const blockY = currentCeilY;
-
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: 180
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: 180 });
         this.fillAbove(objects, currentX, blockY, blockSize);
       } else if (ceilStepY > 0) {
-        // DOWN Slope ◣
         const isSteep = ceilStepY === blockSize * 2;
         const slopeType = isSteep ? 'steep_triangle' : 'triangle';
         const slopeHeight = Math.abs(ceilStepY);
-
         const blockY = currentCeilY;
-        objects.push({
-          type: slopeType,
-          x: currentX,
-          y: blockY,
-          width: blockSize,
-          height: slopeHeight,
-          rotation: -90
-        });
+        objects.push({ type: slopeType, x: currentX, y: blockY, width: blockSize, height: slopeHeight, rotation: -90 });
         this.fillAbove(objects, currentX, blockY, blockSize);
         currentCeilY += ceilStepY;
       } else {
-        // FLAT
         const blockY = currentCeilY - blockSize;
         objects.push({ type: 'block', x: currentX, y: blockY, width: blockSize, height: blockSize });
         this.fillAbove(objects, currentX, blockY, blockSize);
       }
 
-      // 4. Decoration & Rhythm (Optimized O(1) inside loop)
-
-      // 4. Decoration (Nine Circles Saws) - Precise Surface Placement
-      // Place saws EXACTLY on the surface line to create the "teeth" effect.
-      // Saws should be hitbox=true and embedded slightly less than before to be visible hazards.
-
-      // 4. Decoration - Diverse Obstacles (Spikes, Mines, etc.)
-      // 난이도 1~2는 장애물을 생성하지 않거나 매우 제한적으로 생성
+      // 4. Decoration & Hazards
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
+      const hazardThreshold = 0.2 + (difficulty / 30) * 0.35;
 
-      // 4. Decoration - Diverse Obstacles (Spikes, Mines, etc.)
-      // Obstacle frequency: even more aggressive scaling
-      const hazardThreshold = 0.2 + (difficulty / 30) * 0.35; // 0.2 ~ 0.55
-      if (stepY === 0 && currentGap > 100 && rand < hazardThreshold) {
-        // Dynamic Size based on Difficulty
-        let spikeH = 40;
-        if (difficulty <= 5) spikeH = 20;
-        else if (difficulty <= 10) spikeH = 30;
+      if (stepY === 0 && ceilStepY === 0 && currentGap > 120 && rand < hazardThreshold) {
+        // Diversified Size
+        const sizeVariance = 0.8 + Math.random() * 0.4; // 0.8x ~ 1.2x
+        let baseH = 40;
+        if (difficulty <= 5) baseH = 25;
+        else if (difficulty > 20) baseH = 50;
+        const spikeH = baseH * sizeVariance;
 
-        // Increase difficulty scaling for size
-        if (difficulty > 15) spikeH = 45;
-        if (difficulty > 25) spikeH = 50;
+        // Balanced Floor/Ceiling Choice (Rotate)
+        const isFloor = (currentX / blockSize) % 2 === 0;
 
-        // Randomly choose from new floor/ceiling obstacles
-        // Segment Logic
-        const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
-        const segIdx = Math.floor(progress * SEGMENT_COUNT);
-
-        const currentFloorOptions = segmentFloor[segIdx]!;
-        const currentCeilOptions = segmentCeil[segIdx]!;
-
-        let floorType = currentFloorOptions[Math.floor(Math.random() * currentFloorOptions.length)] || 'spike';
-        let ceilType = currentCeilOptions[Math.floor(Math.random() * currentCeilOptions.length)] || 'spike';
-
-        // Visual adjustment: Use 'mini_spike' for small spikes
-        if (floorType === 'spike' && difficulty <= 8) floorType = 'mini_spike';
-        if (ceilType === 'spike' && difficulty <= 8) ceilType = 'mini_spike';
-
-        // Floor Obstacle
-        if (rand < 0.1) {
-          // Ensure enough space
-          if (currentPoint.y < currentFloorY - spikeH - 40 && currentFloorY - spikeH > currentCeilY + 40) {
+        if (isFloor) {
+          const type = floorBag.next();
+          if (currentPoint.y < currentFloorY - spikeH - 20) {
             objects.push({
-              type: floorType,
+              type: (type === 'spike' && difficulty <= 8) ? 'mini_spike' : type,
               x: currentX,
               y: currentFloorY - spikeH,
               width: blockSize,
               height: spikeH,
-              movement: this.getRandomMovement(floorType as ObstacleType, 0.25)
+              movement: this.getRandomMovement(type as ObstacleType, 0.4)
             });
           }
-        }
-        // Ceiling Obstacle
-        else {
+        } else {
+          const type = ceilBag.next();
           let adjustedCeilY = currentCeilY;
-          // USER REQUEST: "Don't place falling spikes too high"
-          // If falling_spike, ensure it's not more than 250px above the player
-          if (ceilType === 'falling_spike') {
+          if (type === 'falling_spike') {
             const dist = currentPoint.y - currentCeilY;
-            if (dist > 250) {
-              adjustedCeilY = currentPoint.y - 250;
-            }
+            if (dist > 250) adjustedCeilY = currentPoint.y - 250;
           }
 
-          if (currentPoint.y > adjustedCeilY + spikeH + 40 && adjustedCeilY + spikeH < currentFloorY - 40) {
+          if (currentPoint.y > adjustedCeilY + spikeH + 20) {
             objects.push({
-              type: ceilType,
+              type: (type === 'spike' && difficulty <= 8) ? 'mini_spike' : type,
               x: currentX,
               y: adjustedCeilY,
               width: blockSize,
               height: spikeH,
               rotation: 180,
-              movement: this.getRandomMovement(ceilType as ObstacleType, 0.25)
+              movement: this.getRandomMovement(type as ObstacleType, 0.4)
             });
           }
         }
       }
 
-      // Chance to place Floating Hazards (Mines) 
-      // All difficulties allowed
-      if (rand > 0.95 && currentGap > 200) {
-        // Size Scaling: 20 (Easy) -> 30 (Hard)
-        const mineSize = difficulty <= 7 ? 20 : 30;
-
-        // Try to place in the "other" side of player
+      // Floating Hazards (Perfectly Balanced)
+      if (rand > 0.94 && currentGap > 220) {
+        const mineSize = (difficulty <= 7 ? 20 : 35) * (0.9 + Math.random() * 0.2);
         const midY = (currentFloorY + currentCeilY) / 2;
-        let pY = midY;
+        let pY = currentPoint.y < midY ? midY + (currentFloorY - midY) * 0.5 : midY - (midY - currentCeilY) * 0.5;
 
-        if (currentPoint.y < midY) {
-          // Player is in upper half -> place mine in lower half
-          pY = midY + (currentFloorY - midY) * 0.5;
-        } else {
-          // Player is in lower half -> place mine in upper half
-          pY = midY - (midY - currentCeilY) * 0.5;
-        }
-
-        // Segment Logic for Floating
-        const progress = Math.min(Math.max((currentX - startX) / (endX - startX), 0), 0.999);
-        const segIdx = Math.floor(progress * SEGMENT_COUNT);
-        const currentFloatOptions = segmentFloat[segIdx]!;
-
-        const chosenFloat = currentFloatOptions[Math.floor(Math.random() * currentFloatOptions.length)] || 'mine';
-
-        // Remove difficulty check for type
-        const obsType = chosenFloat;
-
-        // Custom config for Planets/Stars (Satellites)
+        const obsType = floatBag.next();
         let children: any[] | undefined = undefined;
         let customData: any | undefined = undefined;
 
-        if (obsType === 'planet') {
-          // Planet with moons
-          customData = { orbitSpeed: 1.5, orbitDistance: mineSize * 0.8, orbitCount: 2 };
-          children = [];
-          for (let k = 0; k < 2; k++) {
-            children.push({ type: 'planet', x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true });
-          }
-        } else if (obsType === 'star') {
-          // Star with planets
-          customData = { orbitSpeed: 1.0, orbitDistance: mineSize * 0.8, orbitCount: 3 };
-          children = [];
-          for (let k = 0; k < 3; k++) {
-            children.push({ type: 'planet', x: 0, y: 0, width: mineSize * 0.5, height: mineSize * 0.5, isHitbox: true });
-          }
+        if (obsType === 'planet' || obsType === 'star') {
+          const count = obsType === 'planet' ? 2 : 3;
+          customData = { orbitSpeed: 1.0 + Math.random(), orbitDistance: mineSize * 0.8, orbitCount: count };
+          children = Array(count).fill(0).map(() => ({ type: 'moon', x: 0, y: 0, width: mineSize * 0.4, height: mineSize * 0.4, isHitbox: true }));
         }
 
         objects.push({
@@ -457,43 +342,44 @@ export class MapGenerator {
           rotation: obsType === 'laser_beam' ? 90 : 0,
           children,
           customData,
-          movement: this.getRandomMovement(obsType as ObstacleType, 0.5)
+          movement: this.getRandomMovement(obsType as ObstacleType, 0.6)
         });
       }
 
       // Beat Decoration (Orbs)
-      // Check if any beat time falls within this block's time range
-      while (beatIdx < beatTimes.length && beatTimes[beatIdx]! < currentPoint!.time) {
-        beatIdx++; // Skip past beats
-      }
-
+      while (beatIdx < beatTimes.length && beatTimes[beatIdx]! < currentPoint!.time) beatIdx++;
       while (beatIdx < beatTimes.length && beatTimes[beatIdx]! <= nextPoint.time) {
         const beatY = (currentFloorY + currentCeilY) / 2 - 40;
-
-        // Ensure Orb is within safe tunnel
         if (beatY >= currentCeilY && beatY + 80 <= currentFloorY) {
-          objects.push({
-            type: 'orb',
-            x: currentX + 25,
-            y: beatY,
-            width: 80, height: 80, isHitbox: false
-          });
+          objects.push({ type: 'orb', x: currentX + 25, y: beatY, width: 80, height: 80, isHitbox: false });
         }
-
         beatIdx++;
       }
     }
 
-    // Final filtering: 히트박스가 벽에 완전히 편입되는 장애물 제거 (Post-process)
+    // Final Post-Process: Remove obstacles that are outside the playable tunnel
+    // 바닥과 천장 밖으로 나간 장애물 제거
     return objects.filter(obj => {
-      // 포탈과 베이스 지형(triangle, slope, block isHitbox:true)은 제외
-      if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green'].includes(obj.type)) return true;
-      if (obj.isHitbox === true) return true; // Base terrain blocks
+      // 1. Keep terrain and portals
+      if (['block', 'triangle', 'steep_triangle'].includes(obj.type)) return true;
+      if (['gravity_yellow', 'gravity_blue', 'speed_0.25', 'speed_0.5', 'speed_1', 'speed_2', 'speed_3', 'speed_4', 'mini_pink', 'mini_green', 'teleport_in', 'teleport_out'].includes(obj.type)) return true;
+      if (obj.type === 'orb') return true;
 
-      // 장식성 장애물(spike, saw, mine, orb 등)이 지형 내부로 들어갔는지 검사
-      // 지형은 floorY 이상, ceilY 이하에 존재함.
-      // (현 방식에선 post-filtering 보다는 생성 시점에 거르는게 효율적이나 사용자 요청에 따라 명시적 로직 추가)
-      return true; // 생략 (이미 생성 시점에 currentFloorY, currentCeilY로 검증하도록 수정함)
+      // 2. Check hazard boundaries
+      const bounds = boundaryMap.get(Math.floor(obj.x / blockSize) * blockSize);
+      if (!bounds) return true;
+
+      const top = obj.y;
+      const bottom = obj.y + (obj.height || 0);
+
+      // Completely outside CEILING (Above it)
+      if (bottom <= bounds.ceilY - 5) return false;
+      // Completely outside FLOOR (Below it)
+      if (top >= bounds.floorY + 5) return false;
+
+      // Partially overlapping is fine, but if most of it is buried, we could remove it.
+      // For now, "completely outside" is a safe bet for removal.
+      return true;
     });
   }
 
