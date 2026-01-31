@@ -1888,7 +1888,7 @@ export class GameEngine {
       return `${xi}_${yi}_${s.g ? 1 : 0}_${Math.round(s.sm * 10)}_${s.m ? 1 : 0}`;
     };
 
-    const checkColl = (tx: number, ty: number, sz: number, tm: number, margin: number = 0): boolean => {
+    const checkColl = (tx: number, ty: number, sz: number, tm: number, sm: number, margin: number = 0): boolean => {
       // 바닥/천장 충돌 체크 (실제 게임과 동일하게 마진 없음)
       // 바닥/천장 충돌 체크 제거 (슬라이딩 처리로 변경)
       // if (ty < this.minY + sz || ty > this.maxY - sz) return true;
@@ -1905,7 +1905,7 @@ export class GameEngine {
         const moveMargin = o.movement ? 2.0 : 0;
 
         // 실제 게임과 동일하게 sz 그대로 사용, 이동 오브젝트만 추가 마진
-        if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm)) return true;
+        if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm, sm)) return true;
       }
       return false;
     };
@@ -1950,7 +1950,7 @@ export class GameEngine {
         if (sy > this.maxY - sz) sy = this.maxY - sz;
 
         // 생존 확인: 안전 마진 1px 적용 (더 정밀한 경로 탐색 허용)
-        if (checkColl(sx, sy, sz, sTime, 1)) return false;
+        if (checkColl(sx, sy, sz, sTime, ssm, 1)) return false;
       }
       return true;
     };
@@ -2019,17 +2019,17 @@ export class GameEngine {
       if (nYR < this.minY + sz) nYR = this.minY + sz;
       if (nYR > this.maxY - sz) nYR = this.maxY - sz;
 
-      let dH = checkColl(nX, nYH, sz, nT, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
-      let dR = checkColl(nX, nYR, sz, nT, 3);
+      let dH = checkColl(nX, nYH, sz, nT, nSM, 3); // 안전 마진 3px 적용 - 아슬아슬한 경로 방지
+      let dR = checkColl(nX, nYR, sz, nT, nSM, 3);
 
       // Tunneling prevention: Check midpoint if moving fast vertically
       // dt=1/30 (approx 11px X movement), but Y movement can be large (50px+)
       const vDist = sz * 0.8;
       if (!dH && Math.abs(nYH - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, 3)) dH = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 3)) dH = true;
       }
       if (!dR && Math.abs(nYR - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, 3)) dR = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, nSM, 3)) dR = true;
       }
 
       if (dH && dR && nX > furthestFailX) { furthestFailX = nX; failY = curr.y; }
@@ -2073,26 +2073,8 @@ export class GameEngine {
 
       // Default preference based on safety
       // Default preference based on safety
-      // USER REQUEST: "falling spike에서 자꾸 tutorial mode가 죽음. 최대한 위로 가라."
-      // Detect falling spike ahead and bias UP (Hold)
-      let fallingSpikeAhead = false;
-      const scanEnd = nX + 400;
-      // Optimize: continue from previous index if possible, but binary search is fast enough
-      // We reusing sortedObs.
-      // We can reuse `findStartIndex` but let's just loop a bit or reuse `startI` concept if available.
-      // `findStartIndex` is available in scope.
-      for (let i = findStartIndex(nX); i < sortedObs.length; i++) {
-        const o = sortedObs[i]!;
-        if (o.x > scanEnd) break;
-        if (o.type === 'falling_spike') {
-          fallingSpikeAhead = true;
-          break;
-        }
-      }
-
-      if (fallingSpikeAhead) {
-        preferHold = true;
-      } else if (prevH) {
+      // Default preference based on safety: Stick to current state if safe
+      if (prevH) {
         if (isHoldSafe) preferHold = true;
         else preferHold = false;
       } else {
@@ -2176,6 +2158,25 @@ export class GameEngine {
         } else {
           preferHold = prevH;
         }
+      }
+
+      // USER REQUEST: "falling spike에서 자꾸 tutorial mode가 죽음. 최대한 위로 가라." -> Revised: "Try Low first, then High"
+      // Falling Spike Strategy Override:
+      // Try 'Low' first (Release in Normal, Hold in Inverted)
+      const scanEnd = nX + 400;
+      let fallingSpikeAhead = false;
+
+      for (let i = findStartIndex(nX); i < sortedObs.length; i++) {
+        const o = sortedObs[i]!;
+        if (o.x > scanEnd) break;
+        if (o.type === 'falling_spike') {
+          fallingSpikeAhead = true;
+          break;
+        }
+      }
+
+      if (fallingSpikeAhead) {
+        preferHold = !nG; // Normal(F): false(Release/Low). Inverted(T): true(Hold/Low).
       }
 
       // 1. If currently violating CPS limit, FORCE keeping same state if safe.
@@ -2695,7 +2696,7 @@ export class GameEngine {
    * 세밀한 충돌 체크 (가시는 세모, 기울어진 블록은 OBB 적용)
    * 전역 회전 지원: 플레이어 점들을 역회전시켜 AABB와 체크
    */
-  private checkObstacleCollision(obs: Obstacle, px: number, py: number, pSize: number, simTime?: number): boolean {
+  private checkObstacleCollision(obs: Obstacle, px: number, py: number, pSize: number, simTime?: number, simSpeedMultiplier?: number): boolean {
     let obsY = obs.y;
     let obsAngle = obs.angle || 0;
 
@@ -2723,6 +2724,17 @@ export class GameEngine {
     const minHitboxSize = 10;
     effectiveWidth = Math.max(effectiveWidth, minHitboxSize);
     effectiveHeight = Math.max(effectiveHeight, minHitboxSize);
+    // Hitbox Reduction (Forgiveness)
+    // 히트박스를 시각적 크기보다 약간 작게 만들어 판정을 관대하게 함
+    const hitboxReduction = 4; // Total reduction (2px per side)
+    const planetReduction = 10; // More reduction for planets (circular shapes often feel wider)
+
+    let reduction = hitboxReduction;
+    if (obs.type === 'planet' || obs.type === 'star') reduction = planetReduction;
+
+    effectiveWidth = Math.max(10, effectiveWidth - reduction);
+    effectiveHeight = Math.max(10, effectiveHeight - reduction);
+
     const effectiveX = obs.x - (effectiveWidth - obs.width) / 2;
     const effectiveY = obsY - (effectiveHeight - obs.height) / 2;
 
@@ -2780,7 +2792,7 @@ export class GameEngine {
         // Safe approach: assume fast fall (instant block?) No.
 
         // Let's use a standard speed estimation 
-        const estimatedSpeed = this.baseSpeed * (this.speedMultiplier || 1);
+        const estimatedSpeed = this.baseSpeed * (simSpeedMultiplier !== undefined ? simSpeedMultiplier : (this.speedMultiplier || 1));
         // Note: this.speedMultiplier is the CURRENT engine state, which might differ from SearchState.
         // However, checkObstacleCollision is usually called within checkColl which doesn't pass speed.
         // Limitation accepted.

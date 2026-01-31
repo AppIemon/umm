@@ -1374,6 +1374,63 @@ const draw = () => {
          }
          ctx.closePath();
          ctx.stroke();
+      } else if (obs.type === 'planet' || obs.type === 'star') {
+         // Planet/Star Body (Circle)
+         ctx.beginPath();
+         ctx.arc(0, 0, hw, 0, Math.PI * 2);
+         ctx.stroke();
+
+         // Orbiting Moons (Logic synchronized with GameEngine collision check)
+         const time = currentTrackTime.value;
+         const hasChildren = obs.children && obs.children.length > 0;
+         
+         if (hasChildren) {
+             const children = obs.children!;
+             const speed = obs.customData?.orbitSpeed ?? 1.0;
+             children.forEach((child, i) => {
+                const theta = time * speed + (i * ((Math.PI * 2) / children.length));
+                const dist = obs.customData?.orbitDistance ?? (obs.width * 0.85);
+                const cx = Math.cos(theta) * dist;
+                const cy = Math.sin(theta) * dist;
+                const childSize = child.width ? child.width / 2 : 14;
+                
+                ctx.beginPath();
+                ctx.arc(cx, cy, childSize, 0, Math.PI*2);
+                ctx.stroke();
+
+                // Moon's moons (Sub-orbit)
+                if (child.type === 'planet') {
+                    const moonCount = child.customData?.orbitCount ?? 2;
+                    const moonSpeed = child.customData?.orbitSpeed ?? 2.0;
+                    const moonDist = child.customData?.orbitDistance ?? (child.width * 0.8);
+                    for(let j=0; j<moonCount; j++) {
+                        const mTheta = time * moonSpeed + (j * ((Math.PI * 2) / moonCount));
+                        const mx = cx + Math.cos(mTheta) * moonDist;
+                        const my = cy + Math.sin(mTheta) * moonDist;
+                        const mSize = 8;
+                        ctx.beginPath();
+                        ctx.arc(mx, my, mSize, 0, Math.PI*2);
+                        ctx.stroke(); 
+                    }
+                }
+             });
+         } else {
+             // Fallback for generated orbits
+             const count = obs.customData?.orbitCount ?? (obs.type === 'star' ? 0 : 2);
+             if (count > 0) {
+                 const speed = obs.customData?.orbitSpeed ?? 1.0;
+                 const dist = obs.customData?.orbitDistance ?? (obs.width * 0.8);
+                 for(let i=0; i<count; i++) {
+                     const theta = time * speed + (i * ((Math.PI * 2) / count));
+                     const cx = Math.cos(theta) * dist;
+                     const cy = Math.sin(theta) * dist;
+                     const moonRadius = obs.type === 'star' ? 20 : 10;
+                     ctx.beginPath();
+                     ctx.arc(cx, cy, moonRadius, 0, Math.PI*2);
+                     ctx.stroke();
+                 }
+             }
+         }
       } else if (obs.type === 'saw' || obs.type === 'spike_ball' || obs.type === 'mine' || obs.type === 'orb') {
          ctx.beginPath();
          ctx.arc(0, 0, hw, 0, Math.PI * 2);

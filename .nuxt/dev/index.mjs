@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3cdd2-RnusVDscM8md7f5HivcOjhGTsok\"",
-    "mtime": "2026-01-30T18:24:49.278Z",
-    "size": 249298,
+    "etag": "\"3cf73-33njc0Jx6o2sej+9UaQO1p5dDaY\"",
+    "mtime": "2026-01-31T02:15:42.321Z",
+    "size": 249715,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"ea2cc-BYMwSfFC/pyhLbUSlIaNUN8f4qA\"",
-    "mtime": "2026-01-30T18:24:49.287Z",
-    "size": 959180,
+    "etag": "\"ea94a-GWexWbyecJe8bX4BgXLK78+fpG8\"",
+    "mtime": "2026-01-31T02:15:42.324Z",
+    "size": 960842,
     "path": "index.mjs.map"
   }
 };
@@ -5958,14 +5958,14 @@ class GameEngine {
       const yi = Math.floor(s.y / 12);
       return `${xi}_${yi}_${s.g ? 1 : 0}_${Math.round(s.sm * 10)}_${s.m ? 1 : 0}`;
     };
-    const checkColl = (tx, ty, sz, tm, margin = 0) => {
+    const checkColl = (tx, ty, sz, tm, sm, margin = 0) => {
       const startI = findStartIndex(tx - 1e3);
       for (let i = startI; i < sortedObs.length; i++) {
         const o = sortedObs[i];
         if (o.x + o.width < tx - 50) continue;
         if (o.x > tx + 100) break;
         const moveMargin = o.movement ? 2 : 0;
-        if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm)) return true;
+        if (this.checkObstacleCollision(o, tx, ty, sz + margin + moveMargin, tm, sm)) return true;
       }
       return false;
     };
@@ -6000,7 +6000,7 @@ class GameEngine {
         sy += amp * vy * dt;
         if (sy < this.minY + sz) sy = this.minY + sz;
         if (sy > this.maxY - sz) sy = this.maxY - sz;
-        if (checkColl(sx, sy, sz, sTime, 1)) return false;
+        if (checkColl(sx, sy, sz, sTime, ssm, 1)) return false;
       }
       return true;
     };
@@ -6063,14 +6063,14 @@ class GameEngine {
       if (nYH > this.maxY - sz) nYH = this.maxY - sz;
       if (nYR < this.minY + sz) nYR = this.minY + sz;
       if (nYR > this.maxY - sz) nYR = this.maxY - sz;
-      let dH = checkColl(nX, nYH, sz, nT, 3);
-      let dR = checkColl(nX, nYR, sz, nT, 3);
+      let dH = checkColl(nX, nYH, sz, nT, nSM, 3);
+      let dR = checkColl(nX, nYR, sz, nT, nSM, 3);
       const vDist = sz * 0.8;
       if (!dH && Math.abs(nYH - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, 3)) dH = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 3)) dH = true;
       }
       if (!dR && Math.abs(nYR - curr.y) > vDist) {
-        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, 3)) dR = true;
+        if (checkColl((curr.x + nX) / 2, (curr.y + nYR) / 2, sz, curr.time + dt / 2, nSM, 3)) dR = true;
       }
       if (dH && dR && nX > furthestFailX) {
         furthestFailX = nX;
@@ -6097,19 +6097,7 @@ class GameEngine {
       let preferHold = false;
       const isHoldSafe = !dH && checkSurvival({ ...curr, x: nX, y: nYH, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, lastSwitchTime: prevH ? curr.lastSwitchTime : nT}, true, lookaheadFrames);
       const isReleaseSafe = !dR && checkSurvival({ ...curr, x: nX, y: nYR, time: nT, g: nG, sm: nSM, m: nM, wa: nWA, pIdx: npIdx, lastSwitchTime: !prevH ? curr.lastSwitchTime : nT}, false, lookaheadFrames);
-      let fallingSpikeAhead = false;
-      const scanEnd = nX + 400;
-      for (let i = findStartIndex(nX); i < sortedObs.length; i++) {
-        const o = sortedObs[i];
-        if (o.x > scanEnd) break;
-        if (o.type === "falling_spike") {
-          fallingSpikeAhead = true;
-          break;
-        }
-      }
-      if (fallingSpikeAhead) {
-        preferHold = true;
-      } else if (prevH) {
+      if (prevH) {
         if (isHoldSafe) preferHold = true;
         else preferHold = false;
       } else {
@@ -6178,6 +6166,19 @@ class GameEngine {
         } else {
           preferHold = prevH;
         }
+      }
+      const scanEnd = nX + 400;
+      let fallingSpikeAhead = false;
+      for (let i = findStartIndex(nX); i < sortedObs.length; i++) {
+        const o = sortedObs[i];
+        if (o.x > scanEnd) break;
+        if (o.type === "falling_spike") {
+          fallingSpikeAhead = true;
+          break;
+        }
+      }
+      if (fallingSpikeAhead) {
+        preferHold = !nG;
       }
       if (isSwitchRestricted) {
         if (prevH && isHoldSafe) preferHold = true;
@@ -6623,7 +6624,7 @@ class GameEngine {
    * 세밀한 충돌 체크 (가시는 세모, 기울어진 블록은 OBB 적용)
    * 전역 회전 지원: 플레이어 점들을 역회전시켜 AABB와 체크
    */
-  checkObstacleCollision(obs, px, py, pSize, simTime) {
+  checkObstacleCollision(obs, px, py, pSize, simTime, simSpeedMultiplier) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
     let obsY = obs.y;
     let obsAngle = obs.angle || 0;
@@ -6645,6 +6646,12 @@ class GameEngine {
     const minHitboxSize = 10;
     effectiveWidth = Math.max(effectiveWidth, minHitboxSize);
     effectiveHeight = Math.max(effectiveHeight, minHitboxSize);
+    const hitboxReduction = 4;
+    const planetReduction = 10;
+    let reduction = hitboxReduction;
+    if (obs.type === "planet" || obs.type === "star") reduction = planetReduction;
+    effectiveWidth = Math.max(10, effectiveWidth - reduction);
+    effectiveHeight = Math.max(10, effectiveHeight - reduction);
     const effectiveX = obs.x - (effectiveWidth - obs.width) / 2;
     const effectiveY = obsY - (effectiveHeight - obs.height) / 2;
     const isRotated = obsAngle !== 0;
@@ -6658,7 +6665,7 @@ class GameEngine {
     if (obs.type === "falling_spike" && simTime !== void 0) {
       const triggerX = obs.x - 150;
       if (px > triggerX) {
-        const estimatedSpeed = this.baseSpeed * (this.speedMultiplier || 1);
+        const estimatedSpeed = this.baseSpeed * (simSpeedMultiplier !== void 0 ? simSpeedMultiplier : this.speedMultiplier || 1);
         const dist = Math.max(0, px - triggerX);
         const t = dist / estimatedSpeed;
         const drop = 0.5 * 2500 * t * t;
