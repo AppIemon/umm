@@ -57,6 +57,9 @@ declare module "nitropack/types" {
     '/api/rooms/:id/update': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/update.post').default>>>>
     }
+    '/api/rooms/cleanup': {
+      'get': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/cleanup.get').default>>>>
+    }
     '/api/rooms/clear': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/clear.post').default>>>>
     }

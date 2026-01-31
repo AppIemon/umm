@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3ffab-RWbhh1eGdYc4LvPYQo2pTlT81tE\"",
-    "mtime": "2026-01-31T06:28:58.987Z",
-    "size": 262059,
+    "etag": "\"40652-e1tXJP5XmzB+BYq/bLcGe3bSDOE\"",
+    "mtime": "2026-01-31T06:44:05.095Z",
+    "size": 263762,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f5beb-LU0hgm+h17gRbCvtu9/MEJg2JI8\"",
-    "mtime": "2026-01-31T06:28:58.988Z",
-    "size": 1006571,
+    "etag": "\"f7064-qAVL58b6DkFw+OOg3HlJoUJd49U\"",
+    "mtime": "2026-01-31T06:44:05.097Z",
+    "size": 1011812,
     "path": "index.mjs.map"
   }
 };
@@ -1955,6 +1955,7 @@ const _lazy_pWLlQp = () => Promise.resolve().then(function () { return leave_pos
 const _lazy_QxYKdS = () => Promise.resolve().then(function () { return start_post$1; });
 const _lazy_wgeVPj = () => Promise.resolve().then(function () { return status_get$1; });
 const _lazy_HdxjLr = () => Promise.resolve().then(function () { return update_post$1; });
+const _lazy_XkCyjq = () => Promise.resolve().then(function () { return cleanup_get$1; });
 const _lazy_JZu9YS = () => Promise.resolve().then(function () { return clear_post$1; });
 const _lazy_P7t_8y = () => Promise.resolve().then(function () { return create_post$1; });
 const _lazy_I38_NH = () => Promise.resolve().then(function () { return index_get$1; });
@@ -1987,6 +1988,7 @@ const handlers = [
   { route: '/api/rooms/:id/start', handler: _lazy_QxYKdS, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/:id/status', handler: _lazy_wgeVPj, lazy: true, middleware: false, method: "get" },
   { route: '/api/rooms/:id/update', handler: _lazy_HdxjLr, lazy: true, middleware: false, method: "post" },
+  { route: '/api/rooms/cleanup', handler: _lazy_XkCyjq, lazy: true, middleware: false, method: "get" },
   { route: '/api/rooms/clear', handler: _lazy_JZu9YS, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/create', handler: _lazy_P7t_8y, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms', handler: _lazy_I38_NH, lazy: true, middleware: false, method: "get" },
@@ -3578,6 +3580,7 @@ const leave_post = defineEventHandler(async (event) => {
   if (!roomId || !userId) {
     throw createError({ statusCode: 400, statusMessage: "Missing fields" });
   }
+  await Room.findById(roomId);
   const result = await Room.findOneAndUpdate(
     { _id: roomId, "players.userId": userId },
     { $pull: { players: { userId } } },
@@ -3585,18 +3588,19 @@ const leave_post = defineEventHandler(async (event) => {
   );
   if (!result) return { success: true };
   if (result.players.length === 0) {
+    console.log(`[Room] Empty room ${roomId} deleted.`);
     await Room.deleteOne({ _id: roomId });
   } else {
     if (result.hostId === userId) {
       const newHost = result.players[0];
+      console.log(`[Room] Host migration in ${roomId}: ${userId} -> ${newHost.userId}`);
+      const updateData = {
+        hostId: newHost.userId,
+        "players.0.isHost": true
+      };
       await Room.updateOne(
         { _id: roomId },
-        {
-          $set: {
-            hostId: newHost.userId,
-            "players.0.isHost": true
-          }
-        }
+        { $set: updateData }
       );
     }
   }
@@ -3782,6 +3786,38 @@ const update_post = defineEventHandler(async (event) => {
 const update_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: update_post
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const cleanup_get = defineEventHandler(async (event) => {
+  var _a, _b;
+  const staleThreshold = new Date(Date.now() - 30 * 1e3);
+  await Room.deleteMany({ players: { $size: 0 } });
+  const rooms = await Room.find({});
+  let deletedCount = 0;
+  for (const room of rooms) {
+    const activePlayers = room.players.filter((p) => new Date(p.lastSeen) > staleThreshold);
+    if (activePlayers.length === 0) {
+      await Room.deleteOne({ _id: room._id });
+      deletedCount++;
+    } else if (activePlayers.length < room.players.length) {
+      const newHostId = ((_a = activePlayers.find((p) => p.isHost)) == null ? void 0 : _a.userId) || ((_b = activePlayers[0]) == null ? void 0 : _b.userId);
+      await Room.updateOne(
+        { _id: room._id },
+        {
+          $set: {
+            players: activePlayers,
+            hostId: newHostId
+          }
+        }
+      );
+    }
+  }
+  return { deleted: deletedCount };
+});
+
+const cleanup_get$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: cleanup_get
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const clear_post = defineEventHandler(async (event) => {
@@ -6362,12 +6398,12 @@ class GameEngine {
       const nX = curr.x + spd * dt;
       let nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       let nYR = curr.y + amp * (nG ? -1 : 1) * dt;
-      if (nYH < this.minY + sz) nYH = this.minY + sz;
-      if (nYH > this.maxY - sz) nYH = this.maxY - sz;
-      if (nYR < this.minY + sz) nYR = this.minY + sz;
-      if (nYR > this.maxY - sz) nYR = this.maxY - sz;
-      let dH = checkColl(nX, nYH, sz, nT, nSM, 0.1);
-      let dR = checkColl(nX, nYR, sz, nT, nSM, 0.1);
+      let isOffscreenH = false;
+      let isOffscreenR = false;
+      if (nYH < this.minY + sz || nYH > this.maxY - sz) isOffscreenH = true;
+      if (nYR < this.minY + sz || nYR > this.maxY - sz) isOffscreenR = true;
+      let dH = isOffscreenH || checkColl(nX, nYH, sz, nT, nSM, 0.1);
+      let dR = isOffscreenR || checkColl(nX, nYR, sz, nT, nSM, 0.1);
       const vDist = sz * 0.8;
       if (!dH && Math.abs(nYH - curr.y) > vDist) {
         if (checkColl((curr.x + nX) / 2, (curr.y + nYH) / 2, sz, curr.time + dt / 2, nSM, 0.1)) dH = true;
@@ -6600,9 +6636,11 @@ class GameEngine {
     }
     if (this.playerY < this.minY + this.playerSize) {
       this.playerY = this.minY + this.playerSize;
+      this.die("\uCDA9\uB3CC: \uCC9C\uC7A5");
     }
     if (this.playerY > this.maxY - this.playerSize) {
       this.playerY = this.maxY - this.playerSize;
+      this.die("\uCDA9\uB3CC: \uBC14\uB2E5");
     }
     this.cameraX = this.playerX - 280;
     this.progress = Math.min(100, this.playerX / this.totalLength * 100);

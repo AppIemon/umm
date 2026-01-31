@@ -2054,15 +2054,17 @@ export class GameEngine {
       let nYH = curr.y + amp * (nG ? 1 : -1) * dt;
       let nYR = curr.y + amp * (nG ? -1 : 1) * dt;
 
-      // 바닥/천장 슬라이딩 처리
-      if (nYH < this.minY + sz) nYH = this.minY + sz;
-      if (nYH > this.maxY - sz) nYH = this.maxY - sz;
-      if (nYR < this.minY + sz) nYR = this.minY + sz;
-      if (nYR > this.maxY - sz) nYR = this.maxY - sz;
+      // 바닥/천장 충돌 처리 (Death) - 이전의 슬라이딩 로직 제거
+      let isOffscreenH = false;
+      let isOffscreenR = false;
+
+      if (nYH < this.minY + sz || nYH > this.maxY - sz) isOffscreenH = true;
+      if (nYR < this.minY + sz || nYR > this.maxY - sz) isOffscreenR = true;
 
       // 생존 확인: 안전 마진 0.1px로 완화 (Pixel Perfect 허용)
-      let dH = checkColl(nX, nYH, sz, nT, nSM, 0.1);
-      let dR = checkColl(nX, nYR, sz, nT, nSM, 0.1);
+      // boundary 충돌이면 무조건 사망 처리 (OR 연산)
+      let dH = isOffscreenH || checkColl(nX, nYH, sz, nT, nSM, 0.1);
+      let dR = isOffscreenR || checkColl(nX, nYR, sz, nT, nSM, 0.1);
 
       // Tunneling prevention: Check midpoint if moving fast vertically
       // dt=1/30 (approx 11px X movement), but Y movement can be large (50px+)
@@ -2371,11 +2373,11 @@ export class GameEngine {
 
     if (this.playerY < this.minY + this.playerSize) {
       this.playerY = this.minY + this.playerSize;
-      // 천장 충돌 시 죽지 않음 (슬라이딩)
+      this.die("충돌: 천장");
     }
     if (this.playerY > this.maxY - this.playerSize) {
       this.playerY = this.maxY - this.playerSize;
-      // 바닥 충돌 시 죽지 않음 (슬라이딩)
+      this.die("충돌: 바닥");
     }
 
     this.cameraX = this.playerX - 280;

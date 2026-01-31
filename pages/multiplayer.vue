@@ -302,6 +302,9 @@ async function loadNextMap() {
 // 1. LOBBY
 async function refreshRooms() {
   try {
+    // Background cleanup of stale rooms
+    await $fetch('/api/rooms/cleanup');
+    
     const res: any = await $fetch('/api/rooms');
     rooms.value = res.rooms;
   } catch (e) {
@@ -527,7 +530,8 @@ async function finishGame() {
   step.value = 'RESULT';
 }
 
-function exitGame() {
+async function exitGame() {
+  await leaveRoom();
   router.push('/');
 }
 
