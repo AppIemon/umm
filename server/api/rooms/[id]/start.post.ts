@@ -80,7 +80,6 @@ export default defineEventHandler(async (event) => {
       })
       rounds.push(newMap._id)
 
-      // Safety cap to avoid document size issues or extreme loops
       if (rounds.length >= 200) break;
     }
 
@@ -105,16 +104,30 @@ export default defineEventHandler(async (event) => {
       rounds.push(newMap._id)
     }
 
-    // Update Room state
-    room.map = rounds[0]
-    room.mapQueue = rounds as any // Cast because of Mongoose types
-    room.status = 'playing'
-    room.players.forEach((p: any) => {
-      p.progress = 0
-      p.isReady = false
-    })
+    // ATOMIC UPDATE to avoid VersionError (No matching document found)
+    // This happens because concurrent polling updates player status while map gen is running
+    const updatedRoom = await Room.findOneAndUpdate(
+      { _id: roomId, status: 'waiting' }, // Ensure we only start if still waiting
+      {
+        $set: {
+          map: rounds[0],
+          mapQueue: rounds,
+          status: 'playing',
+          startedAt: new Date(),
+          'players.$[].progress': 0,
+          'players.$[].isReady': false
+        }
+      },
+      { new: true }
+    )
 
-    await room.save()
+    if (!updatedRoom) {
+      // If it failed, check if it was already started or lost
+      const checkAgain = await Room.findById(roomId)
+      if (checkAgain?.status === 'playing') return { success: true, mapId: checkAgain.map }
+      throw new Error('Room state changed or room was deleted during map generation')
+    }
+
     console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} rounds.`)
 
     return { success: true, mapId: rounds[0] }

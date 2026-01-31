@@ -2,26 +2,25 @@ import { Room } from '~/server/models/Room'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { matchId, userId } = body // Frontend sends 'matchId' but it is actually roomId
+  const { roomId, matchId, userId } = body // Accept both for compatibility
+  const id = roomId || matchId
 
-  if (!matchId || !userId) {
-    throw createError({ statusCode: 400, statusMessage: 'Missing matchId (roomId) or userId' })
+  if (!id || !userId) {
+    throw createError({ statusCode: 400, statusMessage: 'Missing roomId or userId' })
   }
 
-  const room = await Room.findById(matchId)
-  if (!room) {
-    throw createError({ statusCode: 404, statusMessage: 'Room not found' })
+  // Atomic update to increment clearCount
+  const result = await Room.updateOne(
+    { _id: id, 'players.userId': userId },
+    {
+      $inc: { 'players.$.clearCount': 1 },
+      $set: { 'players.$.lastSeen': new Date() }
+    }
+  )
+
+  if (result.matchedCount === 0) {
+    throw createError({ statusCode: 404, statusMessage: 'Room or Player not found' })
   }
 
-  const player = room.players.find(p => p.userId === userId)
-  if (!player) {
-    throw createError({ statusCode: 404, statusMessage: 'Player not found in room' })
-  }
-
-  // Increment clear count
-  player.clearCount = (player.clearCount || 0) + 1
-  player.lastSeen = new Date()
-  await room.save()
-
-  return { success: true, clearCount: player.clearCount }
+  return { success: true }
 })

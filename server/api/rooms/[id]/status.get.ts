@@ -62,6 +62,7 @@ export default defineEventHandler(async (event) => {
       hostId: room.hostId,
       map: optimizedMap,
       duration: room.duration,
+      startedAt: room.startedAt,
       messages: room.messages
     }
   }

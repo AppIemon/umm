@@ -43,7 +43,7 @@ export class MapGenerator {
       baseGap = 180 - (difficulty - 24) * 15;
     }
 
-    baseGap = Math.max(90, baseGap); // Min gap raised from 60 to 90
+    baseGap = Math.max(60, baseGap); // Minimum gap reduced from 90 to 60 for higher difficulty
 
     // Mini Portal: 간격 1.5배 (유지)
     return isMini ? baseGap * 1.5 : baseGap;
@@ -333,7 +333,9 @@ export class MapGenerator {
 
       // 4. Decoration - Diverse Obstacles (Spikes, Mines, etc.)
       // User Update: Enable obstacle variety for all difficulties, scale by difficulty
-      if (stepY === 0 && currentGap > 100 && rand < 0.2) {
+      // Obstacle frequency based on difficulty (increases as difficulty rises)
+      const hazardThreshold = 0.15 + (difficulty / 30) * 0.25; // 0.15 ~ 0.4
+      if (stepY === 0 && currentGap > 100 && rand < hazardThreshold) {
         // Dynamic Size based on Difficulty
         // 1-5: Small (20), 6-10: Medium (30), 11+: Large (40)
         let spikeH = 40;

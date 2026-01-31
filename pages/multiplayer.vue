@@ -60,7 +60,7 @@
 
          <div class="form-group">
            <label>DIFFICULTY: {{ newRoomDifficulty }}</label>
-           <input type="range" v-model.number="newRoomDifficulty" min="1" max="10" class="range-slider" />
+           <input type="range" v-model.number="newRoomDifficulty" min="1" max="30" class="range-slider" />
          </div>
 
          <div class="form-group">
@@ -193,7 +193,7 @@ const rooms = ref<any[]>([]);
 const newRoomTitle = ref('New Room');
 const newRoomMaxPlayers = ref(4);
 const newRoomDuration = ref(120);
-const newRoomDifficulty = ref(5);
+const newRoomDifficulty = ref(10);
 const newRoomMusic = ref<any>(null);
 
 const sampleTracks = [
@@ -230,6 +230,8 @@ const myProgress = ref(0);
 const myY = ref(360);
 const playerClearCount = ref(0);
 const allPlayers = ref<any[]>([]); // Synced via poll
+
+let isEnteringGame = false;
 
 onMounted(() => {
   if (!user.value?._id && !sessionStorage.getItem('umm_player_id')) {
@@ -356,11 +358,20 @@ async function joinRoom(roomId: string) {
 
 async function leaveRoom() {
   stopPolling();
+  if (currentRoomId.value) {
+    try {
+      await $fetch(`/api/rooms/${currentRoomId.value}/leave`, {
+        method: 'POST',
+        body: { userId: playerId.value }
+      });
+    } catch (e) {
+      console.error("Failed to leave room", e);
+    }
+  }
   currentRoomId.value = null;
   currentRoom.value = null;
   step.value = 'LOBBY';
   refreshRooms();
-  // Call leave API if needed
 }
 
 // 2. POLLING (ROOM & GAME)
@@ -392,6 +403,15 @@ function startRoomPolling() {
       currentRoom.value = res.room;
       allPlayers.value = res.room.players || [];
       
+      // Sync Time Remaining with server
+      if (res.room.status === 'playing' && res.room.startedAt) {
+        const startTs = new Date(res.room.startedAt).getTime();
+        const nowTs = Date.now();
+        const elapsed = Math.floor((nowTs - startTs) / 1000);
+        const serverDuration = res.room.duration || 60;
+        timeRemaining.value = Math.max(0, serverDuration - elapsed);
+      }
+      
       // Check for Game Start
       if (step.value === 'ROOM' && res.room.status === 'playing') {
         enterGame(res.room);
@@ -419,6 +439,9 @@ async function startRoomGame() {
 }
 
 async function enterGame(roomData: any) {
+  if (isEnteringGame) return;
+  isEnteringGame = true;
+  
   // Load Map (If map isn't populated in roomData, fetch it)
   // Our status API populates map if playing
   if (!roomData.map) return;
@@ -453,11 +476,15 @@ async function enterGame(roomData: any) {
   // So we just pass `selectedMap`.
   
   step.value = 'PLAY';
+  isEnteringGame = false;
   
-  // Start local timer
+  // Start local timer (As fallback/smoother, but poll will correct it)
+  if (matchTimer.value) clearInterval(matchTimer.value);
   matchTimer.value = setInterval(() => {
-    timeRemaining.value--;
-    if (timeRemaining.value <= 0) {
+    // timeRemaining is now also synced from poll, but we dec locally for smoothness
+    if (timeRemaining.value > 0) {
+      timeRemaining.value--;
+    } else {
       finishGame();
     }
   }, 1000);

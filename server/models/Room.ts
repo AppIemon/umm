@@ -32,6 +32,7 @@ export interface IRoom extends Document {
 
   status: 'waiting' | 'starting' | 'playing' | 'finished'
   winner: string | null
+  startedAt?: Date
   createdAt: Date
 }
 
@@ -73,6 +74,7 @@ const roomSchema = new mongoose.Schema<IRoom>({
     default: 'waiting'
   },
   winner: { type: String, default: null },
+  startedAt: { type: Date, default: null },
   createdAt: {
     type: Date,
     default: Date.now,

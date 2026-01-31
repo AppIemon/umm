@@ -5,12 +5,9 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const { userId, username, text } = body
 
-  if (!userId || !text) {
+  if (!roomId || !userId || !text) {
     throw createError({ statusCode: 400, statusMessage: 'Missing fields' })
   }
-
-  const room = await Room.findById(roomId)
-  if (!room) throw createError({ statusCode: 404, statusMessage: 'Room not found' })
 
   const msg = {
     userId,
@@ -19,14 +16,18 @@ export default defineEventHandler(async (event) => {
     timestamp: new Date()
   }
 
-  room.messages.push(msg)
-
-  // Keep only last 50 messages
-  if (room.messages.length > 50) {
-    room.messages = room.messages.slice(room.messages.length - 50)
-  }
-
-  await room.save()
+  // Atomic update: push message and slice in one go (if possible) or just push
+  await Room.updateOne(
+    { _id: roomId },
+    {
+      $push: {
+        messages: {
+          $each: [msg],
+          $slice: -50 // Keep last 50
+        }
+      }
+    }
+  )
 
   return { success: true }
 })

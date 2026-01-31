@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3e5b4-xP+sox71YPOF6JPWAksqBAcvKJo\"",
-    "mtime": "2026-01-31T02:54:20.068Z",
-    "size": 255412,
+    "etag": "\"3f07b-PIJ1huN9AdATFl3HlaR3T3I0KiA\"",
+    "mtime": "2026-01-31T03:25:43.871Z",
+    "size": 258171,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"efc04-D6yzScR1Okjy4JWLNMpSZMvzw2o\"",
-    "mtime": "2026-01-31T02:54:20.069Z",
-    "size": 982020,
+    "etag": "\"f20c8-Jtu2ojnC9g/DI6KZZMB6C0s2T8M\"",
+    "mtime": "2026-01-31T03:25:43.873Z",
+    "size": 991432,
     "path": "index.mjs.map"
   }
 };
@@ -1950,6 +1950,7 @@ const _lazy_vSvfPH = () => Promise.resolve().then(function () { return record_po
 const _lazy_tYJqVb = () => Promise.resolve().then(function () { return index_get$3; });
 const _lazy_DwrcjF = () => Promise.resolve().then(function () { return index_post$1; });
 const _lazy_3cvM1k = () => Promise.resolve().then(function () { return chat_post$1; });
+const _lazy_pWLlQp = () => Promise.resolve().then(function () { return leave_post$1; });
 const _lazy_QxYKdS = () => Promise.resolve().then(function () { return start_post$1; });
 const _lazy_wgeVPj = () => Promise.resolve().then(function () { return status_get$1; });
 const _lazy_HdxjLr = () => Promise.resolve().then(function () { return update_post$1; });
@@ -1980,6 +1981,7 @@ const handlers = [
   { route: '/api/maps', handler: _lazy_tYJqVb, lazy: true, middleware: false, method: "get" },
   { route: '/api/maps', handler: _lazy_DwrcjF, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/:id/chat', handler: _lazy_3cvM1k, lazy: true, middleware: false, method: "post" },
+  { route: '/api/rooms/:id/leave', handler: _lazy_pWLlQp, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/:id/start', handler: _lazy_QxYKdS, lazy: true, middleware: false, method: "post" },
   { route: '/api/rooms/:id/status', handler: _lazy_wgeVPj, lazy: true, middleware: false, method: "get" },
   { route: '/api/rooms/:id/update', handler: _lazy_HdxjLr, lazy: true, middleware: false, method: "post" },
@@ -2451,7 +2453,7 @@ mapSchema.index({ createdAt: -1 });
 mapSchema.index({ difficulty: 1 });
 mapSchema.index({ rating: -1 });
 mapSchema.index({ isShared: 1, createdAt: -1 });
-const GameMap$1 = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
+const GameMap = mongoose.models.GameMap || mongoose.model("GameMap", mapSchema);
 
 const audioContentSchema = new mongoose.Schema({
   hash: {
@@ -2485,7 +2487,7 @@ const optimize_get = defineEventHandler(async (event) => {
     errors: []
   };
   try {
-    const maps = await GameMap$1.find({
+    const maps = await GameMap.find({
       $or: [
         { audioData: { $ne: null } },
         { audioChunks: { $not: { $size: 0 } } }
@@ -2811,7 +2813,7 @@ const updateStats_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.define
 
 const _id__delete = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
-  const deletedMap = await GameMap$1.findByIdAndDelete(id);
+  const deletedMap = await GameMap.findByIdAndDelete(id);
   if (!deletedMap) {
     throw createError({
       statusCode: 404,
@@ -2828,7 +2830,7 @@ const _id__delete$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePrope
 
 const _id__get = defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
-  const map = await GameMap$1.findById(id).populate("audioContentId");
+  const map = await GameMap.findById(id).populate("audioContentId");
   if (!map) {
     throw createError({
       statusCode: 404,
@@ -2933,7 +2935,7 @@ const _id__patch = defineEventHandler(async (event) => {
   if (isShared !== void 0) updateData.isShared = isShared;
   if (bpm !== void 0) updateData.bpm = bpm;
   if (measureLength !== void 0) updateData.measureLength = measureLength;
-  const updatedMap = await GameMap$1.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+  const updatedMap = await GameMap.findByIdAndUpdate(id, { $set: updateData }, { new: true });
   if (!updatedMap) {
     throw createError({
       statusCode: 404,
@@ -2958,7 +2960,7 @@ const audioChunk_post = defineEventHandler(async (event) => {
   if (chunkIndex === void 0 || !chunkData || totalChunks === void 0) {
     throw createError({ statusCode: 400, statusMessage: "Missing chunk info" });
   }
-  const map = await GameMap$1.findById(id);
+  const map = await GameMap.findById(id);
   if (!map) {
     throw createError({ statusCode: 404, statusMessage: "Map not found" });
   }
@@ -3021,7 +3023,7 @@ const rate_post = defineEventHandler(async (event) => {
       statusMessage: "Invalid rating. Must be between 1 and 30."
     });
   }
-  const map = await GameMap$1.findById(mapId);
+  const map = await GameMap.findById(mapId);
   if (!map) {
     throw createError({
       statusCode: 404,
@@ -3112,7 +3114,7 @@ const record_post = defineEventHandler(async (event) => {
   if (id === "tutorial_mode") {
     mapTitle = "TUTORIAL";
   } else {
-    map = await GameMap$1.findById(id);
+    map = await GameMap.findById(id);
     if (!map) {
       throw createError({
         statusCode: 404,
@@ -3215,7 +3217,7 @@ const index_get$2 = defineEventHandler(async (event) => {
   const authUser = userCookie ? JSON.parse(userCookie) : null;
   const userId = (authUser == null ? void 0 : authUser._id) || (authUser == null ? void 0 : authUser.id);
   try {
-    const maps = await GameMap$1.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50).allowDiskUse(true);
+    const maps = await GameMap.find(filter).select("-audioData -audioChunks -engineObstacles -enginePortals -autoplayLog -sections -beatTimes").sort({ createdAt: -1 }).limit(50).allowDiskUse(true);
     if (userId) {
       const mapIds = maps.map((m) => m._id);
       const userScores = await Score.find({
@@ -3372,10 +3374,10 @@ const index_post = defineEventHandler(async (event) => {
       measureLength: measureLength || 2
     };
     if (_id) {
-      const updated = await GameMap$1.findByIdAndUpdate(_id, mapData, { new: true });
+      const updated = await GameMap.findByIdAndUpdate(_id, mapData, { new: true });
       return updated;
     } else {
-      const newMap = await GameMap$1.create(mapData);
+      const newMap = await GameMap.create(mapData);
       return newMap;
     }
   } catch (error) {
@@ -3428,6 +3430,7 @@ const roomSchema = new mongoose.Schema({
     default: "waiting"
   },
   winner: { type: String, default: null },
+  startedAt: { type: Date, default: null },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -3442,28 +3445,71 @@ const chat_post = defineEventHandler(async (event) => {
   const roomId = (_a = event.context.params) == null ? void 0 : _a.id;
   const body = await readBody(event);
   const { userId, username, text } = body;
-  if (!userId || !text) {
+  if (!roomId || !userId || !text) {
     throw createError({ statusCode: 400, statusMessage: "Missing fields" });
   }
-  const room = await Room.findById(roomId);
-  if (!room) throw createError({ statusCode: 404, statusMessage: "Room not found" });
   const msg = {
     userId,
     username,
     text,
     timestamp: /* @__PURE__ */ new Date()
   };
-  room.messages.push(msg);
-  if (room.messages.length > 50) {
-    room.messages = room.messages.slice(room.messages.length - 50);
-  }
-  await room.save();
+  await Room.updateOne(
+    { _id: roomId },
+    {
+      $push: {
+        messages: {
+          $each: [msg],
+          $slice: -50
+          // Keep last 50
+        }
+      }
+    }
+  );
   return { success: true };
 });
 
 const chat_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
   __proto__: null,
   default: chat_post
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const leave_post = defineEventHandler(async (event) => {
+  var _a;
+  const roomId = (_a = event.context.params) == null ? void 0 : _a.id;
+  const body = await readBody(event);
+  const { userId } = body;
+  if (!roomId || !userId) {
+    throw createError({ statusCode: 400, statusMessage: "Missing fields" });
+  }
+  const result = await Room.findOneAndUpdate(
+    { _id: roomId, "players.userId": userId },
+    { $pull: { players: { userId } } },
+    { new: true }
+  );
+  if (!result) return { success: true };
+  if (result.players.length === 0) {
+    await Room.deleteOne({ _id: roomId });
+  } else {
+    if (result.hostId === userId) {
+      const newHost = result.players[0];
+      await Room.updateOne(
+        { _id: roomId },
+        {
+          $set: {
+            hostId: newHost.userId,
+            "players.0.isHost": true
+          }
+        }
+      );
+    }
+  }
+  return { success: true };
+});
+
+const leave_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: leave_post
 }, Symbol.toStringTag, { value: 'Module' }));
 
 const roundNum$1 = (num, precision = 1) => {
@@ -3511,7 +3557,7 @@ const start_post = defineEventHandler(async (event) => {
     console.log(`[StartGame] Room ${room.title} duration: ${maxDuration}s. Generating rounds...`);
     for (let d = startD; d <= maxDuration; d += 10) {
       engine.generateMap([], [], d, seed, false);
-      const newMap = await GameMap$1.create({
+      const newMap = await GameMap.create({
         title: `ROOM_${room.title}_ROUND_${d / 10}`,
         difficulty: room.difficulty || 5,
         seed,
@@ -3532,7 +3578,7 @@ const start_post = defineEventHandler(async (event) => {
     }
     if (rounds.length === 0) {
       engine.generateMap([], [], maxDuration, seed, false);
-      const newMap = await GameMap$1.create({
+      const newMap = await GameMap.create({
         title: `ROOM_${room.title}_ROUND_1`,
         difficulty: room.difficulty || 5,
         seed,
@@ -3550,14 +3596,26 @@ const start_post = defineEventHandler(async (event) => {
       });
       rounds.push(newMap._id);
     }
-    room.map = rounds[0];
-    room.mapQueue = rounds;
-    room.status = "playing";
-    room.players.forEach((p) => {
-      p.progress = 0;
-      p.isReady = false;
-    });
-    await room.save();
+    const updatedRoom = await Room.findOneAndUpdate(
+      { _id: roomId, status: "waiting" },
+      // Ensure we only start if still waiting
+      {
+        $set: {
+          map: rounds[0],
+          mapQueue: rounds,
+          status: "playing",
+          startedAt: /* @__PURE__ */ new Date(),
+          "players.$[].progress": 0,
+          "players.$[].isReady": false
+        }
+      },
+      { new: true }
+    );
+    if (!updatedRoom) {
+      const checkAgain = await Room.findById(roomId);
+      if ((checkAgain == null ? void 0 : checkAgain.status) === "playing") return { success: true, mapId: checkAgain.map };
+      throw new Error("Room state changed or room was deleted during map generation");
+    }
     console.log(`[StartGame] Successfully started game in room ${roomId} with ${rounds.length} rounds.`);
     return { success: true, mapId: rounds[0] };
   } catch (err) {
@@ -3621,6 +3679,7 @@ const status_get = defineEventHandler(async (event) => {
       hostId: room.hostId,
       map: optimizedMap,
       duration: room.duration,
+      startedAt: room.startedAt,
       messages: room.messages
     }
   };
@@ -3656,22 +3715,22 @@ const update_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.definePrope
 
 const clear_post = defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { matchId, userId } = body;
-  if (!matchId || !userId) {
-    throw createError({ statusCode: 400, statusMessage: "Missing matchId (roomId) or userId" });
+  const { roomId, matchId, userId } = body;
+  const id = roomId || matchId;
+  if (!id || !userId) {
+    throw createError({ statusCode: 400, statusMessage: "Missing roomId or userId" });
   }
-  const room = await Room.findById(matchId);
-  if (!room) {
-    throw createError({ statusCode: 404, statusMessage: "Room not found" });
+  const result = await Room.updateOne(
+    { _id: id, "players.userId": userId },
+    {
+      $inc: { "players.$.clearCount": 1 },
+      $set: { "players.$.lastSeen": /* @__PURE__ */ new Date() }
+    }
+  );
+  if (result.matchedCount === 0) {
+    throw createError({ statusCode: 404, statusMessage: "Room or Player not found" });
   }
-  const player = room.players.find((p) => p.userId === userId);
-  if (!player) {
-    throw createError({ statusCode: 404, statusMessage: "Player not found in room" });
-  }
-  player.clearCount = (player.clearCount || 0) + 1;
-  player.lastSeen = /* @__PURE__ */ new Date();
-  await room.save();
-  return { success: true, clearCount: player.clearCount };
+  return { success: true };
 });
 
 const clear_post$1 = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
@@ -3745,32 +3804,39 @@ const join_post = defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing fields" });
   }
   const room = await Room.findById(roomId);
-  if (!room) {
-    throw createError({ statusCode: 404, statusMessage: "Room not found" });
-  }
-  if (room.status !== "waiting") {
-    throw createError({ statusCode: 403, statusMessage: "Game already started" });
-  }
+  if (!room) throw createError({ statusCode: 404, statusMessage: "Room not found" });
+  if (room.status !== "waiting") throw createError({ statusCode: 403, statusMessage: "Game already started" });
+  const existingPlayer = room.players.find((p) => p.userId === userId);
+  if (existingPlayer) return { success: true, roomId: room._id };
   if (room.players.length >= room.maxPlayers) {
     throw createError({ statusCode: 403, statusMessage: "Room is full" });
-  }
-  const existingPlayer = room.players.find((p) => p.userId === userId);
-  if (existingPlayer) {
-    return { success: true, roomId: room._id };
   }
   const isValidId = mongoose.Types.ObjectId.isValid(userId);
   const user = isValidId ? await User.findById(userId) : null;
   const username = passedUsername || (user == null ? void 0 : user.displayName) || (user == null ? void 0 : user.username) || `Guest_${Math.floor(Math.random() * 1e3)}`;
-  room.players.push({
-    userId,
-    username,
-    isHost: false,
-    isReady: false,
-    progress: 0,
-    y: 360,
-    lastSeen: /* @__PURE__ */ new Date()
-  });
-  await room.save();
+  const result = await Room.updateOne(
+    { _id: roomId, status: "waiting", "players.userId": { $ne: userId } },
+    {
+      $push: {
+        players: {
+          userId,
+          username,
+          isHost: false,
+          isReady: false,
+          progress: 0,
+          y: 360,
+          lastSeen: /* @__PURE__ */ new Date()
+        }
+      }
+    }
+  );
+  if (result.matchedCount === 0) {
+    const check = await Room.findById(roomId);
+    if (!check) throw createError({ statusCode: 404, statusMessage: "Room disappeared" });
+    if (check.status !== "waiting") throw createError({ statusCode: 403, statusMessage: "Game started" });
+    if (check.players.length >= check.maxPlayers) throw createError({ statusCode: 403, statusMessage: "Full" });
+    if (check.players.some((p) => p.userId === userId)) return { success: true, roomId: check._id };
+  }
   return { success: true, roomId: room._id };
 });
 
@@ -3802,21 +3868,17 @@ const nextMap_post = defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing roomId or userId" });
   }
   const room = await Room.findById(roomId);
-  if (!room) {
-    throw createError({ statusCode: 404, statusMessage: "Room not found" });
-  }
-  if (!room.mapQueue) {
-    room.mapQueue = [];
-    if (room.map) room.mapQueue.push(room.map);
-  }
+  if (!room) throw createError({ statusCode: 404, statusMessage: "Room not found" });
   if (mapIndex >= (((_a = room.mapQueue) == null ? void 0 : _a.length) || 0)) {
-    const verifiedCount = await GameMap$1.countDocuments({ isShared: true, isVerified: true });
+    const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true });
     if (verifiedCount > 0) {
       const skip = Math.floor(Math.random() * verifiedCount);
-      const newMap = await GameMap$1.findOne({ isShared: true, isVerified: true }).skip(skip);
+      const newMap = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip);
       if (newMap) {
-        room.mapQueue.push(newMap._id);
-        await room.save();
+        await Room.updateOne(
+          { _id: roomId },
+          { $push: { mapQueue: newMap._id } }
+        );
         const mObj = newMap.toObject();
         mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
         mObj.enginePortals = optimizeObstacles(mObj.enginePortals);
@@ -3826,7 +3888,7 @@ const nextMap_post = defineEventHandler(async (event) => {
     return { map: null, mapIndex };
   }
   const existingMapId = room.mapQueue[mapIndex];
-  const existingMap = await GameMap$1.findById(existingMapId);
+  const existingMap = await GameMap.findById(existingMapId);
   if (existingMap) {
     const mObj = existingMap.toObject();
     mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles);
@@ -4351,7 +4413,7 @@ class MapGenerator {
     } else {
       baseGap = 180 - (difficulty - 24) * 15;
     }
-    baseGap = Math.max(90, baseGap);
+    baseGap = Math.max(60, baseGap);
     return isMini ? baseGap * 1.5 : baseGap;
   }
   /**
@@ -4538,7 +4600,8 @@ class MapGenerator {
         this.fillAbove(objects, currentX, blockY, blockSize);
       }
       const rand = Math.abs(Math.sin(currentX * 0.123 + currentFloorY * 0.456));
-      if (stepY === 0 && currentGap > 100 && rand < 0.2) {
+      const hazardThreshold = 0.15 + difficulty / 30 * 0.25;
+      if (stepY === 0 && currentGap > 100 && rand < hazardThreshold) {
         let spikeH = 40;
         if (difficulty <= 5) spikeH = 20;
         else if (difficulty <= 10) spikeH = 30;

@@ -27,26 +27,20 @@ export default defineEventHandler(async (event) => {
   }
 
   const room = await Room.findById(roomId)
-  if (!room) {
-    throw createError({ statusCode: 404, statusMessage: 'Room not found' })
-  }
-
-  // Check if map queue already has this index
-  if (!room.mapQueue) {
-    room.mapQueue = []
-    if (room.map) room.mapQueue.push(room.map)
-  }
+  if (!room) throw createError({ statusCode: 404, statusMessage: 'Room not found' })
 
   // If we need a new map (index is beyond current queue)
   if (mapIndex >= (room.mapQueue?.length || 0)) {
-    // Find verified maps as fallback
     const verifiedCount = await GameMap.countDocuments({ isShared: true, isVerified: true })
     if (verifiedCount > 0) {
       const skip = Math.floor(Math.random() * verifiedCount)
       const newMap = await GameMap.findOne({ isShared: true, isVerified: true }).skip(skip)
       if (newMap) {
-        room.mapQueue.push(newMap._id)
-        await room.save()
+        // Atomic push to mapQueue
+        await Room.updateOne(
+          { _id: roomId },
+          { $push: { mapQueue: newMap._id } }
+        )
 
         const mObj = newMap.toObject()
         mObj.engineObstacles = optimizeObstacles(mObj.engineObstacles)

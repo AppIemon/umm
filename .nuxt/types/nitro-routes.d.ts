@@ -42,6 +42,9 @@ declare module "nitropack/types" {
     '/api/rooms/:id/chat': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/chat.post').default>>>>
     }
+    '/api/rooms/:id/leave': {
+      'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/leave.post').default>>>>
+    }
     '/api/rooms/:id/start': {
       'post': Simplify<Serialize<Awaited<ReturnType<typeof import('../../server/api/rooms/[id]/start.post').default>>>>
     }
