@@ -357,6 +357,11 @@ async function handlePlayerClear() {
 async function loadNextMap() {
   const nextIndex = currentMapIndex.value + 1;
   
+  console.log('[loadNextMap] ===== LOADING NEXT MAP =====');
+  console.log('[loadNextMap] currentMapIndex:', currentMapIndex.value);
+  console.log('[loadNextMap] nextIndex:', nextIndex);
+  console.log('[loadNextMap] roomId:', currentRoomId.value);
+  
   try {
     const res: any = await $fetch('/api/rooms/next-map', {
       method: 'POST',
@@ -367,15 +372,22 @@ async function loadNextMap() {
       }
     });
     
+    console.log('[loadNextMap] Response:', res);
+    
     if (res.map) {
+      console.log('[loadNextMap] New map received:', res.map.title);
+      console.log('[loadNextMap] New map obstacles count:', res.map.engineObstacles?.length);
       selectedMap.value = res.map;
       currentMapIndex.value = res.mapIndex; // Update index ONLY after successful fetch
       obstacles.value = res.map.engineObstacles || [];
       sections.value = res.map.sections || [];
       myProgress.value = 0;
+      console.log('[loadNextMap] Map switched successfully');
+    } else {
+      console.log('[loadNextMap] No map in response');
     }
   } catch (e) {
-    console.error('Failed to load next map', e);
+    console.error('[loadNextMap] Failed to load next map', e);
   }
 }
 
@@ -598,13 +610,22 @@ function updateMyProgress(data: any) {
 }
 
 function handleRoundFinish(data: any) {
+  console.log('[handleRoundFinish] ===== ROUND FINISHED =====');
+  console.log('[handleRoundFinish] data:', data);
+  console.log('[handleRoundFinish] outcome:', data?.outcome);
+  
   // Check if player completed the map
   if (data?.outcome === 'win') {
+    console.log('[handleRoundFinish] Player WON! Calling handlePlayerClear...');
     handlePlayerClear();
     // After clear, load next stage after a short delay
+    console.log('[handleRoundFinish] Scheduling loadNextMap in 1.5 seconds...');
     setTimeout(() => {
+       console.log('[handleRoundFinish] Timeout triggered, calling loadNextMap');
        loadNextMap();
     }, 1500); // 1.5 seconds delay to show "Complete"
+  } else {
+    console.log('[handleRoundFinish] Not a win outcome, not loading next map');
   }
 }
 
