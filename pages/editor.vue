@@ -929,10 +929,18 @@ const saveMap = async () => {
     }
   } catch (e: any) {
     console.error('Save error:', e);
-    // Show more detailed error from server if available
-    const msg = e.response?._data?.statusMessage || e.message || 'Unknown error';
-    alert(`Failed to save map: ${msg}`);
-  } finally {
+    const errorData = e.response?._data || {};
+    
+    if (errorData.statusMessage === "MUSIC_NOT_IN_SERVER") {
+      const guide = errorData.data?.guide || "음악 파일을 서버에 저장할 수 없습니다.";
+      const contact = errorData.data?.contact || "관리자에게 문의하세요.";
+      alert(`${guide}\n\n문의처: ${contact}`);
+    } else {
+      const msg = errorData.statusMessage || e.message || 'Unknown error';
+      alert(`Failed to save map: ${msg}`);
+    }
+  }
+ finally {
     isSaving.value = false;
   }
 };

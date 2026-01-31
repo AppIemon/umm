@@ -775,6 +775,12 @@ const handleMapReady = async (mapData: any) => {
     }
   } catch (e: any) {
     console.error("Failed to save map auto-registration:", e);
+    const errorData = e.response?._data || {};
+    if (errorData.statusMessage === "MUSIC_NOT_IN_SERVER") {
+      const guide = errorData.data?.guide || "곡 추가가 필요합니다.";
+      const contact = errorData.data?.contact || "관리자에게 문의하세요.";
+      alert(`${guide}\n\n문의처: ${contact}`);
+    }
   }
 };
 

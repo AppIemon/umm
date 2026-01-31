@@ -5,8 +5,8 @@ import crypto$1 from 'node:crypto';
 import { parentPort, threadId } from 'node:worker_threads';
 import { defineEventHandler, handleCacheHeaders, splitCookiesString, createEvent, fetchWithEvent, isEvent, eventHandler, setHeaders, sendRedirect, proxyRequest, getRequestHeader, setResponseHeaders, setResponseStatus, send, getRequestHeaders, setResponseHeader, appendResponseHeader, getRequestURL, getResponseHeader, removeResponseHeader, createError, getQuery as getQuery$1, readBody, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getResponseStatus, getRouterParam, setCookie, deleteCookie, getCookie, sendStream, getResponseStatusText } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/h3/dist/index.mjs';
 import { escapeHtml } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/@vue/shared/dist/shared.cjs.js';
-import fs, { promises } from 'node:fs';
 import mongoose from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/mongoose/index.js';
+import fs, { promises } from 'node:fs';
 import { Readable } from 'node:stream';
 import { createRenderer, getRequestDependencies, getPreloadLinks, getPrefetchLinks } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { parseURL, withoutBase, joinURL, getQuery, withQuery, withTrailingSlash, decodePath, withLeadingSlash, withoutTrailingSlash, joinRelativeURL } from 'file://F:/%EB%82%B4%EA%B0%80%20%EC%99%9C%20%EB%B0%95%EC%B9%98%EC%9E%84/impossibletiming/node_modules/ufo/dist/index.mjs';
@@ -1499,16 +1499,16 @@ _6Nqr69zlGa2_YJTzMqdgLamajd8rCKPNKhPIZxUdk
 const assets = {
   "/index.mjs": {
     "type": "text/javascript; charset=utf-8",
-    "etag": "\"3ec54-cpj2mIRaalEspYNNz0BmlsDBpaY\"",
-    "mtime": "2026-01-31T05:28:14.720Z",
-    "size": 257108,
+    "etag": "\"3eb66-AFH8jN3Wr6e8fuz/0yanH4tJ2ak\"",
+    "mtime": "2026-01-31T05:33:54.877Z",
+    "size": 256870,
     "path": "index.mjs"
   },
   "/index.mjs.map": {
     "type": "application/json",
-    "etag": "\"f0e05-z42V/UJL4yjxvEejl7CuH3iJGyA\"",
-    "mtime": "2026-01-31T05:28:14.724Z",
-    "size": 986629,
+    "etag": "\"f0be6-wT1qGYkZT8j8HIjZR0CY2QFBDAc\"",
+    "mtime": "2026-01-31T05:33:54.881Z",
+    "size": 986086,
     "path": "index.mjs.map"
   }
 };
@@ -3298,44 +3298,28 @@ const index_post = defineEventHandler(async (event) => {
         else if (mimeType.includes("ogg")) ext = ".ogg";
         const isVercel = !!process.env.VERCEL;
         if (isVercel) {
-          let audioContent = await AudioContent.findOne({ hash });
-          if (!audioContent) {
-            audioContent = await AudioContent.create({
-              hash,
-              chunks: [binaryData],
-              size: binaryData.length
-            });
-            console.log(`[Audio] Saved new music to MongoDB: ${hash}`);
-          }
-          finalAudioUrl = `audioContentId:${audioContent._id}`;
-        } else {
-          try {
-            const filename = `${hash}${ext}`;
-            const musicDir = path.join(process.cwd(), "public", "music");
-            if (!fs.existsSync(musicDir)) {
-              fs.mkdirSync(musicDir, { recursive: true });
+          throw createError({
+            statusCode: 403,
+            statusMessage: "MUSIC_NOT_IN_SERVER",
+            data: {
+              guide: "\uC774 \uACE1\uC740 \uC544\uC9C1 \uC11C\uBC84(GitHub)\uC5D0 \uB4F1\uB85D\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uAD00\uB9AC\uC790\uC5D0\uAC8C \uACE1 \uCD94\uAC00\uB97C \uC694\uCCAD\uD574\uC8FC\uC138\uC694!",
+              contact: "https://open.kakao.com/o/sPXMJgUg"
             }
-            const filePath = path.join(musicDir, filename);
-            if (!fs.existsSync(filePath)) {
-              fs.writeFileSync(filePath, binaryData);
-              console.log(`[Audio] Saved new music file: ${filename}`);
-            } else {
-              console.log(`[Audio] Music file exists, skipping write: ${filename}`);
-            }
-            finalAudioUrl = `/music/${filename}`;
-          } catch (fsError) {
-            console.error("[Audio] Local save failed, falling back to MongoDB:", fsError.message);
-            let audioContent = await AudioContent.findOne({ hash });
-            if (!audioContent) {
-              audioContent = await AudioContent.create({
-                hash,
-                chunks: [binaryData],
-                size: binaryData.length
-              });
-            }
-            finalAudioUrl = `audioContentId:${audioContent._id}`;
-          }
+          });
         }
+        const filename = `${hash}${ext}`;
+        const musicDir = path.join(process.cwd(), "public", "music");
+        if (!fs.existsSync(musicDir)) {
+          fs.mkdirSync(musicDir, { recursive: true });
+        }
+        const filePath = path.join(musicDir, filename);
+        if (!fs.existsSync(filePath)) {
+          fs.writeFileSync(filePath, binaryData);
+          console.log(`[Audio] Saved new music file: ${filename}`);
+        } else {
+          console.log(`[Audio] Music file exists, skipping write: ${filename}`);
+        }
+        finalAudioUrl = `/music/${filename}`;
       }
     }
     let user = await User.findOne({ username: (creatorName == null ? void 0 : creatorName.toLowerCase()) || "guest" });
