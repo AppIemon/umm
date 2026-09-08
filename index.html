@@ -7,162 +7,130 @@
 <meta name="description" content="플라스틱세 발표 복습용 참여형 서바이버 게임">
 <style>
   :root{
-    --ink:#eaf2ff; --dim:#9fb3d0; --acc:#3ddc97; --acc2:#4cc9f0;
-    --warn:#ff6b6b; --gold:#ffd166; --panel:#0d1729; --panel2:#132340;
+    --ink:#e8eef6; --dim:#8b9bb0; --acc:#3ddc97; --acc2:#4cc9f0;
+    --warn:#ff6b6b; --gold:#ffd166; --bg:#0b0f16; --card:#121821; --line:#243044;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:#060b16;overflow:hidden;
+  html,body{margin:0;height:100%;background:#070a10;overflow:hidden;
     font-family:'Pretendard','Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',system-ui,sans-serif;
     color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
   #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
   #frame{position:relative;line-height:0}
-  canvas{display:block;background:#0a1220;width:100%;height:100%;
-    box-shadow:0 0 0 1px #1d2f4d, 0 30px 80px rgba(0,0,0,.6)}
+  canvas{display:block;background:#0a1220;width:100%;height:100%}
   .layer{position:absolute;inset:0;pointer-events:none}
 
-  /* ── HUD ── */
-  #hud{position:absolute;left:0;right:0;top:0;padding:12px 16px;pointer-events:none;
-    background:linear-gradient(#060b16dd,transparent 85%)}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .chip{background:#0e1a2ecc;border:1px solid #24395c;border-radius:999px;padding:5px 12px;
-    display:flex;gap:7px;align-items:center;backdrop-filter:blur(6px);white-space:nowrap;font-size:13px}
-  .chip .sub{color:var(--dim);font-size:11px}
-  #roundName{font-weight:800;color:var(--acc)}
-  .tbadge{display:inline-block;font-size:30px;font-weight:800;letter-spacing:1px;
-    font-variant-numeric:tabular-nums;background:#0e1a2ecc;border:1px solid #24395c;
-    border-radius:14px;padding:2px 20px;backdrop-filter:blur(6px);
-    text-shadow:0 2px 10px rgba(0,0,0,.6)}
-  #hpwrap{width:220px;height:16px;background:#12203a;border:1px solid #24395c;border-radius:99px;
-    overflow:hidden;position:relative}
-  #hpIn{height:100%;width:100%;background:linear-gradient(90deg,#3ddc97,#8ef0c4);transition:width .15s}
-  #hpwrap .lab{position:absolute;inset:0;font-size:11px;display:grid;place-items:center;
-    color:#04231a;font-weight:800}
-  #xpwrap{position:absolute;left:0;right:0;top:0;height:6px;background:#0d1729}
-  #xpIn{height:100%;width:0%;background:linear-gradient(90deg,var(--acc2),#a78bfa);transition:width .12s}
-  #hud .skip{pointer-events:auto;cursor:pointer;color:var(--dim);font:inherit;font-size:12.5px}
-  #hud .skip:hover{color:var(--ink);border-color:var(--acc2)}
-  .gold{color:var(--gold)} .ok{color:var(--acc)}
+  /* HUD — 얇은 한 줄 */
+  #hud{position:absolute;left:0;right:0;top:0;padding:8px 12px;pointer-events:none}
+  #xpwrap{height:3px;background:#161d28;margin-bottom:8px}
+  #xpIn{height:100%;width:0%;background:var(--acc2)}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px}
+  #roundName{font-weight:700;color:var(--acc)}
+  #roundSub{color:var(--dim)}
+  #whoNow{color:var(--gold)}
+  #timeBig{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums;font-size:18px}
+  #hpwrap{width:140px;height:8px;background:#1a2230;overflow:hidden;position:relative}
+  #hpIn{height:100%;width:100%;background:var(--acc)}
+  #hpwrap .lab{position:absolute;inset:0;font-size:9px;display:grid;place-items:center;
+    color:#04140e;font-weight:700}
+  #hud .skip{pointer-events:auto;cursor:pointer;background:none;border:0;color:var(--dim);
+    font:inherit;font-size:13px;padding:0}
+  #hud .skip:hover{color:var(--ink)}
 
-  /* ── 오버레이 공통 ── */
+  /* 오버레이 — 어두운 배경 + 단순한 패널 */
   .ov{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
-    background:rgba(4,9,18,.88);backdrop-filter:blur(8px);z-index:20;padding:3vh 3vw}
+    background:rgba(7,10,16,.82);z-index:20;padding:4vh 4vw}
   .ov.on{display:flex}
-  .card{width:min(1020px,95vw);max-height:94vh;overflow:auto;
-    background:linear-gradient(160deg,var(--panel2),var(--panel));
-    border:1px solid #2a4570;border-radius:22px;padding:32px 38px;box-shadow:0 24px 70px rgba(0,0,0,.55)}
-  .eyebrow{color:var(--acc);font-size:13px;font-weight:700;letter-spacing:1.5px;margin-bottom:8px}
+  .card{width:min(640px,94vw);max-height:92vh;overflow:auto;background:var(--card);
+    border:1px solid var(--line);padding:28px 28px 24px}
+  #quiz .card, #end .card{width:min(780px,94vw)}
+  .eyebrow{color:var(--dim);font-size:12px;margin-bottom:6px}
   .eyebrow.op,.eyebrow.hardq{color:var(--gold)}
-  .card h1{margin:0 0 8px;font-size:clamp(22px,2.8vw,38px);line-height:1.28}
-  .card h2{margin:0 0 16px;font-size:clamp(14px,1.6vw,20px);color:var(--dim);font-weight:600;line-height:1.5}
-  .card b{color:var(--gold)} .card .em{color:var(--acc2);font-weight:700}
+  .card h1{margin:0 0 6px;font-size:clamp(20px,2.4vw,30px);font-weight:700;line-height:1.3}
+  .card h2{margin:0 0 14px;font-size:14px;color:var(--dim);font-weight:500;line-height:1.5}
+  .card b{color:var(--gold);font-weight:700} .card .em{color:var(--acc2);font-weight:600}
 
-  .opts{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:18px}
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
   @media(max-width:780px){.opts{grid-template-columns:1fr}}
-  .opt{pointer-events:auto;cursor:pointer;text-align:left;background:#152541;
-    border:1px solid #2c4570;color:var(--ink);border-radius:14px;padding:14px 16px;font:inherit;
-    font-size:clamp(14px,1.3vw,17px);display:flex;gap:11px;align-items:center;transition:.12s;line-height:1.4}
-  .opt:hover{background:#1c3157;border-color:var(--acc2);transform:translateY(-2px)}
-  .opt .n{width:25px;height:25px;flex:none;border-radius:8px;background:#25406b;display:grid;
-    place-items:center;font-size:12px;font-weight:700;color:#cfe0ff}
-  .opt.right{background:#12402f;border-color:var(--acc)}
-  .opt.wrong{background:#3d1620;border-color:var(--warn);opacity:.8}
-  .opt.chosen{background:#3a3115;border-color:var(--gold)}
-  .opt[disabled]{cursor:default;transform:none}
-  .verdict{margin-top:16px;font-size:clamp(14px,1.4vw,18px);line-height:1.65;display:none;
-    background:#0d1c31;border-left:4px solid var(--acc);border-radius:0 10px 10px 0;padding:13px 17px}
+  .opt{pointer-events:auto;cursor:pointer;text-align:left;background:#0e141d;
+    border:1px solid var(--line);color:var(--ink);padding:12px 14px;font:inherit;
+    font-size:15px;display:flex;gap:10px;align-items:center;line-height:1.4}
+  .opt:hover{border-color:#4a6288}
+  .opt .n{width:22px;height:22px;flex:none;background:#1c2736;display:grid;
+    place-items:center;font-size:12px;color:var(--dim)}
+  .opt.right{background:#10281e;border-color:var(--acc)}
+  .opt.wrong{background:#2a1218;border-color:var(--warn)}
+  .opt.chosen{background:#2a2410;border-color:var(--gold)}
+  .opt[disabled]{cursor:default}
+  .verdict{margin-top:14px;font-size:15px;line-height:1.6;display:none;color:var(--dim)}
   .verdict.on{display:block}
-  .verdict.bad{border-left-color:var(--warn)}
-  .verdict.op{border-left-color:var(--gold)}
+  .verdict.bad{color:#ffb4b4}
+  .verdict.op{color:var(--gold)}
 
-  .btn{pointer-events:auto;cursor:pointer;margin-top:20px;background:var(--acc);color:#04231a;border:none;
-    border-radius:12px;padding:13px 26px;font:inherit;font-weight:800;font-size:16px}
-  .btn:hover{filter:brightness(1.08)}
-  .btn.ghost{background:transparent;color:var(--dim);border:1px solid #2c4570;margin-left:8px}
+  .btn{pointer-events:auto;cursor:pointer;margin-top:16px;background:var(--acc);color:#04231a;border:0;
+    padding:10px 18px;font:inherit;font-weight:700;font-size:15px}
+  .btn.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);margin-left:8px}
+  .btn.gold{background:var(--gold);color:#2a2410}
 
-  #title .card{text-align:center}
-  #title h1{font-size:clamp(26px,4.4vw,50px);letter-spacing:-1px}
-  .keys{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:18px;color:var(--dim);font-size:13px}
-  .keys div{display:flex;gap:6px;align-items:center}
-  kbd{background:#1b2c4a;border:1px solid #35548a;border-bottom-width:2px;border-radius:6px;
-    padding:2px 8px;font-size:12px;font-family:inherit;color:#cfe0ff}
-  .chips{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin-top:18px}
-  .chips span{background:#152541;border:1px solid #2c4570;border-radius:999px;padding:5px 12px;
-    font-size:12px;color:var(--dim)}
-  .note{margin-top:18px;color:var(--dim);font-size:13px;line-height:1.75;text-align:left;
-    background:#0c1626;border:1px dashed #2c4570;border-radius:12px;padding:14px 18px}
+  #title .card{text-align:center;width:min(560px,94vw)}
+  #title h1{font-size:clamp(22px,3.2vw,34px)}
+  .keys{margin-top:10px;color:var(--dim);font-size:12px}
+  kbd{border:1px solid var(--line);padding:1px 5px;font-size:11px;font-family:inherit;color:var(--ink)}
 
-  /* ── 강화 카드 ── */
-  .ucards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:24px}
+  .ucards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
   @media(max-width:820px){.ucards{grid-template-columns:1fr}}
-  .ucard{pointer-events:auto;cursor:pointer;background:#152541;border:1px solid #2c4570;border-radius:16px;
-    padding:22px 18px;color:var(--ink);font:inherit;text-align:center;transition:.13s;display:flex;
-    flex-direction:column;align-items:center;gap:8px}
-  .ucard:hover{background:#1c3157;border-color:var(--acc2);transform:translateY(-4px)}
-  .ucard .ico{font-size:34px;line-height:1}
-  .ucard .cat{font-size:11px;letter-spacing:1.5px;color:var(--acc);font-weight:700}
-  .ucard .nm{font-size:19px;font-weight:800}
-  .ucard .ds{font-size:13.5px;color:var(--dim);line-height:1.5}
-  .ucard .lv{font-size:11.5px;color:var(--gold)}
-  .goalbox{margin-top:16px;background:#0c1626;border:1px solid #2c4570;border-radius:12px;
-    padding:12px 16px;font-size:14px;line-height:1.7;color:var(--ink)}
-  .uplist{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:14px}
-  .uplist span{background:#152541;border:1px solid #2c4570;border-radius:999px;padding:4px 11px;font-size:12px;color:var(--dim)}
+  .ucard{pointer-events:auto;cursor:pointer;background:#0e141d;border:1px solid var(--line);
+    padding:16px 12px;color:var(--ink);font:inherit;text-align:center;display:flex;
+    flex-direction:column;align-items:center;gap:4px}
+  .ucard:hover{border-color:var(--acc2)}
+  .ucard .ico{font-size:26px;line-height:1}
+  .ucard .cat{font-size:11px;color:var(--acc)}
+  .ucard .nm{font-size:16px;font-weight:700}
+  .ucard .ds{font-size:12px;color:var(--dim);line-height:1.4}
+  .ucard .lv{font-size:11px;color:var(--gold)}
+  .uplist{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .uplist span{color:var(--dim);font-size:12px}
 
-  .diffpick{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:22px}
-  .diffpick button{pointer-events:auto;cursor:pointer;background:#152541;border:1px solid #2c4570;
-    color:var(--dim);border-radius:14px;padding:12px 20px;font:inherit;font-size:14px;text-align:center;
-    line-height:1.5;transition:.12s;min-width:150px}
-  .diffpick button:hover{border-color:var(--acc2);color:var(--ink)}
-  .diffpick button.sel{background:#12402f;border-color:var(--acc);color:var(--ink)}
-  .diffpick button b{display:block;font-size:16px;margin-bottom:2px}
-  .diffpick button span{font-size:11.5px;opacity:.8}
+  .diffpick{display:flex;gap:6px;justify-content:center;margin-top:16px}
+  .diffpick button{pointer-events:auto;cursor:pointer;background:transparent;border:1px solid var(--line);
+    color:var(--dim);padding:8px 14px;font:inherit;font-size:13px}
+  .diffpick button.sel{border-color:var(--acc);color:var(--ink)}
+  .diffpick button span{display:none}
 
-  .pick{margin-top:20px;background:#0c1626;border:1px dashed #2c4570;border-radius:14px;padding:16px 18px}
-  .rlabel{color:var(--dim);font-size:12.5px;margin-bottom:10px}
-  .pick input{pointer-events:auto;width:min(320px,100%);background:#152541;border:1px solid #2c4570;
-    color:var(--ink);border-radius:10px;padding:11px 14px;font:inherit;font-size:15px;outline:none;text-align:center}
+  .pick{margin-top:14px}
+  .pick input{pointer-events:auto;width:min(260px,100%);background:#0e141d;border:1px solid var(--line);
+    color:var(--ink);padding:10px 12px;font:inherit;font-size:15px;outline:none;text-align:center}
   .pick input:focus{border-color:var(--acc2)}
 
-  .review{margin:14px 0 0;padding:0;list-style:none;text-align:left}
-  .review li{border-top:1px solid #1e3355;padding:13px 0}
+  .review{margin:10px 0 0;padding:0;list-style:none;text-align:left}
+  .review li{border-top:1px solid var(--line);padding:10px 0}
   .review li:first-child{border-top:none}
-  .review .q{font-size:clamp(14px,1.35vw,17px);margin-bottom:5px}
-  .review .a{color:var(--acc);font-size:13.5px}
-  .review .m{color:var(--dim);font-size:13.5px;margin-top:3px;line-height:1.6}
-  .review .pick2{color:var(--gold);font-size:13.5px}
-  .scoreline{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-  .scoreline div{background:#152541;border:1px solid #2c4570;border-radius:12px;padding:11px 16px;
-    font-size:14px;text-align:center;min-width:110px}
-  .scoreline b{display:block;font-size:24px;color:var(--acc);margin-top:3px}
-  .ptable{width:100%;border-collapse:collapse;margin-top:12px;font-size:14.5px}
-  .ptable th{color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid #2c4570}
-  .ptable td{padding:9px 10px;border-bottom:1px solid #1e3355}
-  .ptable td:first-child{font-weight:700}
-  .ptable tbody tr:first-child td{color:var(--gold)}
-  .ptable.chrono tbody tr td{color:var(--ink)}
-  .ptable.chrono tbody tr.win td{color:var(--gold);background:rgba(255,209,102,.07)}
-  .prize{margin-top:14px;background:linear-gradient(135deg,#2a2410,#152541);
-    border:1px solid var(--gold);border-radius:16px;padding:20px 24px;text-align:center}
-  .prize .pname{font-size:clamp(22px,2.6vw,32px);font-weight:800}
-  .prize .pval{font-size:clamp(32px,4.4vw,52px);font-weight:900;color:var(--gold);line-height:1.15;margin:4px 0}
-  .prize .pdesc{color:var(--dim);font-size:13.5px}
+  .review .q{font-size:15px;margin-bottom:4px}
+  .review .a{color:var(--acc);font-size:13px}
+  .review .m{color:var(--dim);font-size:13px;margin-top:2px;line-height:1.5}
+  .review .pick2{color:var(--gold);font-size:13px}
+  .scoreline{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--dim)}
+  .scoreline b{color:var(--ink);font-size:16px;margin-left:6px}
+  .ptable{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  .ptable th{color:var(--dim);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .ptable td{padding:6px 8px;border-bottom:1px solid #1a2230}
+  .ptable.chrono tbody tr.win td{color:var(--gold)}
+  .prize{margin-top:12px;font-size:15px}
+  .prize .pname{font-weight:700}
+  .prize .pval{color:var(--gold);font-weight:800;margin-left:8px}
+  .prize .pdesc{color:var(--dim);font-size:13px;margin-top:4px}
 
-  #toast{position:absolute;left:50%;top:110px;transform:translateX(-50%);background:#0e1a2ee6;
-    border:1px solid #2c4570;border-radius:12px;padding:9px 18px;font-size:14px;opacity:0;
-    transition:opacity .25s;z-index:15;white-space:nowrap}
+  #toast{position:absolute;left:50%;top:52px;transform:translateX(-50%);color:var(--ink);
+    font-size:13px;opacity:0;transition:opacity .2s;z-index:15;white-space:nowrap;pointer-events:none;
+    text-shadow:0 1px 6px #000}
   #toast.on{opacity:1}
 
-  #stick{position:absolute;left:0;right:0;bottom:0;height:190px;display:none;z-index:12;
-    background:linear-gradient(transparent,rgba(76,201,240,.06))}
-  #stick::after{content:'이 영역을 끌어서 이동';position:absolute;left:0;right:0;bottom:10px;
-    text-align:center;color:var(--dim);font-size:12px}
+  #stick{position:absolute;left:0;right:0;bottom:0;height:160px;display:none;z-index:12}
   @media(pointer:coarse){#stick{display:block}}
 
-  .deathbtns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:10px}
-  .btn.gold{background:var(--gold);color:#2a2410}
-  .patbadge{position:absolute;left:50%;bottom:70px;transform:translateX(-50%);
-    font-size:13px;letter-spacing:2px;color:#ffd166;font-weight:800;opacity:.9;
-    text-shadow:0 2px 10px #000;pointer-events:none;display:none;white-space:nowrap}
+  .deathbtns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .patbadge{position:absolute;left:50%;bottom:58px;transform:translateX(-50%);
+    font-size:12px;letter-spacing:1px;color:#ffd166;font-weight:700;opacity:.9;
+    text-shadow:0 2px 8px #000;pointer-events:none;display:none;white-space:nowrap}
   #patName.on{display:block}
 </style>
 </head>
@@ -172,141 +140,94 @@
     <canvas id="game" width="1280" height="720"></canvas>
     <div id="hud" class="layer">
       <div id="xpwrap"><div id="xpIn"></div></div>
-      <div class="row" style="margin-top:10px">
-        <div class="chip"><span id="roundName">ROUND 1</span><span class="sub" id="roundSub"></span></div>
-        <div class="chip gold">🎮 <span id="whoNow">—</span></div>
-        <div class="chip"><span class="sub">LV</span> <b id="lvNum">1</b></div>
-        <div class="chip"><span class="sub">HP</span>
-          <div id="hpwrap"><div id="hpIn"></div><div class="lab" id="hpLab">100</div></div></div>
-        <div class="chip ok">☠ <span id="kills">0</span></div>
-        <div class="chip" style="color:#ff8fa3">⚔ <span id="dpsNow">0</span> DPS</div>
-        <div class="chip"><span class="sub">✦ 강화</span> <b id="upNum">0</b></div>
-        <div class="chip"><span class="sub">SCORE</span> <b id="score">0</b></div>
-        <button class="chip skip" id="skipBtn">⏭ 라운드 스킵</button>
+      <div class="row">
+        <span id="roundName">ROUND 1</span>
+        <span id="roundSub"></span>
+        <span id="whoNow">—</span>
+        <span>LV <b id="lvNum">1</b></span>
+        <div id="hpwrap"><div id="hpIn"></div><div class="lab" id="hpLab">100</div></div>
+        <span id="timeBig">0:50</span>
+        <button class="skip" id="skipBtn">스킵</button>
       </div>
-      <div style="text-align:center;margin-top:8px">
-        <span id="timeBig" class="tbadge">0:50</span></div>
       <div class="patbadge" id="patName"></div>
+      <span id="kills" hidden></span><span id="dpsNow" hidden></span>
+      <span id="score" hidden></span><span id="upNum" hidden></span>
     </div>
     <div id="toast"></div>
     <div id="stick"></div>
   </div>
 
-  <!-- 타이틀 -->
   <div class="ov on" id="title">
     <div class="card">
-      <div class="eyebrow">발표 복습 서바이버 · 6 ROUNDS</div>
+      <div class="eyebrow">6라운드 · 복습 서바이버</div>
       <h1>플라스틱 배출량 기반 과세</h1>
-      <h2>1라운드는 서바이버, 2~6라운드는 언더테일식 보스 탄막 — 맞으면 아픕니다</h2>
-      <div class="chips" id="roundPreview"></div>
-      <div class="keys">
-        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 또는 <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> 이동</div>
-        <div>공격은 <b style="color:var(--acc2)">자동</b> — 가장 가까운 적을 조준합니다</div>
-      </div>
-      <div class="keys" style="margin-top:8px">
-        <div><kbd>1</kbd>~<kbd>4</kbd> 답 선택 · 강화 고르기</div>
-        <div><kbd>N</kbd> 라운드 스킵</div>
-        <div><kbd>P</kbd> 일시정지</div>
-        <div><kbd>M</kbd> 소리</div>
-      </div>
+      <h2>1라운드 서바이버 · 2~6 보스 탄막</h2>
+      <div class="keys"><kbd>WASD</kbd> 이동 · 공격 자동 · <kbd>N</kbd> 스킵</div>
       <div class="diffpick" id="diffPick"></div>
-      <button class="btn" id="startBtn">복습 시작 ▶</button>
-      <div class="note">
-        <b>진행 방식</b> — <span class="em">총 6라운드</span>. <b>1라운드만</b> 서바이버(이동만, 공격 자동)이고
-        <b>2~6라운드는 보스 탄막</b>입니다. 경험치 조각은 <span class="em">수초 뒤 소멸</span>하니
-        <b>⚡ 전량 흡수</b>를 주우면 한 번에 쓸어담습니다. 레벨업마다 <b>강화 카드 3장 중 하나</b>.<br><br>
-        <b>죽으면</b> — <span class="em">재시도</span>(그 라운드 시작 전으로) 또는 <span class="em">스킵</span>(시간 없을 때, 복습 문제로).
-        라운드마다 <span class="em">"해 볼 사람?"</span> 화면이 뜹니다. 막히면 <b>⏭ 라운드 스킵</b>.<br><br>
-        <b>🍪 간식 규칙</b> — 차례마다 <span class="em">낸 딜량과 플레이 시간</span>을 기록해
-        초당 피해(DPS)를 냅니다. 끝나면 <b>직전 사람보다 몇 % 더 냈는지</b>로 순위를 매겨
-        <b>성장률 1위</b>를 뽑습니다. 첫 주자(발표자)가 기준이 되고, 뒤로 갈수록 강화가 쌓이지만
-        <span class="em">바로 앞사람과만 비교</span>하니 강화 차이는 한 단계뿐입니다.<br><br>
-        <b>퀴즈</b> — 라운드를 버텨내면 복습 문제가 나옵니다.
-        <b>★ 고난도 문제를 맞히면 강화 카드를 한 장 더</b> 받습니다. 발표를 열심히 들었을수록 게임이 쉬워집니다.
-      </div>
+      <button class="btn" id="startBtn">시작</button>
     </div>
   </div>
 
-  <!-- 강화 선택 -->
   <div class="ov" id="upg">
     <div class="card" style="text-align:center">
-      <div class="eyebrow op" id="upgWhy">LEVEL UP — 강화 획득</div>
-      <h1>셋 중 하나를 고르세요</h1>
-      <h2>반 전체가 함께 쓰는 강화입니다. 교대해도 그대로 유지됩니다.</h2>
+      <div class="eyebrow op" id="upgWhy">LEVEL UP</div>
+      <h1>강화 하나</h1>
       <div class="ucards" id="upgCards"></div>
-      <div class="keys" style="margin-top:16px"><div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 키로도 고를 수 있습니다</div></div>
     </div>
   </div>
 
-  <!-- 차례 / 교대 -->
   <div class="ov" id="turn">
     <div class="card" style="text-align:center">
-      <div class="eyebrow" id="tnEyebrow">다음 차례</div>
+      <div class="eyebrow" id="tnEyebrow">ROUND 1 / 6</div>
       <h1 id="tnName">해 볼 사람?</h1>
       <h2 id="tnDesc"></h2>
-      <div class="goalbox" id="tnGoal"></div>
-      <div class="uplist" id="tnUps"></div>
       <div class="pick">
-        <div class="rlabel">손 든 사람 중에서 골라 주세요 — 이름은 적어도 되고 안 적어도 됩니다</div>
-        <input id="tnInput" placeholder="이름 (비워두면 '도전자 N')" autocomplete="off" spellcheck="false" maxlength="12">
+        <input id="tnInput" placeholder="이름 (비워도 됨)" autocomplete="off" spellcheck="false" maxlength="12">
       </div>
-      <div class="keys">
-        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동</div>
-        <div>공격 자동</div>
-        <div>경험치 조각을 주우면 레벨업</div>
-      </div>
-      <button class="btn" id="tnBtn">시작 ▶</button>
+      <button class="btn" id="tnBtn">시작</button>
     </div>
   </div>
 
-  <!-- 퀴즈 -->
   <div class="ov" id="quiz">
     <div class="card">
-      <div class="eyebrow" id="qzEyebrow">복습 퀴즈</div>
+      <div class="eyebrow" id="qzEyebrow">퀴즈</div>
       <h1 id="qzQ"></h1>
       <h2 id="qzHint"></h2>
       <div class="opts" id="qzOpts"></div>
       <div class="verdict" id="qzVerdict"></div>
-      <button class="btn" id="qzNext" style="display:none">계속 ▶</button>
+      <button class="btn" id="qzNext" style="display:none">계속</button>
     </div>
   </div>
 
-  <!-- 라운드 클리어 -->
   <div class="ov" id="clear">
     <div class="card" style="text-align:center">
-      <div class="eyebrow">ROUND CLEAR</div>
+      <div class="eyebrow">CLEAR</div>
       <h1 id="clTitle"></h1>
       <h2 id="clLine"></h2>
-      <button class="btn" id="clBtn">다음 라운드 ▶</button>
+      <button class="btn" id="clBtn">다음</button>
     </div>
   </div>
 
-  <!-- 사망 — 재시도 / 스킵 -->
   <div class="ov" id="death">
     <div class="card" style="text-align:center">
-      <div class="eyebrow op">쓰러졌습니다</div>
-      <h1 id="deathTitle">어떻게 할까요?</h1>
-      <h2 id="deathDesc">재시도하면 이 라운드에 들어가기 <b>직전</b>으로 돌아갑니다. 발표 시간이 없으면 스킵하세요 — 복습 문제는 그대로 나옵니다.</h2>
+      <div class="eyebrow op" id="deathTitle">쓰러짐</div>
+      <h1>재시도?</h1>
+      <h2 id="deathDesc"></h2>
       <div class="deathbtns">
-        <button class="btn gold" id="retryRoundBtn">↺ 재시도 — 라운드 처음부터</button>
-        <button class="btn ghost" id="skipDeathBtn">⏭ 스킵 — 문제로</button>
-      </div>
-      <div class="keys" style="margin-top:16px">
-        <div><kbd>R</kbd> 또는 <kbd>1</kbd> 재시도</div>
-        <div><kbd>N</kbd> 또는 <kbd>2</kbd> 스킵</div>
+        <button class="btn gold" id="retryRoundBtn">재시도</button>
+        <button class="btn ghost" id="skipDeathBtn">스킵</button>
       </div>
     </div>
   </div>
 
-  <!-- 결과 -->
   <div class="ov" id="end">
     <div class="card">
-      <div class="eyebrow">RESULT · 오답노트</div>
+      <div class="eyebrow">결과</div>
       <h1 id="endTitle">복습 완료</h1>
       <div class="scoreline" id="endStats"></div>
       <div id="endBody"></div>
-      <button class="btn" id="retryBtn">틀린 문제만 다시 풀기 ↺</button>
-      <button class="btn ghost" id="againBtn">처음부터 다시 ⟲</button>
+      <button class="btn" id="retryBtn">틀린 문제만</button>
+      <button class="btn ghost" id="againBtn">처음부터</button>
     </div>
   </div>
 </div>
@@ -822,7 +743,7 @@ function loadRound(i, opts){
   hideAll();
   if(retry){
     state = S.play;
-    toast('↺ 재시도 — 라운드 시작 전으로 돌아왔습니다');
+    toast('재시도');
   } else {
     showTurn('round');
   }
@@ -845,20 +766,9 @@ function showTurn(kind){
   state = S.turn;
   dom('upg').classList.remove('on'); dom('quiz').classList.remove('on');
   dom('tnEyebrow').textContent = `ROUND ${round.n} / 6`;
-  dom('tnEyebrow').className = 'eyebrow';
   dom('tnName').textContent = '해 볼 사람?';
-  dom('tnDesc').innerHTML = `<b>${round.title}</b> · ${round.sub}` +
-      (round.boss ? ' — <span class="em">보스 탄막 (처치하면 클리어). 맞으면 매우 아픕니다.</span>'
-                  : ` — <span class="em">${round.sec}초 버티기 · 조각은 수초 뒤 소멸</span>`);
-  /* 직전 사람 기록을 목표로 보여 줍니다 */
-  const prev = turns.length ? turns[turns.length-1] : null;
-  dom('tnGoal').innerHTML = (prev && prev.sec>=MIN_SEC)
-    ? `직전 기록 — <b>${prev.name}</b> · <span class="em">${Math.round(dps(prev))} DPS</span>
-       (${Math.round(prev.dmg).toLocaleString()} 딜 / ${prev.sec.toFixed(0)}초)<br>
-       <span style="color:var(--gold)">이걸 넘기면 성장률 1위 후보!</span>`
-    : `<span style="color:var(--dim)">첫 주자입니다 — 이 기록이 다음 사람들의 기준이 됩니다.</span>`;
+  dom('tnDesc').textContent = round.title + (round.boss ? ' · 보스' : ' · '+round.sec+'초');
   dom('tnInput').value='';
-  paintUps();
   dom('turn').classList.add('on');
   setTimeout(()=>{ try{ dom('tnInput').focus(); }catch(_){} },60);
 }
@@ -866,8 +776,7 @@ dom('tnBtn').onclick = ()=>{
   pickPlayer(dom('tnInput').value);
   dom('turn').classList.remove('on');
   state = S.play;
-  toast('🎮 ' + curPlayer.name + ' 차례 — 화이팅!');
-  if(upgQueue>0) runUpgradeQueue(()=>{ state = S.play; });   /* 밀려 있던 강화 선택 */
+  if(upgQueue>0) runUpgradeQueue(()=>{ state = S.play; });
 };
 dom('tnInput').addEventListener('keydown', e=>{
   e.stopPropagation();
@@ -876,7 +785,7 @@ dom('tnInput').addEventListener('keydown', e=>{
 dom('skipBtn').onclick = ()=> skipRound();
 function skipRound(){
   if(state!==S.play && state!==S.pause && state!==S.turn && state!==S.death) return;
-  hideAll(); toast('⏭ 라운드를 건너뜁니다');
+  hideAll(); toast('스킵');
   finishRound(true);
 }
 function retryRound(){
@@ -884,13 +793,14 @@ function retryRound(){
   loadRound(roundIdx, {retry:true});
 }
 function skipFromDeath(){
-  hideAll(); toast('⏭ 스킵 — 복습 문제로');
+  hideAll(); toast('스킵');
   finishRound(true);
 }
 function showDeath(){
   state = S.death;
-  dom('deathTitle').textContent = (curPlayer?curPlayer.name+' — ':'') + '쓰러졌습니다';
-  dom('deathDesc').innerHTML = `<b>${round.title}</b> 시작 직전으로 돌아갈까요, 아니면 문제로 건너뛸까요?`;
+  const el = document.getElementById('deathTitle');
+  if(el) el.textContent = '쓰러짐';
+  dom('deathDesc').textContent = (curPlayer?curPlayer.name+' · ':'') + round.title;
   dom('death').classList.add('on');
 }
 dom('retryRoundBtn').onclick = retryRound;
@@ -1557,17 +1467,10 @@ function finishRound(skipped){
 function roundClear(){
   score += 400; state = S.clear;
   dom('clTitle').textContent = `ROUND ${round.n} — ${round.title}`;
-  const i = turns.length-1, t = turns[i];
-  const g = growth(i);
-  dom('clLine').innerHTML =
-    `${curPlayer?curPlayer.name+' · ':''}Lv.${level} · 누적 정답 ${correct}/${asked} · 처치 ${killsTotal}마리 · ${score}점`
-    + (t ? `<div style="margin-top:12px;font-size:17px;color:var(--ink)">
-        이번 차례 딜량 <b>${Math.round(t.dmg).toLocaleString()}</b>
-        · <span class="em">${Math.round(dps(t))} DPS</span>
-        ${g===null ? '<span style="color:var(--dim)"> (기준 기록)</span>'
-                   : ` · 직전 대비 <b style="color:${g>=0?'var(--acc)':'var(--warn)'}">${g>=0?'+':''}${g.toFixed(1)}%</b>`}
-      </div>` : '');
-  dom('clBtn').textContent = (roundIdx>=ROUNDS.length-1) ? '결과 보기 ▶' : '다음 라운드 ▶';
+  const t = turns[turns.length-1];
+  dom('clLine').textContent = (curPlayer?curPlayer.name+' · ':'') + 'Lv.'+level +
+    (t ? ' · '+Math.round(dps(t))+' DPS' : '');
+  dom('clBtn').textContent = (roundIdx>=ROUNDS.length-1) ? '결과' : '다음';
   dom('clear').classList.add('on');
 }
 dom('clBtn').onclick = ()=>{
@@ -1627,11 +1530,7 @@ function takeUpgrade(i){
   const d = upgDone; upgDone=null; upgChoices=[];
   if(d) d(); else state = S.play;
 }
-function paintUps(){
-  const list = UPGRADES.filter(u=>uv(u.id)>0 && u.id!=='heal')
-    .map(u=>`<span>${u.icon} ${u.name}${uv(u.id)>1?' ×'+uv(u.id):''}</span>`).join('');
-  dom('tnUps').innerHTML = list || '<span>아직 강화 없음 — 적을 잡아 레벨을 올리세요</span>';
-}
+function paintUps(){}
 
 /* ── HUD ── */
 function updateHud(){
@@ -1643,9 +1542,7 @@ function updateHud(){
   const r = Math.max(0, player.hp)/player.maxHp;
   const el = dom('hpIn');
   el.style.width = (r*100)+'%';
-  el.style.background = r>.5 ? 'linear-gradient(90deg,#3ddc97,#8ef0c4)'
-                     : r>.25 ? 'linear-gradient(90deg,#ffd166,#ffe9a8)'
-                             : 'linear-gradient(90deg,#ff6b6b,#ffa8a8)';
+  el.style.background = r>.5 ? '#3ddc97' : r>.25 ? '#ffd166' : '#ff6b6b';
   dom('hpLab').textContent = Math.max(0,Math.round(player.hp)) + ' / ' + player.maxHp;
   dom('xpIn').style.width = Math.min(100, xp/xpNeed*100) + '%';
   if(round && round.boss){
@@ -1685,14 +1582,10 @@ function nextQuestion(){
   curId = queue.shift(); cur = QUIZ_BANK[curId]; locked=false;
   const op = cur.type==='opinion';
   dom('qzEyebrow').className = 'eyebrow' + (op?' op':'') + (cur.hard?' hardq':'');
-  dom('qzEyebrow').textContent = reviewMode ? '오답 다시 풀기'
-    : (op ? '💬 정답 없는 질문 — 여러분이라면?'
-          : (cur.hard ? '★ 고난도 — 맞히면 강화 카드 한 장 · ' : '') +
-            `ROUND ${round.n} · ${round.title}  (${asked+1}/${totalQ})`);
+  dom('qzEyebrow').textContent = reviewMode ? '오답'
+    : (op ? '의견' : (cur.hard ? '★ 고난도' : 'ROUND '+round.n));
   dom('qzQ').textContent = cur.q;
-  dom('qzHint').innerHTML = op
-    ? '정답이 없습니다. 반 친구들 의견을 물어보고, 가장 많은 손이 든 쪽을 골라 주세요.'
-    : '반 친구들에게 정답을 물어보세요 — 보기를 클릭하거나 <kbd>1</kbd>~<kbd>4</kbd> 키.';
+  dom('qzHint').textContent = op ? '정답 없음 — 의견만 고르세요.' : '1~4 또는 클릭';
   dom('qzVerdict').className = 'verdict';
   dom('qzNext').style.display='none';
   dom('qzOpts').innerHTML = cur.opts.map((o,i)=>
@@ -1711,8 +1604,7 @@ function pickOpt(i){
       answeredIds.add(curId); if(curPlayer){ curPlayer.asked++; curPlayer.correct++; } }
     sfx.right();
     v.className = 'verdict on op';
-    v.innerHTML = `<b style="color:var(--gold)">우리 반의 선택 — ${i+1}번.</b> ${cur.reacts[i]}`
-                + (cur.close ? `<div style="margin-top:10px;color:var(--dim)">${cur.close}</div>` : '');
+    v.innerHTML = `${i+1}번. ${cur.reacts[i]}` + (cur.close ? `<div style="margin-top:8px">${cur.close}</div>` : '');
   } else {
     const ok = (i===cur.answer);
     btns.forEach((b,j)=>{ b.disabled=true; if(j===cur.answer) b.classList.add('right'); else if(j===i) b.classList.add('wrong'); });
@@ -1726,21 +1618,16 @@ function pickOpt(i){
     }
     ok ? sfx.right() : sfx.wrong();
     v.className = 'verdict on' + (ok?'':' bad');
-    let head = ok ? '✅ <b style="color:var(--acc)">정답!</b> '
-                  : `❌ <b style="color:var(--warn)">아쉽네요.</b> 정답은 ${cur.answer+1}번 — “${cur.opts[cur.answer]}”. `;
+    let head = ok ? '정답. ' : `오답. ${cur.answer+1}번 — “${cur.opts[cur.answer]}”. `;
     let tail = '';
     if(cur.hard && !reviewMode){
-      if(ok){ pendingUpgrade = true;
-        tail = `<div style="margin-top:12px;color:var(--acc2);font-weight:700">
-                  ✦ 고난도 정답 — <b style="color:var(--gold)">보너스 강화 카드</b>를 한 장 고를 수 있습니다</div>`;
-      } else {
-        tail = `<div style="margin-top:12px;color:var(--dim)">✦ 맞혔다면 강화 카드를 한 장 더 받을 수 있었습니다.</div>`;
-      }
+      if(ok){ pendingUpgrade = true; tail = '<div style="margin-top:8px">보너스 강화</div>'; }
+      else { tail = ''; }
     }
     v.innerHTML = head + cur.why + tail;
   }
   dom('qzNext').style.display='inline-block';
-  dom('qzNext').textContent = queue.length||pendingUpgrade ? '다음 ▶' : '계속 ▶';
+  dom('qzNext').textContent = queue.length||pendingUpgrade ? '다음' : '계속';
   dom('qzNext').onclick = nextQuestion;
 }
 
@@ -1750,15 +1637,11 @@ function showEnd(){
   const mc = results.filter(r=>!r.opinion);
   const mcOk = mc.filter(r=>r.ok).length;
   const pct = mc.length ? Math.round(mcOk/mc.length*100) : 0;
-  dom('endTitle').textContent = pct>=90 ? '완벽합니다 — 발표 내용을 거의 다 잡았어요'
-                    : pct>=70 ? '좋아요 — 큰 줄기는 확실히 잡혔습니다'
-                    : pct>=40 ? '절반은 왔습니다 — 아래 오답노트만 다시 보세요'
-                              : '오답노트부터 같이 보시죠';
+  dom('endTitle').textContent = '복습 완료';
   dom('endStats').innerHTML =
-    `<div>정답률<b>${pct}%</b></div><div>맞힌 문제<b>${mcOk}/${mc.length}</b></div>
-     <div>처치한 몬스터<b>${killsTotal}</b></div><div>최종 레벨<b>${level}</b></div>
-     <div>총 딜량<b>${Math.round(turns.reduce((a,t)=>a+t.dmg,0)).toLocaleString()}</b></div>
-     <div>최종 점수<b>${score}</b></div>`;
+    `<div>정답<b>${mcOk}/${mc.length}</b> ${pct}%</div>
+     <div>레벨<b>${level}</b></div>
+     <div>점수<b>${score}</b></div>`;
 
   let html='';
 
@@ -1770,24 +1653,17 @@ function showEnd(){
     const topDmg = rows.slice().sort((a,b)=>b.dmg-a.dmg)[0];
     const topDps = rows.filter(r=>r.sec>=MIN_SEC).sort((a,b)=>b.dps-a.dps)[0];
 
-    html += `<h2 style="margin-top:22px">🍪 간식 주인공 — 직전 사람 대비 성장률 1위</h2>`;
+    html += `<h2 style="margin-top:18px">성장률 1위</h2>`;
     if(best){
-      html += `<div class="prize">
-        <div class="pname">🥇 ${best.name}</div>
-        <div class="pval">${best.g>=0?'+':''}${best.g.toFixed(1)}%</div>
-        <div class="pdesc">ROUND ${best.round} · ${Math.round(best.dps)} DPS
-          (직전 ${turns[best.i-1].name} ${Math.round(dps(turns[best.i-1]))} DPS 대비)</div>
-      </div>`;
+      html += `<div class="prize"><span class="pname">${best.name}</span>
+        <span class="pval">${best.g>=0?'+':''}${best.g.toFixed(1)}%</span>
+        <div class="pdesc">${Math.round(best.dps)} DPS · R${best.round}</div></div>`;
     } else {
-      html += `<div class="prize"><div class="pdesc">비교 가능한 기록이 부족합니다
-        (${MIN_SEC}초 이상 플레이한 차례가 2개 이상 필요)</div></div>`;
+      html += `<div class="prize"><div class="pdesc">비교할 기록이 부족합니다</div></div>`;
     }
-    html += `<div class="scoreline" style="margin-top:14px">
-      <div>최다 딜량<b>${topDmg?Math.round(topDmg.dmg).toLocaleString():0}</b>
-        <span style="font-size:12px;color:var(--dim)">${topDmg?topDmg.name:'-'}</span></div>
-      <div>최고 DPS<b>${topDps?Math.round(topDps.dps):0}</b>
-        <span style="font-size:12px;color:var(--dim)">${topDps?topDps.name:'-'}</span></div>
-      <div>총 누적 딜량<b>${Math.round(turns.reduce((a,t)=>a+t.dmg,0)).toLocaleString()}</b></div>
+    html += `<div class="scoreline">
+      <div>최다 딜<b>${topDmg?Math.round(topDmg.dmg).toLocaleString():0}</b></div>
+      <div>최고 DPS<b>${topDps?Math.round(topDps.dps):0}</b></div>
     </div>`;
 
     html += `<table class="ptable chrono" style="margin-top:16px">
@@ -1800,23 +1676,18 @@ function showEnd(){
         return `<tr class="${win?'win':''}"><td>${r.i+1}</td><td>${win?'🍪 ':''}${r.name}</td><td>${r.round}</td>
           <td>${Math.round(r.dmg).toLocaleString()}</td><td>${r.sec.toFixed(0)}초</td>
           <td>${Math.round(r.dps)}</td><td>${gtxt}</td></tr>`;
-      }).join('') + `</tbody></table>
-      <div style="color:var(--dim);font-size:12.5px;margin-top:8px;line-height:1.7">
-        딜량은 실제로 몬스터 체력을 깎은 만큼만 셉니다(오버킬 제외).
-        차례마다 강화 단계가 다르니 <b>직전 사람과의 비교</b>가 가장 공정합니다 —
-        ${MIN_SEC}초 미만으로 끝난 차례는 순위에서 빠집니다.
-      </div>`;
+      }).join('') + `</tbody></table>`;
   }
 
   const ups = UPGRADES.filter(u=>uv(u.id)>0 && u.id!=='heal');
   if(ups.length){
-    html += `<h2 style="margin-top:20px">우리 반이 고른 강화 ${ups.reduce((a,u)=>a+uv(u.id),0)}개</h2>
-      <div class="uplist" style="justify-content:flex-start">` +
+    html += `<h2 style="margin-top:16px">강화</h2>
+      <div class="uplist">` +
       ups.map(u=>`<span>${u.icon} ${u.name}${uv(u.id)>1?' ×'+uv(u.id):''}</span>`).join('') + `</div>`;
   }
   if(roster.length){
     const rank = roster.slice().sort((a,b)=> (b.dmg-a.dmg)||(b.kills-a.kills));
-    html += `<h2 style="margin-top:26px">오늘 나와 준 사람 ${roster.length}명 (누적 딜량 순)</h2>
+    html += `<h2 style="margin-top:16px">플레이어</h2>
       <table class="ptable"><thead><tr><th>이름</th><th>누적 딜량</th><th>플레이</th><th>평균 DPS</th><th>처치</th><th>쓰러짐</th><th>퀴즈</th></tr></thead><tbody>` +
       rank.map((pl,i)=>`<tr><td>${i===0&&pl.dmg?'🏆 ':''}${pl.name}</td>
         <td>${Math.round(pl.dmg).toLocaleString()}</td><td>${pl.sec.toFixed(0)}초</td>
@@ -1827,17 +1698,17 @@ function showEnd(){
   const wrong = mc.filter(r=>!r.ok);
   const ops = results.filter(r=>r.opinion);
   if(wrong.length===0){
-    html += `<h2 style="margin-top:22px">틀린 문제가 없습니다 🎉</h2>`;
+    html += `<h2 style="margin-top:16px">오답 없음</h2>`;
     dom('retryBtn').style.display='none';
   }else{
     dom('retryBtn').style.display='inline-block';
-    html += `<h2 style="margin-top:22px">틀린 문제 ${wrong.length}개 — 여기만 다시 보면 됩니다</h2><ul class="review">` +
+    html += `<h2 style="margin-top:16px">오답 ${wrong.length}</h2><ul class="review">` +
       wrong.map(r=>{ const q=QUIZ_BANK[r.id];
         return `<li><div class="q">${q.q}</div><div class="a">정답 — ${q.opts[q.answer]}</div>
                 <div class="m">${q.why}</div></li>`; }).join('') + '</ul>';
   }
   if(ops.length){
-    html += `<h2 style="margin-top:26px">우리 반의 선택 — 정답 없는 질문 ${ops.length}개</h2><ul class="review">` +
+    html += `<h2 style="margin-top:16px">의견</h2><ul class="review">` +
       ops.map(r=>{ const q=QUIZ_BANK[r.id];
         return `<li><div class="q">${q.q}</div><div class="pick2">→ ${q.opts[r.picked]}</div>
                 <div class="m">${q.reacts[r.picked]}</div></li>`; }).join('') + '</ul>';
@@ -2180,11 +2051,9 @@ function loop(now){
   const dt = Math.min(.033,(now-last)/1000); last = now;
   update(dt); render(); requestAnimationFrame(loop);
 }
-dom('roundPreview').innerHTML = ROUNDS.map(r=>`<span>${r.n}. ${r.title}</span>`).join('')
-  + `<span style="color:var(--acc)">총 ${totalQ}문제</span>`;
 function paintDiff(){
   dom('diffPick').innerHTML = DIFFS.map((d,i)=>
-    `<button data-i="${i}" class="${i===DIFF?'sel':''}"><b>${d.name}</b><span>${d.desc}</span></button>`).join('');
+    `<button data-i="${i}" class="${i===DIFF?'sel':''}">${d.name}</button>`).join('');
   dom('diffPick').querySelectorAll('button').forEach(b=>b.onclick=()=>{ DIFF=+b.dataset.i; paintDiff(); });
 }
 paintDiff();
