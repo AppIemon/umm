@@ -118,6 +118,11 @@
   .prize .pname{font-weight:700}
   .prize .pval{color:var(--gold);font-weight:800;margin-left:8px}
   .prize .pdesc{color:var(--dim);font-size:13px;margin-top:4px}
+  .oreo-hero{margin-top:22px;font-size:42px;font-weight:900;letter-spacing:-.04em;color:#f6d27a;text-shadow:0 0 24px rgba(246,184,80,.45)}
+  .oreo-sub{color:var(--dim);font-size:14px;margin:6px 0 10px}
+  .prize.oreo{border:2px solid var(--gold);border-radius:14px;padding:22px 20px;background:linear-gradient(180deg,#1a1408,#120e08);box-shadow:0 0 28px rgba(246,184,80,.22)}
+  .prize.oreo .pname{font-size:28px;font-weight:900;color:var(--gold)}
+  .prize.oreo .pval{font-size:36px;font-weight:900}
 
   #toast{position:absolute;left:50%;top:52px;transform:translateX(-50%);color:var(--ink);
     font-size:13px;opacity:0;transition:opacity .2s;z-index:15;white-space:nowrap;pointer-events:none;
@@ -159,10 +164,10 @@
 
   <div class="ov on" id="title">
     <div class="card">
-      <div class="eyebrow">4명 · 약 7분</div>
+      <div class="eyebrow">4라운드 · 매 라운드 보스 · 1등 오레오</div>
       <h1>플라스틱 배출량 기반 과세</h1>
-      <h2>사냥·레벨업 후 보스 · 한 명씩 네 차례</h2>
-      <div class="keys"><kbd>WASD</kbd> 이동 · 공격 자동 · <kbd>N</kbd> 스킵</div>
+      <h2>1라운드는 발표자 시범 · 직전 대비 DPS 1등이 오레오</h2>
+      <div class="keys"><kbd>WASD</kbd> 이동 · 공격 자동 · 틀려도 강화 · 정답이면 더 좋음 · <kbd>M</kbd> 소리</div>
       <div class="diffpick" id="diffPick"></div>
       <button class="btn" id="startBtn">시작</button>
     </div>
@@ -236,27 +241,29 @@
 "use strict";
 /* ==========================================================================
    플라스틱 배출량 기반 과세 — 복습 서바이버
-   4명 · 약 7분. 각 차례 = 사냥·레벨업 → 끝날 때 보스.
+   4라운드. 매 라운드 사냥 → 보스 → 퀴즈.
+   1라운드 = 발표자 시범. 직전 대비 DPS 1등 = 오레오.
+   퀴즈는 틀려도 강화, 정답이면 더 좋은 강화. BGM 랜덤.
    죽으면 재시도(그 구간 시작 전) / 스킵
    ========================================================================== */
 const QUIZ_BANK = {
 
 /* ── 1. 플라스틱세란? ───────────────────────────────────────── */
 q101:{ type:'mc',
-  q:'플라스틱세는 무엇에 비례해 매기나요?',
-  opts:['플라스틱 배출량(사용량)','기업의 영업이익','포장재의 색깔','재활용 공장 수'], answer:0,
-  why:'플라스틱세는 <b>배출량(사용량)</b>에 비례합니다. 이익이 아니라 "얼마나 썼는가"가 기준입니다.' },
+  q:'플라스틱세는 무엇에 비례해 세금을 매기나요?',
+  opts:['쓰거나 버린 양','기업의 영업이익','포장재의 색깔','재활용 공장 수'], answer:0,
+  why:'발표 정의 그대로입니다. <b>플라스틱을 쓰거나 버린 양</b>에 비례합니다.' },
 
 q102:{ type:'mc',
-  q:'발표에서 과세 대상을 나눈 두 축은?',
+  q:'과세 시점을 나눈 두 가지는?',
   opts:['대기업 / 중소기업','국내 / 수입','업스트림 / 다운스트림','재활용 / 소각'], answer:2,
-  why:'<b>업스트림(생산)</b>과 <b>다운스트림(소비·배출)</b> 두 축입니다.' },
+  why:'<b>만들 때(업스트림)</b> 매길지, <b>버릴 때(다운스트림)</b> 매길지입니다.' },
 
 /* ── 2. 원리와 유인 설계 ────────────────────────────────────── */
 q201:{ type:'mc',
   q:'플라스틱세가 구현하려는 원칙은?',
   opts:['수익자 부담','응능부담','예방 원칙','오염자 부담(Polluter Pays)'], answer:3,
-  why:'<b>오염자 부담 원칙</b>입니다. 오염을 일으킨 쪽이 비용을 집니다.' },
+  why:'<b>오염자 부담 원칙</b>입니다. 환경을 오염시킨 쪽이 치우는 비용을 냅니다.' },
 
 q202:{ type:'opinion',
   q:'플라스틱세의 1차 목표, 어디에 두시겠어요?',
@@ -272,12 +279,12 @@ q202:{ type:'opinion',
 q301:{ type:'mc',
   q:'영국 PPT는 어떤 포장재에 세금을 매기나요?',
   opts:['재생원료 30% 미만인 포장재','모든 플라스틱 포장재','수입 포장재만','비닐봉지뿐'], answer:0,
-  why:'<b>재생 플라스틱 30% 미만</b>인 포장재가 대상입니다. 30%를 넘기면 세금이 0입니다.' },
+  why:'영국 PPT는 <b>재생 플라스틱 함량 30% 미만</b> 포장재가 대상입니다. 30%를 넘기면 세금이 안 붙습니다.' },
 
 q302:{ type:'mc',
   q:'영국 PPT는 누구에게 매기나요?',
   opts:['소비자','유통업체','생산자·수입자','지자체'], answer:2,
-  why:'영국은 <b>생산자·수입자</b>에게, <b>톤(t)</b> 단위로 부과합니다.' },
+  why:'영국은 <b>생산자·수입자</b>에게 직접, <b>무게(톤)</b>으로 매깁니다.' },
 
 /* ── 4. 업스트림 ② EU ───────────────────────────────────────── */
 q401:{ type:'mc',
@@ -288,13 +295,13 @@ q401:{ type:'mc',
 q402:{ type:'mc',
   q:'EU 분담금을 실제로 내는 주체는?',
   opts:['회원국 정부','개별 기업','소비자','WTO'], answer:0,
-  why:'EU는 <b>기업이 아니라 회원국 정부</b>가 EU 예산에 분담합니다.' },
+  why:'EU는 기업이 아니라 <b>회원국이 EU 예산에 분담금</b>을 냅니다. 1kg당 0.80유로입니다.' },
 
 /* ── 5. 다운스트림 ① ────────────────────────────────────────── */
 q501:{ type:'mc',
   q:'종량제 봉투가 다운스트림인 이유는?',
   opts:['생산자가 내기 때문','지자체가 만들기 때문','버리는 사람이 버리는 양만큼 내기 때문','수입품만 대상이기 때문'], answer:2,
-  why:'다운스트림은 <b>배출 단계에서 배출자가 부담</b>하는 방식입니다.' },
+  why:'종량제는 <b>버리는 사람이 버린 양(봉투 크기)만큼</b> 내는 다운스트림입니다.' },
 
 q502:{ type:'opinion',
   q:'한국에 지금 더 필요한 쪽은?',
@@ -310,7 +317,7 @@ q502:{ type:'opinion',
 q601:{ type:'mc',
   q:'발표에서 든 한국 다운스트림 사례가 <u>아닌</u> 것은?',
   opts:['생산자책임재활용(EPR)','종량제 봉투','자원순환보증금제','일회용컵 보증금제'], answer:0,
-  why:'든 사례는 <b>종량제 · 보증금제 · 컵 보증금제</b>입니다. EPR은 생산자 쪽 제도입니다.' },
+  why:'발표 사례는 <b>종량제 봉투 · 자원순환보증금제 · 일회용컵 보증금제</b>입니다. EPR은 생산자 쪽입니다.' },
 
 q602:{ type:'mc',
   q:'보증금제가 세금과 다른 점은?',
@@ -336,13 +343,13 @@ q702:{ type:'opinion',
 /* ── 8. 설계 쟁점 ② ─────────────────────────────────────────── */
 q801:{ type:'mc',
   q:'역진세 논란은 어느 항목인가요?',
-  opts:['형평성','과세 대상','세율 기준','부정 배출'], answer:0,
-  why:'저소득층이 더 부담한다는 지적은 <b>형평성</b>입니다.' },
+  opts:['공평성','과세 대상','세율 기준','부정 배출'], answer:0,
+  why:'소득이 적은 가구가 상대적으로 더 부담하는 문제는 <b>공평성(역진세)</b>입니다.' },
 
 q802:{ type:'mc',
   q:'대체재가 없으면 값만 오르고 배출은 그대로인 문제는?',
   opts:['형평성','부정 배출','실효성','과세 대상'], answer:2,
-  why:'<b>실효성</b>입니다. 대안이 없으면 가격만 전가됩니다.' },
+  why:'<b>실효성</b>입니다. 대신 쓸 물건이 없으면 값만 오르고 사용량은 그대로일 수 있습니다.' },
 
 q803:{ type:'mc',
   q:'"부정 배출"이 걱정하는 것은?',
@@ -379,7 +386,7 @@ q1003:{ type:'opinion',
     '현실적인 절충입니다. 세수를 취약계층·인프라로 되돌리는 설계가 핵심입니다.',
     '대체재가 없으면 가격 전가로 끝날 수 있습니다.',
     '다른 수단(규제·EPR·보증금)을 우선하자는 입장입니다.' ],
-  close:'업스트림과 다운스트림, 형평성과 실효성을 같이 보는 게 오늘 결론이었습니다.' }
+  close:'업스트림과 다운스트림, 공평성과 실효성을 같이 보는 게 오늘 결론이었습니다.' }
 };
 
 /* ── 난이도 ── */
@@ -395,7 +402,7 @@ let DIFF = 1;
 const D = () => DIFFS[DIFF];
 
 /* ── 강화 카드 ──
-   레벨업 때마다, 그리고 ★고난도 문제를 맞힐 때마다 셋 중 하나를 고릅니다.
+   레벨업마다, 퀴즈마다(오답 1회·정답 2회) 셋 중 하나를 고릅니다.
    ★ 카드를 추가하려면 아래 배열에 한 줄 넣고 ST(능력치)에 반영하면 됩니다. */
 const UPGRADES = [
   /* 무기 */
@@ -456,18 +463,18 @@ const ENEMY = {
    각 차례: 사냥·레벨업(sec초) → 보스. qs 는 클리어 후 퀴즈. */
 const ROUNDS = [
  {n:1, sec:38, title:'플라스틱세란?',   sub:'정의 · 오염자 부담',
-  qs:['q101','q201','q202'], bossId:0,
+  qs:['q101','q201','q102'], bossId:0, demo:true,
   pool:['bag','cup','smog'],
   theme:{a:'#0a1730', b:'#1b3c63', acc:'#4cc9f0'}},
  {n:2, sec:38, title:'업스트림',        sub:'영국 PPT · EU 분담금',
-  qs:['q301','q402'], bossId:1,
+  qs:['q301','q302','q402'], bossId:1,
   pool:['bag','cup','bottle','smog'],
   theme:{a:'#141026', b:'#3b2560', acc:'#c77dff'}},
  {n:3, sec:38, title:'다운스트림',      sub:'종량제 · 보증금',
-  qs:['q501','q602','q502'], bossId:2,
+  qs:['q501','q601','q602'], bossId:2,
   pool:['cup','bottle','foam','smog','net'],
   theme:{a:'#0a1c1a', b:'#155e52', acc:'#3ddc97'}},
- {n:4, sec:38, title:'쟁점과 정리',     sub:'형평성 · 찬반',
+ {n:4, sec:38, title:'쟁점과 정리',     sub:'공평성 · 찬반',
   qs:['q801','q901','q1003'], bossId:3,
   pool:['bag','cup','bottle','foam','smog','net'],
   theme:{a:'#2a0f16', b:'#7a2233', acc:'#ffd166'}}
@@ -646,7 +653,8 @@ function handleKey(e){
     if(c==='KeyN'||c==='Digit2'||c==='Numpad2'||c==='Enter'||c==='Space'){ skipFromDeath(); return; }
     return;
   }
-  if(state===S.title){ if(c==='Enter'||c==='Space') startGame(); return; }
+  if(c==='KeyM'){ soundOn=!soundOn; if(soundOn) startBgm(); else stopBgm(); toast(soundOn?'🔊 소리 켜짐':'🔇 소리 꺼짐'); return; }
+  if(state===S.title){ if(c==='Enter'||c==='Space'){ startBgm(); startGame(); } return; }
   if(state===S.upg){
     const n = {Digit1:0,Digit2:1,Digit3:2,Numpad1:0,Numpad2:1,Numpad3:2}[c];
     if(n!==undefined) takeUpgrade(n);
@@ -660,9 +668,8 @@ function handleKey(e){
   }
   if(state===S.turn){ if(c==='Enter'||c==='Space') dom('tnBtn').click(); return; }
   if(state===S.clear){ if(c==='Enter'||c==='Space') dom('clBtn').click(); return; }
-  if(state===S.end){ if(c==='KeyR') startGame(); return; }
+  if(state===S.end){ if(c==='KeyR'){ startBgm(); startGame(); } return; }
   if(c==='KeyP'){ state = state===S.pause?S.play:S.pause; toast(state===S.pause?'⏸ 일시정지':'▶ 재개'); }
-  if(c==='KeyM'){ soundOn=!soundOn; toast(soundOn?'🔊 소리 켜짐':'🔇 소리 꺼짐'); }
   if(c==='KeyN'){ skipRound(); }
   if(c==='KeyH'){ toast('WASD 이동 · 공격 자동 · 조각은 수초 뒤 소멸 · N 스킵 · 죽으면 재시도/스킵'); }
 }
@@ -691,6 +698,31 @@ const sfx={
   boss:()=>{[110,90,70].forEach((f,i)=>setTimeout(()=>beep(f,.25,'sawtooth',.06),i*160));},
   chest:()=>{[523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,.14,'triangle',.07),i*70));}
 };
+
+/* ── BGM — 세 곡 중 랜덤, 끝나면 다른 곡 ── */
+const BGM_TRACKS = ['music/1.mp3','music/2.mp3','music/3.mp3'];
+let bgmEl = null, bgmIdx = -1;
+function startBgm(){
+  if(!soundOn) return;
+  if(!bgmEl){
+    bgmEl = new Audio();
+    bgmEl.volume = .32;
+    bgmEl.addEventListener('ended', ()=> pickBgm(true));
+  }
+  if(bgmEl.paused){
+    if(!bgmEl.src) pickBgm(false);
+    else bgmEl.play().catch(()=>{});
+  }
+}
+function pickBgm(forceNext){
+  if(!soundOn || !bgmEl) return;
+  let i = Math.floor(Math.random()*BGM_TRACKS.length);
+  if(BGM_TRACKS.length>1 && (forceNext || i===bgmIdx)) i = (bgmIdx+1+Math.floor(Math.random()*(BGM_TRACKS.length-1)))%BGM_TRACKS.length;
+  bgmIdx = i;
+  bgmEl.src = BGM_TRACKS[i];
+  bgmEl.play().catch(()=>{});
+}
+function stopBgm(){ if(bgmEl){ bgmEl.pause(); } }
 
 /* ── 라운드 ── */
 function loadRound(i, opts){
@@ -729,19 +761,30 @@ function startGame(){
   const qn = +(new URLSearchParams(location.search).get('round')||1);
   loadRound(Math.max(0, Math.min(ROUNDS.length-1, (qn|0)-1)));
 }
-dom('startBtn').onclick = startGame;
-dom('againBtn').onclick = startGame;
+dom('startBtn').onclick = ()=>{ startBgm(); startGame(); };
+dom('againBtn').onclick = ()=>{ startBgm(); startGame(); };
 
 function showTurn(kind){
   state = S.turn;
+  startBgm();
   dom('upg').classList.remove('on'); dom('quiz').classList.remove('on');
-  dom('tnEyebrow').textContent = `ROUND ${round.n} / ${ROUNDS.length}`;
-  dom('tnName').textContent = '해 볼 사람?';
+  const demo = !!(round && round.demo);
   const bname = (BOSS_DEFS[round.bossId]||{}).name || '보스';
-  dom('tnDesc').textContent = round.title + ' · ' + round.sec + '초 사냥 후 ' + bname;
-  dom('tnInput').value='';
+  if(demo){
+    dom('tnEyebrow').textContent = `ROUND ${round.n} / ${ROUNDS.length} · 시범`;
+    dom('tnName').textContent = '발표자 시범';
+    dom('tnDesc').textContent = '1라운드는 제가 한 판 보여 드릴게요. ' + round.sec + '초 사냥 후 ' + bname;
+    dom('tnInput').value = '발표자';
+    dom('tnBtn').textContent = '시범 시작';
+  } else {
+    dom('tnEyebrow').textContent = `ROUND ${round.n} / ${ROUNDS.length}`;
+    dom('tnName').textContent = '해 볼 사람?';
+    dom('tnDesc').textContent = round.title + ' · ' + round.sec + '초 사냥 후 ' + bname + ' · 직전 대비 DPS';
+    dom('tnInput').value = '';
+    dom('tnBtn').textContent = '시작';
+  }
   dom('turn').classList.add('on');
-  setTimeout(()=>{ try{ dom('tnInput').focus(); }catch(_){} },60);
+  setTimeout(()=>{ try{ if(!demo) dom('tnInput').focus(); }catch(_){} },60);
 }
 dom('tnBtn').onclick = ()=>{
   pickPlayer(dom('tnInput').value);
@@ -1623,18 +1666,17 @@ function dealQuiz(src){
   q._order = order;
   return q;
 }
-let queue=[], curId=null, cur=null, locked=false, quizTag='', pendingUpgrade=false;
+let queue=[], curId=null, cur=null, locked=false, quizTag='', pendingUpgQueue=[];
 function openQuiz(ids, tag){
-  queue = ids.slice(); quizTag = tag||'';
+  queue = ids.slice(); quizTag = tag||''; pendingUpgQueue = [];
   dom('upg').classList.remove('on'); upgDone = null; upgChoices = [];
   state = S.quiz; dom('quiz').classList.add('on'); nextQuestion();
 }
 function nextQuestion(){
-  if(pendingUpgrade){
-    pendingUpgrade = false;
+  if(pendingUpgQueue.length){
+    upgWhy = pendingUpgQueue.shift();
     dom('quiz').classList.remove('on');
-    upgWhy = '★ 고난도 정답 — 보너스 강화';
-    showUpgrade(()=>{ if(queue.length){ dom('quiz').classList.add('on'); state = S.quiz; } nextQuestion(); });
+    showUpgrade(()=>{ if(queue.length||pendingUpgQueue.length){ dom('quiz').classList.add('on'); state = S.quiz; } nextQuestion(); });
     return;
   }
   if(queue.length===0){
@@ -1666,15 +1708,18 @@ function pickOpt(i){
   if(op){
     btns.forEach((b,j)=>{ b.disabled=true; if(j===i) b.classList.add('chosen'); });
     if(!reviewMode){ asked++; correct++; score+=150; results.push({id:curId, ok:true, opinion:true, picked:origI});
-      answeredIds.add(curId); if(curPlayer){ curPlayer.asked++; curPlayer.correct++; } }
+      answeredIds.add(curId); if(curPlayer){ curPlayer.asked++; curPlayer.correct++; }
+      pendingUpgQueue = ['의견 — 강화 1회']; }
     sfx.right();
     v.className = 'verdict on op';
-    v.innerHTML = `${i+1}번. ${cur.reacts[i]}` + (cur.close ? `<div style="margin-top:8px">${cur.close}</div>` : '');
+    v.innerHTML = `${i+1}번. ${cur.reacts[i]}` + (cur.close ? `<div style="margin-top:8px">${cur.close}</div>` : '')
+      + (reviewMode?'':'<div style="margin-top:8px;color:var(--gold)">강화 1회</div>');
   } else {
     const ok = (i===cur.answer);
     btns.forEach((b,j)=>{ b.disabled=true; if(j===cur.answer) b.classList.add('right'); else if(j===i) b.classList.add('wrong'); });
     if(!reviewMode){
-      asked++; if(ok){ correct++; score+=250; }
+      asked++; if(ok){ correct++; score+=250; pendingUpgQueue = ['정답 강화 1/2','정답 강화 2/2']; }
+      else { pendingUpgQueue = ['오답도 강화 1회']; }
       results.push({id:curId, ok, picked:origI}); answeredIds.add(curId);
       if(curPlayer){ curPlayer.asked++; if(ok) curPlayer.correct++; }
     } else {
@@ -1685,14 +1730,15 @@ function pickOpt(i){
     v.className = 'verdict on' + (ok?'':' bad');
     let head = ok ? '정답. ' : `오답. ${cur.answer+1}번 — “${cur.opts[cur.answer]}”. `;
     let tail = '';
-    if(cur.hard && !reviewMode){
-      if(ok){ pendingUpgrade = true; tail = '<div style="margin-top:8px">보너스 강화</div>'; }
-      else { tail = ''; }
+    if(!reviewMode){
+      tail = ok
+        ? '<div style="margin-top:8px;color:var(--gold)">정답 — 강화 2회</div>'
+        : '<div style="margin-top:8px;color:var(--warn)">오답 — 강화 1회 (그래도 성장)</div>';
     }
     v.innerHTML = head + cur.why + tail;
   }
   dom('qzNext').style.display='inline-block';
-  dom('qzNext').textContent = queue.length||pendingUpgrade ? '다음' : '계속';
+  dom('qzNext').textContent = queue.length||pendingUpgQueue.length ? '다음' : '계속';
   dom('qzNext').onclick = nextQuestion;
 }
 
@@ -1718,13 +1764,14 @@ function showEnd(){
     const topDmg = rows.slice().sort((a,b)=>b.dmg-a.dmg)[0];
     const topDps = rows.filter(r=>r.sec>=MIN_SEC).sort((a,b)=>b.dps-a.dps)[0];
 
-    html += `<h2 style="margin-top:18px">성장률 1위</h2>`;
+    html += `<div class="oreo-hero">🍪 오레오 1등</div>
+      <p class="oreo-sub">직전 대비 DPS 성장률 1위 — 발표자(1번)는 기준선</p>`;
     if(best){
-      html += `<div class="prize"><span class="pname">${best.name}</span>
+      html += `<div class="prize oreo"><span class="pname">🍪 ${best.name}</span>
         <span class="pval">${best.g>=0?'+':''}${best.g.toFixed(1)}%</span>
-        <div class="pdesc">${Math.round(best.dps)} DPS · R${best.round}</div></div>`;
+        <div class="pdesc">${Math.round(best.dps)} DPS · R${best.round} · 직전 대비 성장</div></div>`;
     } else {
-      html += `<div class="prize"><div class="pdesc">비교할 기록이 부족합니다</div></div>`;
+      html += `<div class="prize oreo"><div class="pdesc">비교할 기록이 부족합니다 — 2명 이상 플레이하세요</div></div>`;
     }
     html += `<div class="scoreline">
       <div>최다 딜<b>${topDmg?Math.round(topDmg.dmg).toLocaleString():0}</b></div>
