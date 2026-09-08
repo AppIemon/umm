@@ -1,8 +1,0 @@
-const LandscapeOverlay_vue_vue_type_style_index_0_scoped_d0e574bb_lang = ".landscape-overlay[data-v-d0e574bb]{align-items:center;background:#000;color:#fff;display:none;height:100vh;justify-content:center;left:0;position:fixed;text-align:center;top:0;width:100vw;z-index:9999}.content[data-v-d0e574bb]{animation:pulse-d0e574bb 2s infinite;background:#ffffff0d;border:1px solid hsla(0,0%,100%,.1);border-radius:20px;padding:2rem}.icon[data-v-d0e574bb]{animation:rotate-d0e574bb 2s cubic-bezier(.4,0,.2,1) infinite;font-size:4rem;margin-bottom:1rem}h1[data-v-d0e574bb]{color:#0ff;font-weight:900;margin-bottom:.5rem}h1[data-v-d0e574bb],p[data-v-d0e574bb]{font-family:Outfit,sans-serif}p[data-v-d0e574bb]{color:#888}@keyframes rotate-d0e574bb{0%{transform:rotate(0)}25%{transform:rotate(90deg)}to{transform:rotate(90deg)}}@keyframes pulse-d0e574bb{0%{box-shadow:0 0 #00ffff1a}70%{box-shadow:0 0 0 20px #0ff0}to{box-shadow:0 0 #0ff0}}@media screen and (orientation:portrait)and (max-width:1024px){.landscape-overlay[data-v-d0e574bb]{display:flex}}";
-
-const LandscapeOverlayStyles_D37ELQg2 = [
-  LandscapeOverlay_vue_vue_type_style_index_0_scoped_d0e574bb_lang
-];
-
-export { LandscapeOverlayStyles_D37ELQg2 as default };
-//# sourceMappingURL=LandscapeOverlay-styles.D37ELQg2.mjs.map
