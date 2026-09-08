@@ -159,9 +159,9 @@
 
   <div class="ov on" id="title">
     <div class="card">
-      <div class="eyebrow">6라운드 · 복습 서바이버</div>
+      <div class="eyebrow">4명 · 약 7분</div>
       <h1>플라스틱 배출량 기반 과세</h1>
-      <h2>1라운드 서바이버 · 2~6 보스 탄막</h2>
+      <h2>사냥·레벨업 후 보스 · 한 명씩 네 차례</h2>
       <div class="keys"><kbd>WASD</kbd> 이동 · 공격 자동 · <kbd>N</kbd> 스킵</div>
       <div class="diffpick" id="diffPick"></div>
       <button class="btn" id="startBtn">시작</button>
@@ -178,7 +178,7 @@
 
   <div class="ov" id="turn">
     <div class="card" style="text-align:center">
-      <div class="eyebrow" id="tnEyebrow">ROUND 1 / 6</div>
+      <div class="eyebrow" id="tnEyebrow">ROUND 1 / 4</div>
       <h1 id="tnName">해 볼 사람?</h1>
       <h2 id="tnDesc"></h2>
       <div class="pick">
@@ -236,8 +236,8 @@
 "use strict";
 /* ==========================================================================
    플라스틱 배출량 기반 과세 — 복습 서바이버
-   1라운드만 서바이버 · 2~6라운드 언더테일식 보스 탄막 · 조각 수명 게이지
-   죽으면 재시도(라운드 시작 전) / 스킵
+   4명 · 약 7분. 각 차례 = 사냥·레벨업 → 끝날 때 보스.
+   죽으면 재시도(그 구간 시작 전) / 스킵
    ========================================================================== */
 const QUIZ_BANK = {
 
@@ -452,31 +452,24 @@ const ENEMY = {
   net:    {r:26, hp:18, spd:42,  dmg:10, xp:4, score:90,  name:'유령그물',   slow:true},
   boss:   {r:58, hp:240,spd:0,   dmg:18, xp:0, score:3000,name:'플라스틱 덩어리'}
 };
-/* 라운드가 올라갈수록 등장 종류가 늘어납니다 */
-const POOL = [
-  ['bag','cup','bottle','foam','smog']
-];
-
-/* ── 라운드 = PPT 목차 (6라운드) ──
-   1만 서바이버, 2~6은 보스 탄막. qs 배열이 클리어 후 퀴즈. */
+/* ── 라운드 = 4명 차례 (약 7분)
+   각 차례: 사냥·레벨업(sec초) → 보스. qs 는 클리어 후 퀴즈. */
 const ROUNDS = [
- {n:1, sec:50, title:'플라스틱세란?',    sub:'정의 · 오염자 부담 원칙',
-  qs:['q101','q102','q201','q202'], survive:true,
+ {n:1, sec:38, title:'플라스틱세란?',   sub:'정의 · 오염자 부담',
+  qs:['q101','q201','q202'], bossId:0,
+  pool:['bag','cup','smog'],
   theme:{a:'#0a1730', b:'#1b3c63', acc:'#4cc9f0'}},
- {n:2, sec:0, title:'업스트림 ① 영국',  sub:'보스 — 재생원료 장벽',
-  qs:['q301','q302'], boss:true, bossId:0,
+ {n:2, sec:38, title:'업스트림',        sub:'영국 PPT · EU 분담금',
+  qs:['q301','q402'], bossId:1,
+  pool:['bag','cup','bottle','smog'],
   theme:{a:'#141026', b:'#3b2560', acc:'#c77dff'}},
- {n:3, sec:0, title:'업스트림 ② EU',    sub:'보스 — 분담금 나선',
-  qs:['q401','q402'], boss:true, bossId:1,
-  theme:{a:'#0b1630', b:'#1e3a7a', acc:'#7aa2ff'}},
- {n:4, sec:0, title:'다운스트림',        sub:'보스 — 배출 압박',
-  qs:['q501','q502','q601','q602'], boss:true, bossId:2,
+ {n:3, sec:38, title:'다운스트림',      sub:'종량제 · 보증금',
+  qs:['q501','q602','q502'], bossId:2,
+  pool:['cup','bottle','foam','smog','net'],
   theme:{a:'#0a1c1a', b:'#155e52', acc:'#3ddc97'}},
- {n:5, sec:0, title:'설계 쟁점',         sub:'보스 — 역진 탄막',
-  qs:['q701','q702','q801','q802','q803'], boss:true, bossId:3,
-  theme:{a:'#1c1408', b:'#6b4a15', acc:'#ffd166'}},
- {n:6, sec:0, title:'찬성·반대와 정리',  sub:'최종 보스 — 플라스틱 덩어리',
-  qs:['q901','q902','q1001','q1002','q1003'], boss:true, bossId:4,
+ {n:4, sec:38, title:'쟁점과 정리',     sub:'형평성 · 찬반',
+  qs:['q801','q901','q1003'], bossId:3,
+  pool:['bag','cup','bottle','foam','smog','net'],
   theme:{a:'#2a0f16', b:'#7a2233', acc:'#ffd166'}}
 ];
 
@@ -492,7 +485,7 @@ const dom = id => document.getElementById(id);
 const S = {title:'title', play:'play', quiz:'quiz', clear:'clear', end:'end',
            pause:'pause', turn:'turn', upg:'upg', death:'death'};
 let state = S.title;
-let roundIdx = 0, round = null;
+let roundIdx = 0, round = null, phase = 'survive';
 let score = 0, killsTotal = 0, asked = 0, correct = 0;
 let time = 0, shake = 0, soundOn = true, reviewMode = false;
 let roundLeft = 0, spawnT = 0, spawnGap = 1;
@@ -582,54 +575,42 @@ function resetBox(){
   BOX.y = AH/2 + 10;
 }
 
-/* 라운드 시작 스냅샷 — 죽으면 여기로 되돌림 */
-let snap = null;
-function saveSnap(){
-  snap = {level, xp, xpNeed, UPG:{...UPG}, maxHp:player.maxHp, score, killsTotal};
+/* 라운드 시작 / 보스 직전 스냅샷 — 죽으면 해당 구간으로 되돌림 */
+let snap = null, bossSnap = null;
+function snapshot(){
+  return {level, xp, xpNeed, UPG:{...UPG}, maxHp:player.maxHp, score, killsTotal};
 }
-function restoreSnap(){
-  if(!snap) return;
-  level = snap.level; xp = snap.xp; xpNeed = snap.xpNeed;
-  score = snap.score; killsTotal = snap.killsTotal;
+function restoreSnap(s){
+  if(!s) return;
+  level = s.level; xp = s.xp; xpNeed = s.xpNeed;
+  score = s.score; killsTotal = s.killsTotal;
   Object.keys(UPG).forEach(k=>delete UPG[k]);
-  Object.assign(UPG, snap.UPG);
-  player.maxHp = snap.maxHp;
+  Object.assign(UPG, s.UPG);
+  player.maxHp = s.maxHp;
 }
+function inBoss(){ return phase==='boss'; }
 
 const BOSS_DEFS = [
-  {name:'재생원료 장벽', hp:200, seq:[
-    {id:'aimed', dur:2.8, name:'조준 탄'},
-    {id:'bonesH', dur:4.0, name:'수평 장벽'},
-    {id:'ring', dur:3.2, name:'확산 링'},
+  {name:'오염자 부담', hp:360, seq:[
+    {id:'aimed', dur:3.0, name:'조준 탄'},
     {id:'rain', dur:3.4, name:'낙하'},
-    {id:'spiral', dur:4.0, name:'나선'}]},
-  {name:'분담금 나선', hp:240, seq:[
-    {id:'spiral', dur:3.8, name:'이중 나선'},
-    {id:'homing', dur:3.4, name:'유도 분담'},
-    {id:'plus', dur:3.6, name:'십자 레이저'},
-    {id:'ring', dur:3.0, name:'확산 링'},
-    {id:'fan', dur:3.2, name:'부채 탄'}]},
-  {name:'배출 압박', hp:280, seq:[
-    {id:'shrink', dur:4.4, name:'상자 압박'},
-    {id:'bonesV', dur:3.8, name:'수직 장벽'},
-    {id:'plus', dur:3.4, name:'십자 조준'},
+    {id:'ring', dur:3.2, name:'확산 링'}]},
+  {name:'재생원료 장벽', hp:420, seq:[
+    {id:'spiral', dur:3.6, name:'나선'},
+    {id:'plus', dur:3.4, name:'십자 레이저'},
+    {id:'fan', dur:3.2, name:'부채 탄'},
+    {id:'homing', dur:3.0, name:'유도'}]},
+  {name:'배출 압박', hp:480, seq:[
+    {id:'bonesH', dur:3.8, name:'수평 장벽'},
+    {id:'shrink', dur:4.0, name:'상자 압박'},
     {id:'rain', dur:3.2, name:'낙하'},
     {id:'aimed', dur:2.8, name:'조준 탄'}]},
-  {name:'역진 탄막', hp:330, seq:[
-    {id:'walls', dur:4.0, name:'양쪽 벽'},
-    {id:'sweep', dur:4.2, name:'소제 레이저'},
-    {id:'spiralRain', dur:4.4, name:'나선+낙하'},
-    {id:'bonesH', dur:3.6, name:'수평 장벽'},
-    {id:'plus', dur:3.2, name:'십자 레이저'}]},
-  {name:'플라스틱 덩어리', hp:390, seq:[
-    {id:'fan', dur:3.0, name:'부채 탄'},
-    {id:'bonesH', dur:3.6, name:'수평 장벽'},
-    {id:'spiral', dur:3.8, name:'나선'},
-    {id:'plus', dur:3.2, name:'십자 레이저'},
-    {id:'walls', dur:3.8, name:'양쪽 벽'},
-    {id:'sweep', dur:3.8, name:'소제 레이저'},
-    {id:'spiralRain', dur:4.2, name:'광기 탄막'},
-    {id:'aimed', dur:2.6, name:'집중 사격'}]}
+  {name:'플라스틱 덩어리', hp:620, seq:[
+    {id:'fan', dur:2.8, name:'부채 탄'},
+    {id:'bonesH', dur:3.4, name:'수평 장벽'},
+    {id:'spiral', dur:3.4, name:'나선'},
+    {id:'plus', dur:3.0, name:'십자 레이저'},
+    {id:'spiralRain', dur:3.8, name:'광기 탄막'}]}
 ];
 
 /* ── 입력 ── */
@@ -705,25 +686,20 @@ const sfx={
 /* ── 라운드 ── */
 function loadRound(i, opts){
   const retry = !!(opts && opts.retry);
-  roundIdx=i; round=ROUNDS[i];
-  if(!retry) saveSnap();
-  else restoreSnap();
+  roundIdx=i; round=ROUNDS[i]; phase='survive'; bossSnap=null; bossWarn=false;
+  if(!retry) snap = snapshot();
+  else restoreSnap(snap);
   ents = {foes:[], bullets:[], shots:[], gems:[], parts:[], boss:null};
   fxReset();
   resetBox();
-  if(round.boss){
-    player.x = BOX.x + BOX.w/2; player.y = BOX.y + BOX.h/2;
-    player.r = 12;
-  } else {
-    player.x=AW/2; player.y=AH/2; player.r = 16;
-  }
+  player.x=AW/2; player.y=AH/2; player.r = 16;
   player.vx=0; player.vy=0;
   player.hp=player.maxHp; player.inv=1.2; player.cool=0; player.slowT=0; player.regen=0;
   roundLeft = round.sec;
-  spawnT = 0; spawnGap = Math.max(.45, 1.4 * D().rate);
+  spawnT = 0; spawnGap = Math.max(.4, (1.35 - roundIdx*0.1) * D().rate);
   cam.x = player.x - W/2; cam.y = player.y - H/2;
-  if(round.boss) spawnBoss();
-  dom('roundName').textContent = 'ROUND ' + round.n + '/6';
+  const nR = ROUNDS.length;
+  dom('roundName').textContent = 'ROUND ' + round.n + '/' + nR;
   dom('roundSub').textContent = round.title + ' · ' + D().name;
   hideAll();
   if(retry){
@@ -738,7 +714,7 @@ function startGame(){
   answeredIds.clear();
   Object.keys(UPG).forEach(k=>delete UPG[k]);
   roster.length=0; turns.length=0; autoNo=0; curPlayer=null; curTurn=null;
-  level=1; xp=0; xpNeed=5; snap=null;
+  level=1; xp=0; xpNeed=5; snap=null; bossSnap=null; phase='survive';
   player.maxHp=130; player.hp=130; player.r=16;
   dom('whoNow').textContent='—';
   const qn = +(new URLSearchParams(location.search).get('round')||1);
@@ -750,9 +726,10 @@ dom('againBtn').onclick = startGame;
 function showTurn(kind){
   state = S.turn;
   dom('upg').classList.remove('on'); dom('quiz').classList.remove('on');
-  dom('tnEyebrow').textContent = `ROUND ${round.n} / 6`;
+  dom('tnEyebrow').textContent = `ROUND ${round.n} / ${ROUNDS.length}`;
   dom('tnName').textContent = '해 볼 사람?';
-  dom('tnDesc').textContent = round.title + (round.boss ? ' · 보스' : ' · '+round.sec+'초');
+  const bname = (BOSS_DEFS[round.bossId]||{}).name || '보스';
+  dom('tnDesc').textContent = round.title + ' · ' + round.sec + '초 사냥 후 ' + bname;
   dom('tnInput').value='';
   dom('turn').classList.add('on');
   setTimeout(()=>{ try{ dom('tnInput').focus(); }catch(_){} },60);
@@ -775,6 +752,15 @@ function skipRound(){
 }
 function retryRound(){
   hideAll();
+  if(phase==='boss' && bossSnap){
+    restoreSnap(bossSnap);
+    ents = {foes:[], bullets:[], shots:[], gems:[], parts:[], boss:null};
+    fxReset();
+    beginBoss({retry:true});
+    state = S.play;
+    toast('보스 재시도');
+    return;
+  }
   loadRound(roundIdx, {retry:true});
 }
 function skipFromDeath(){
@@ -785,7 +771,7 @@ function showDeath(){
   state = S.death;
   const el = document.getElementById('deathTitle');
   if(el) el.textContent = '쓰러짐';
-  dom('deathDesc').textContent = (curPlayer?curPlayer.name+' · ':'') + round.title;
+  dom('deathDesc').textContent = (curPlayer?curPlayer.name+' · ':'') + round.title + (inBoss()?' · 보스':' · 사냥');
   dom('death').classList.add('on');
 }
 dom('retryRoundBtn').onclick = retryRound;
@@ -818,6 +804,28 @@ function spawnBoss(){
     flash:0, cool:0, ph:0, acc:0, spin:0, intro:1.5,
     seqI:0, patAge:0, def, name:def.name, sweepDir:1
   };
+}
+let bossWarn = false;
+function beginBoss(opts){
+  const retry = !!(opts && opts.retry);
+  phase = 'boss';
+  for(const f of ents.foes){ pop(f.x,f.y,8,'#ffd166'); ring(f.x,f.y,36,'#ffd166',2); }
+  ents.foes.length=0; ents.shots.length=0; ents.bullets.length=0;
+  ents.gems.length=0; pending.length=0; marks.length=0;
+  player.r = 12;
+  player.hp = player.maxHp;
+  player.inv = 2;
+  player.cool = 0;
+  resetBox();
+  player.x = BOX.x + BOX.w/2;
+  player.y = BOX.y + BOX.h/2;
+  cam.x = player.x - W/2;
+  cam.y = player.y - H/2 - 70;
+  if(!retry) bossSnap = snapshot();
+  spawnBoss();
+  shake=1.4; flashA=.55; slowmo=.55;
+  sfx.boss();
+  toast('BOSS · ' + ((BOSS_DEFS[round.bossId]||{}).name||'보스'));
 }
 function bossDmg(){ return 12; }
 function shotOrb(x,y,vx,vy,opt){
@@ -1056,7 +1064,7 @@ function update(dtRaw){
   if(p.slowT>0) p.slowT -= dt;
   const spd = ST.move() * (p.slowT>0 ? .55 : 1);
   p.x += ix*spd*dt; p.y += iy*spd*dt;
-  if(round && round.boss){
+  if(inBoss()){
     p.x = Math.max(BOX.x+p.r, Math.min(BOX.x+BOX.w-p.r, p.x));
     p.y = Math.max(BOX.y+p.r, Math.min(BOX.y+BOX.h-p.r, p.y));
   } else {
@@ -1095,21 +1103,22 @@ function update(dtRaw){
   for(const b of ents.bullets){ b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; }
   ents.bullets = ents.bullets.filter(b=>b.life>0);
 
-  /* 라운드 타이머 — 서바이버만 */
-  if(round && round.survive){
+  /* 라운드 타이머 — 사냥 구간이 끝나면 보스 */
+  if(round && phase==='survive'){
     roundLeft -= dt;
-    if(roundLeft<=0){ finishRound(false); return; }
+    if(!bossWarn && roundLeft<=8){ bossWarn=true; toast('곧 보스'); }
+    if(roundLeft<=0){ beginBoss(); return; }
   }
 
-  /* 스폰 — 1라운드 서바이버만 */
-  if(round && round.survive){
+  /* 스폰 — 사냥 구간만 */
+  if(round && phase==='survive'){
     spawnT -= dt;
     const elapsed = round.sec - roundLeft;
-    const ramp = 1 + Math.min(1.1, elapsed/round.sec * 1.1);
-    if(spawnT<=0 && ents.foes.length < 80){
+    const ramp = 1 + Math.min(1.05, elapsed/round.sec * 1.05);
+    if(spawnT<=0 && ents.foes.length < 70){
       spawnT = spawnGap / ramp;
-      const pool = POOL[0];
-      const burst = 1 + (Math.random()<.22?1:0) + (DIFF===2?1:0);
+      const pool = round.pool || ['bag','cup'];
+      const burst = 1 + (Math.random()<.22?1:0) + (roundIdx>=2?1:0) + (DIFF===2?1:0);
       for(let i=0;i<burst;i++) spawnFoe(pool[Math.floor(Math.random()*pool.length)]);
     }
   }
@@ -1294,7 +1303,7 @@ function update(dtRaw){
   }
 
   /* 카메라 — 보스전은 상자를 고정으로 보여 줍니다 */
-  if(round && round.boss){
+  if(inBoss()){
     const tx = BOX.x + BOX.w/2 - W/2;
     const ty = BOX.y + BOX.h/2 - H/2 - 70;
     cam.x += (tx-cam.x)*Math.min(1,dt*8);
@@ -1530,7 +1539,7 @@ function updateHud(){
   el.style.background = r>.5 ? '#3ddc97' : r>.25 ? '#ffd166' : '#ff6b6b';
   dom('hpLab').textContent = Math.max(0,Math.round(player.hp)) + ' / ' + player.maxHp;
   dom('xpIn').style.width = Math.min(100, xp/xpNeed*100) + '%';
-  if(round && round.boss){
+  if(inBoss()){
     dom('timeBig').textContent = ents.boss ? 'BOSS ' + Math.max(0,Math.ceil(ents.boss.hp)) : 'CLEAR';
     dom('timeBig').style.color = '#ff8fa3';
   } else {
@@ -1752,7 +1761,7 @@ function render(){
   ctx.strokeRect(0,0,AW,AH); ctx.globalAlpha=1;
 
   /* 보스전 탄막 상자 */
-  if(round && round.boss){
+  if(inBoss()){
     ctx.save();
     ctx.fillStyle='rgba(4,8,18,.5)';
     ctx.fillRect(cam.x-40, cam.y-40, W+80, H+80);
