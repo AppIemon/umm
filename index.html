@@ -243,170 +243,155 @@ const QUIZ_BANK = {
 
 /* ── 1. 플라스틱세란? ───────────────────────────────────────── */
 q101:{ type:'mc',
-  q:'플라스틱세의 과세 표준(무엇에 비례해 매기는가)으로 발표에서 제시한 것은?',
-  opts:['기업의 영업이익','플라스틱 배출량(사용량)','포장재의 부피','재활용 설비 보유 여부'], answer:1,
-  why:'플라스틱세는 <b>플라스틱 배출량(사용량)에 비례</b>해 부과하는 제도입니다. 이익이나 부피가 아니라 "얼마나 썼는가"가 기준입니다.' },
+  q:'플라스틱세는 무엇에 비례해 매기나요?',
+  opts:['플라스틱 배출량(사용량)','기업의 영업이익','포장재의 색깔','재활용 공장 수'], answer:0,
+  why:'플라스틱세는 <b>배출량(사용량)</b>에 비례합니다. 이익이 아니라 "얼마나 썼는가"가 기준입니다.' },
 
-q102:{ type:'mc', hard:true,
-  q:'발표에서 플라스틱세의 과세 대상은 크게 두 축으로 나뉘었습니다. 그 두 축은?',
-  opts:['국내 생산 / 수입','업스트림(생산자·수입자) / 다운스트림(소비자·배출자)',
-        '재활용 가능 / 재활용 불가','대기업 / 중소기업'], answer:1,
-  why:'<b>업스트림(생산 단계)</b>과 <b>다운스트림(소비·배출 단계)</b> — 이 두 축이 오늘 발표의 뼈대였습니다. 나머지 스테이지가 전부 이 구분 위에 서 있습니다.' },
+q102:{ type:'mc',
+  q:'발표에서 과세 대상을 나눈 두 축은?',
+  opts:['대기업 / 중소기업','국내 / 수입','업스트림 / 다운스트림','재활용 / 소각'], answer:2,
+  why:'<b>업스트림(생산)</b>과 <b>다운스트림(소비·배출)</b> 두 축입니다.' },
 
 /* ── 2. 원리와 유인 설계 ────────────────────────────────────── */
 q201:{ type:'mc',
-  q:'플라스틱세가 조세의 형태로 구현하려는 원칙과, 그 원칙의 영어 이름이 맞게 짝지어진 것은?',
-  opts:['수익자 부담 원칙 — Beneficiary Pays','오염자 부담 원칙 — Polluter Pays',
-        '응능부담 원칙 — Ability to Pay','예방 원칙 — Precautionary Principle'], answer:1,
-  why:'<b>오염자 부담 원칙(Polluter Pays Principle)</b>입니다. "오염을 일으킨 쪽이 그 비용을 진다"는 원칙을 세금이라는 수단으로 구현한 것이 플라스틱세입니다.' },
+  q:'플라스틱세가 구현하려는 원칙은?',
+  opts:['수익자 부담','응능부담','예방 원칙','오염자 부담(Polluter Pays)'], answer:3,
+  why:'<b>오염자 부담 원칙</b>입니다. 오염을 일으킨 쪽이 비용을 집니다.' },
 
 q202:{ type:'opinion',
-  q:'여러분이 정책 담당자라면, 플라스틱세의 1차 목표를 무엇으로 두시겠어요?',
-  opts:['플라스틱 사용량 자체를 줄이기','재활용 인프라 재원 마련','기업의 대체소재 기술 개발 유도','국민 인식 개선과 행동 변화'],
+  q:'플라스틱세의 1차 목표, 어디에 두시겠어요?',
+  opts:['사용량 줄이기','재원 마련','대체소재 유도','인식 개선'],
   reacts:[
-    '사용량 억제가 1순위라면 세율이 <b>충분히 높아야</b> 합니다. 다만 성공할수록 세수는 줄어드니 재원을 기대하면 안 됩니다.',
-    '재원 확보를 노리면 안정적으로 걷히지만, <b>세수가 줄지 않는다는 건 사용량이 안 줄었다는 뜻</b>이라는 역설이 생깁니다.',
-    '기술 유도가 목표라면 영국처럼 <b>"재생원료 30%" 같은 명확한 기준선</b>이 효과적입니다. 기업이 계산할 수 있어야 움직입니다.',
-    '인식 개선이 목표라면 소비자가 체감하는 <b>다운스트림 방식</b>이 유리합니다. 대신 역진세 논란이 따라옵니다.' ],
-  close:'정답은 없지만, 목표를 하나로 정해야 세율·과세 단계·세수 사용처가 함께 정해집니다.' },
+    '사용량을 줄이려면 세율이 <b>충분히 높아야</b> 합니다.',
+    '재원 확보를 노리면, 세수가 안 줄어든다는 건 <b>사용량이 안 줄었다</b>는 뜻이 됩니다.',
+    '기술 유도라면 영국처럼 <b>재생원료 30%</b> 같은 기준선이 필요합니다.',
+    '인식 개선이라면 소비자가 체감하는 <b>다운스트림</b>이 유리합니다.' ],
+  close:'정답은 없습니다. 목표를 정해야 세율과 과세 단계가 따라옵니다.' },
 
 /* ── 3. 업스트림 ① 영국 ─────────────────────────────────────── */
 q301:{ type:'mc',
-  q:'영국 Plastic Packaging Tax의 과세 대상을 가장 정확히 말한 것은?',
-  opts:['모든 플라스틱 포장재','재생 플라스틱 함량이 30% 미만인 포장재',
-        '재생 플라스틱을 전혀 쓰지 않은 포장재','수입 포장재에 한정'], answer:1,
-  why:'<b>재생 플라스틱 함량 30% 미만</b>인 포장재만 과세 대상입니다. 30%를 넘기면 세금이 0이 되므로, 이 기준선이 재생원료 수요를 만들어 냅니다.' },
+  q:'영국 PPT는 어떤 포장재에 세금을 매기나요?',
+  opts:['재생원료 30% 미만인 포장재','모든 플라스틱 포장재','수입 포장재만','비닐봉지뿐'], answer:0,
+  why:'<b>재생 플라스틱 30% 미만</b>인 포장재가 대상입니다. 30%를 넘기면 세금이 0입니다.' },
 
-q302:{ type:'mc', hard:true,
-  q:'영국 PPT의 <u>과세 대상자</u>와 <u>중량 단위</u>를 모두 맞게 고른 것은?',
-  opts:['소비자 — kg 단위','생산자·수입자 — 톤(t) 단위',
-        '유통업체 — kg 단위','회원국 정부 — 톤(t) 단위'], answer:1,
-  why:'영국은 <b>생산자·수입자에게 직접</b>, <b>톤(t) 단위 중량</b> 기준으로 부과합니다. kg 단위·국가 단위는 EU 쪽 이야기라 헷갈리기 쉬운 지점입니다. 2022년 시행됐습니다.' },
+q302:{ type:'mc',
+  q:'영국 PPT는 누구에게 매기나요?',
+  opts:['소비자','유통업체','생산자·수입자','지자체'], answer:2,
+  why:'영국은 <b>생산자·수입자</b>에게, <b>톤(t)</b> 단위로 부과합니다.' },
 
 /* ── 4. 업스트림 ② EU ───────────────────────────────────────── */
 q401:{ type:'mc',
-  q:'EU 플라스틱 분담금의 과세(분담) 대상은?',
-  opts:['생산된 모든 플라스틱','재활용되지 않은 플라스틱 포장 폐기물',
-        '수입된 플라스틱 원료','일회용 플라스틱 제품 전체'], answer:1,
-  why:'<b>재활용되지 않은 플라스틱 포장 폐기물</b>이 대상입니다. "만든 양"이 아니라 "재활용에 실패한 양"에 값을 매기는 결과 기준 방식입니다.' },
+  q:'EU 플라스틱 분담금의 대상은?',
+  opts:['만든 플라스틱 전부','수입 원료','일회용컵만','재활용되지 않은 포장 폐기물'], answer:3,
+  why:'<b>재활용에 실패한 포장 폐기물</b>입니다. 만든 양이 아니라 못 살린 양입니다.' },
 
-q402:{ type:'mc', hard:true,
-  q:'영국 PPT와 EU 플라스틱 분담금을 비교한 설명으로 <u>틀린</u> 것은?',
-  opts:['둘 다 업스트림(생산 단계) 접근이다','영국은 2022년, EU는 2021년에 시작됐다',
-        'EU는 회원국 정부가 EU 예산에 분담하는 구조다','EU도 영국처럼 기업에 직접 세금을 물린다'], answer:3,
-  why:'EU는 <b>기업이 아니라 회원국 정부</b>가 EU 예산에 내는 <b>국가 단위 재정 분담</b>입니다. 그래서 스페인·이탈리아 등은 이에 대응하는 자국 플라스틱세를 따로 만들었습니다. 나머지 셋은 모두 맞는 설명입니다.' },
+q402:{ type:'mc',
+  q:'EU 분담금을 실제로 내는 주체는?',
+  opts:['회원국 정부','개별 기업','소비자','WTO'], answer:0,
+  why:'EU는 <b>기업이 아니라 회원국 정부</b>가 EU 예산에 분담합니다.' },
 
 /* ── 5. 다운스트림 ① ────────────────────────────────────────── */
 q501:{ type:'mc',
-  q:'쓰레기 종량제 봉투 제도가 다운스트림 방식인 이유로 가장 적절한 것은?',
-  opts:['생산자에게 부담을 지우기 때문','배출하는 양(봉투 부피)에 비례해 배출자가 부담하기 때문',
-        '지자체가 운영하기 때문','재활용률과 연동되기 때문'], answer:1,
-  why:'다운스트림의 정의는 <b>소비·배출 단계에서 배출자가 부담</b>하는 것입니다. 종량제 봉투는 버리는 양에 비례해 값을 치르게 하는 대표 사례입니다.' },
+  q:'종량제 봉투가 다운스트림인 이유는?',
+  opts:['생산자가 내기 때문','지자체가 만들기 때문','버리는 사람이 버리는 양만큼 내기 때문','수입품만 대상이기 때문'], answer:2,
+  why:'다운스트림은 <b>배출 단계에서 배출자가 부담</b>하는 방식입니다.' },
 
 q502:{ type:'opinion',
-  q:'한국에 지금 더 필요한 쪽은 어디일까요?',
-  opts:['업스트림 — 생산 단계부터 조이기','다운스트림 — 배출자가 체감하게','둘 다 강화','지금 수준 유지'],
+  q:'한국에 지금 더 필요한 쪽은?',
+  opts:['업스트림(생산부터)','다운스트림(배출자가 체감)','둘 다','지금 유지'],
   reacts:[
-    '업스트림은 <b>관리 대상이 적어 징수가 쉽고</b> 생산량 자체에 신호를 줍니다. 다만 소비자는 체감하지 못해 인식 변화는 더딥니다.',
-    '다운스트림은 체감이 크고 행동이 바로 바뀌지만, <b>역진세 논란</b>과 부정 배출 우려가 함께 옵니다.',
-    '두 축을 같이 쓰면 효과는 크지만 <b>이중 부담</b>이라는 반발과 행정 비용 증가를 감수해야 합니다.',
-    '현행 유지도 선택지입니다. 다만 "왜 지금은 충분한가"를 설명할 근거가 필요합니다.' ],
-  close:'한국은 이미 다운스트림 제도가 발달한 나라입니다. 그래서 논쟁의 초점이 업스트림으로 옮겨가고 있습니다.' },
+    '업스트림은 대상이 적어 징수가 쉽습니다. 대신 소비자는 잘 못 느낍니다.',
+    '다운스트림은 체감이 큽니다. 대신 <b>역진세</b> 논란이 따라옵니다.',
+    '효과는 크지만 <b>이중 부담</b> 반발이 나옵니다.',
+    '유지하려면 "왜 지금으로 충분한가"를 설명해야 합니다.' ],
+  close:'한국은 다운스트림이 이미 발달해, 논점이 업스트림으로 옮겨 가는 중입니다.' },
 
 /* ── 6. 다운스트림 ② ────────────────────────────────────────── */
-q601:{ type:'mc', hard:true,
-  q:'발표에서 한국의 다운스트림 사례로 든 세 가지가 <u>아닌</u> 것은?',
-  opts:['종량제 봉투 제도','자원순환보증금제','일회용컵 보증금제','생산자책임재활용제도(EPR)'], answer:3,
-  why:'발표에서 든 다운스트림 세 가지는 <b>종량제 봉투 · 자원순환보증금제 · 일회용컵 보증금제</b>였습니다. EPR은 생산자에게 의무를 지우는 제도라 성격이 다릅니다.' },
+q601:{ type:'mc',
+  q:'발표에서 든 한국 다운스트림 사례가 <u>아닌</u> 것은?',
+  opts:['생산자책임재활용(EPR)','종량제 봉투','자원순환보증금제','일회용컵 보증금제'], answer:0,
+  why:'든 사례는 <b>종량제 · 보증금제 · 컵 보증금제</b>입니다. EPR은 생산자 쪽 제도입니다.' },
 
 q602:{ type:'mc',
-  q:'보증금제가 세금과 결정적으로 다른 점은?',
-  opts:['정부가 걷지 않는다','반환하면 돌려받는다','금액이 더 크다','기업만 부담한다'], answer:1,
-  why:'보증금은 <b>반환하면 환급</b>됩니다. 그래서 "부담"이 아니라 "회수 유인"으로 작동하고, 세금과 달리 성실히 돌려주면 실질 부담이 0이 됩니다.' },
+  q:'보증금제가 세금과 다른 점은?',
+  opts:['금액이 더 크다','정부가 안 걷는다','기업만 낸다','돌려주면 환급된다'], answer:3,
+  why:'보증금은 <b>반환하면 돌려받습니다</b>. 잘 돌려주면 실질 부담이 0입니다.' },
 
 /* ── 7. 설계 쟁점 ① ─────────────────────────────────────────── */
 q701:{ type:'mc',
-  q:'발표의 쟁점 표에서 "세율 기준" 항목으로 제시된 세 가지는?',
-  opts:['무게 · 개수 · 재활용률 연동','매출 · 인원 · 면적',
-        '생산 · 수입 · 유통','국내 · 국외 · 접경'], answer:0,
-  why:'세율 기준은 <b>무게(톤/kg) · 개수 · 재활용률 연동</b> 셋을 두고 논의됩니다. 어느 것을 고르느냐에 따라 기업이 쓰는 편법도 달라집니다.' },
+  q:'세율 기준으로 발표에서 든 셋은?',
+  opts:['매출 · 인원 · 면적','무게 · 개수 · 재활용률 연동','국내 · 국외 · 접경','생산 · 수입 · 유통'], answer:1,
+  why:'<b>무게 · 개수 · 재활용률 연동</b> 셋입니다.' },
 
 q702:{ type:'opinion',
-  q:'여러분이라면 세율을 무엇에 연동하시겠어요?',
-  opts:['무게(톤·kg)','개수(포장 단위)','재활용률·재생원료 함량','여러 기준의 혼합'],
+  q:'세율을 무엇에 연동하겠어요?',
+  opts:['무게','개수','재활용률·재생원료','혼합'],
   reacts:[
-    '무게 기준은 <b>측정이 쉽고 분쟁이 적습니다</b>. 대신 "얇게 여러 겹" 같은 편법이 생길 수 있습니다.',
-    '개수 기준은 과대포장을 직접 억제합니다. 다만 <b>큰 용기와 작은 용기가 같은 세금</b>이 되는 불합리가 생깁니다.',
-    '재활용률 연동은 영국 방식에 가깝고 <b>재생원료 시장을 만드는 힘</b>이 가장 셉니다. 대신 함량 검증 비용이 듭니다.',
-    '혼합 방식은 허점을 줄이지만 <b>제도가 복잡해져 소기업의 신고 부담</b>이 커집니다.' ],
-  close:'세율 기준을 정하는 순간, 기업이 어떤 편법을 쓸지도 함께 정해집니다.' },
+    '무게는 측정이 쉽습니다. 대신 얇게 여러 겹 같은 편법이 생길 수 있습니다.',
+    '개수는 과대포장을 직접 막습니다. 다만 큰 통과 작은 통이 같은 세금이 됩니다.',
+    '재활용률 연동은 재생원료 시장을 만듭니다. 대신 검증 비용이 듭니다.',
+    '혼합은 허점을 줄이지만 제도가 복잡해집니다.' ],
+  close:'기준을 정하는 순간, 기업이 쓸 편법도 같이 정해집니다.' },
 
 /* ── 8. 설계 쟁점 ② ─────────────────────────────────────────── */
 q801:{ type:'mc',
-  q:'"역진세 논란"은 쟁점 표의 어느 항목에 해당할까요?',
-  opts:['과세 대상','세율 기준','형평성','부정 배출'], answer:2,
-  why:'저소득 가구가 상대적으로 더 큰 부담을 진다는 지적은 <b>형평성</b> 항목입니다. 실효성(가격 전가)이나 부정 배출과 헷갈리지 않도록 구분해 두세요.' },
+  q:'역진세 논란은 어느 항목인가요?',
+  opts:['형평성','과세 대상','세율 기준','부정 배출'], answer:0,
+  why:'저소득층이 더 부담한다는 지적은 <b>형평성</b>입니다.' },
 
-q802:{ type:'mc', hard:true,
-  q:'"대체재가 부족하면 단순 가격 전가로 그칠 위험"은 어느 쟁점이며, 그 뜻은?',
-  opts:['형평성 — 저소득층이 더 부담한다','실효성 — 배출은 그대로인데 값만 오른다',
-        '부정 배출 — 불법 투기가 는다','과세 대상 — 누구에게 매길지 모호하다'], answer:1,
-  why:'<b>실효성</b> 쟁점입니다. 바꿔 쓸 대안이 없으면 기업은 값을 올려 소비자에게 넘길 뿐이고, 정작 <b>플라스틱 사용량은 줄지 않습니다</b>.' },
+q802:{ type:'mc',
+  q:'대체재가 없으면 값만 오르고 배출은 그대로인 문제는?',
+  opts:['형평성','부정 배출','실효성','과세 대상'], answer:2,
+  why:'<b>실효성</b>입니다. 대안이 없으면 가격만 전가됩니다.' },
 
 q803:{ type:'mc',
-  q:'"부정 배출" 쟁점이 우려하는 구체적 현상은?',
-  opts:['세금 회피를 노린 불법 투기 증가','재활용업체의 담합',
-        '수입 플라스틱 급증','포장재 규격 난립'], answer:0,
-  why:'부담을 피하려고 정상 경로가 아닌 곳에 버리는 <b>불법 투기(부정 배출)</b>가 늘 수 있습니다. 그래서 단속·추적 체계가 함께 설계돼야 합니다.' },
+  q:'"부정 배출"이 걱정하는 것은?',
+  opts:['포장 규격 난립','수입 급증','업체 담합','불법 투기 증가'], answer:3,
+  why:'부담을 피하려고 <b>불법 투기</b>가 늘 수 있습니다.' },
 
 /* ── 9. 찬성 논거 ───────────────────────────────────────────── */
-q901:{ type:'mc', hard:true,
-  q:'발표의 찬성 논거 세 가지를 순서대로 맞게 나열한 것은?',
-  opts:['오염자 부담 원칙 실현 / 재활용·저감 기술 개발 유인 / 실증 사례 존재',
-        '세수 확보 / 고용 창출 / 국제 협약 준수',
-        '역진세 완화 / 소기업 지원 / 대체재 육성',
-        '규제 단순화 / 행정비 절감 / 수출 증대'], answer:0,
-  why:'찬성 측 논거는 ① <b>오염자 부담 원칙 실현</b>, ② <b>재활용·저감 기술 개발 유인</b>, ③ <b>실증 사례 존재</b> 세 가지였습니다.' },
+q901:{ type:'mc',
+  q:'찬성 논거에 해당하는 것은?',
+  opts:['역진세 완화','오염자 부담 원칙 실현','소기업 행정 부담 감소','대체재 환경비용 해소'], answer:1,
+  why:'찬성은 ① 오염자 부담 ② 기술 유인 ③ 실증 사례입니다.' },
 
 q902:{ type:'mc',
-  q:'찬성 논거의 실증 사례로 제시된 것은?',
-  opts:['영국·아일랜드 비닐봉투세 도입 후 사용량 급감','독일의 재활용률 90% 달성',
-        '일본의 플라스틱 생산 감축','노르웨이의 페트병 회수율 97%'], answer:0,
-  why:'<b>영국·아일랜드의 비닐봉투세</b> 도입 이후 사용량이 크게 감소한 것이 확인됐습니다. "가격이 붙으면 행동이 바뀐다"는 실증입니다.' },
+  q:'찬성 측이 든 실증 사례는?',
+  opts:['독일 재활용률 90%','일본 생산 감축','노르웨이 페트병 97%','영국·아일랜드 비닐봉투세 후 사용량 감소'], answer:3,
+  why:'<b>비닐봉투세</b> 도입 후 사용량이 크게 줄었습니다.' },
 
 /* ── 10. 반대 논거와 정리 ───────────────────────────────────── */
-q1001:{ type:'mc', hard:true,
-  q:'발표의 반대·우려 논거 세 가지에 <u>포함되지 않는</u> 것은?',
-  opts:['역진세 우려','대체재의 다른 환경비용','소기업의 행정 부담','재활용 기술 개발 유인'], answer:3,
-  why:'반대 논거는 <b>역진세 · 대체재의 다른 환경비용 · 소기업 행정 부담</b> 세 가지였습니다. 재활용 기술 개발 유인은 <b>찬성</b> 논거입니다.' },
+q1001:{ type:'mc',
+  q:'반대 논거가 <u>아닌</u> 것은?',
+  opts:['역진세 우려','대체재의 다른 환경비용','재활용 기술 개발 유인','소기업 행정 부담'], answer:2,
+  why:'기술 개발 유인은 <b>찬성</b> 논거입니다. 반대는 역진세·대체재 비용·행정 부담입니다.' },
 
 q1002:{ type:'mc',
-  q:'"대체재의 다른 환경비용"이 지적하는 바는?',
-  opts:['종이 등 대체 포장재도 생산·폐기에서 환경 부담이 생긴다','대체재는 값이 비싸다',
-        '대체재는 전량 수입에 의존한다','대체재는 재활용이 불가능하다'], answer:0,
-  why:'플라스틱을 피해 <b>종이·유리로 옮겨가도 생산과 폐기 과정에서 별도의 환경 부담</b>이 생깁니다. 무게가 늘어 운송 배출이 커지기도 합니다.' },
+  q:'"대체재의 다른 환경비용"의 뜻은?',
+  opts:['종이·유리로 바꿔도 환경 부담이 생긴다','대체재는 무조건 비싸다','대체재는 수입만 된다','대체재는 재활용이 안 된다'], answer:0,
+  why:'종이·유리도 생산·폐기에서 <b>별도의 환경 부담</b>이 생깁니다.' },
 
 q1003:{ type:'opinion',
-  q:'마지막 질문 — 여러분은 플라스틱 배출량 기반 과세, 어떻게 생각하세요?',
-  opts:['적극 찬성 — 지금 당장 도입','조건부 찬성 — 형평성 보완 장치와 함께','조건부 반대 — 대체재부터 확보한 뒤','반대 — 다른 수단이 더 낫다'],
+  q:'플라스틱 배출량 기반 과세, 어떻게 생각하세요?',
+  opts:['적극 찬성','조건부 찬성','조건부 반대','반대'],
   reacts:[
-    '가장 강한 입장입니다. 다만 <b>역진세 대책</b>과 부정 배출 단속을 함께 준비해야 설득력이 생깁니다.',
-    '가장 현실적인 절충안입니다. 세수를 <b>취약계층 환급과 재활용 인프라에 되돌리는 설계</b>가 핵심 조건이 됩니다.',
-    '대체재가 없으면 가격 전가로 끝난다는 실효성 논리입니다. 다만 <b>"언제까지 기다릴 것인가"</b>에 답해야 합니다.',
-    '규제·EPR·보증금제 같은 다른 수단을 우선하자는 입장입니다. 그 수단들이 <b>왜 세금보다 나은지</b>를 보여야 합니다.' ],
-  close:'플라스틱세는 업스트림과 다운스트림으로 나뉘며, 형평성과 실효성을 함께 고려한 설계가 필요합니다 — 오늘 발표의 결론이었죠.' }
+    '강한 입장입니다. 역진세 대책이 같이 있어야 설득력이 납니다.',
+    '현실적인 절충입니다. 세수를 취약계층·인프라로 되돌리는 설계가 핵심입니다.',
+    '대체재가 없으면 가격 전가로 끝날 수 있습니다.',
+    '다른 수단(규제·EPR·보증금)을 우선하자는 입장입니다.' ],
+  close:'업스트림과 다운스트림, 형평성과 실효성을 같이 보는 게 오늘 결론이었습니다.' }
 };
 
 /* ── 난이도 ── */
 const DIFFS = [
-  {key:'easy', name:'편하게', desc:'탄막은 읽히지만 맞으면 아픕니다',
-   ehp:1,    edmg:1,    espd:1,    rate:1,    boss:1,    drop:.08, gemLife:8},
-  {key:'norm', name:'보통',   desc:'조각이 빨리 사라지고 보스가 아프게 때립니다',
-   ehp:1.25, edmg:1.45, espd:1.08, rate:.72,  boss:1.35, drop:.04, gemLife:6.5},
-  {key:'hard', name:'빡세게', desc:'2대면 위험 · 게이지가 눈 깜짝할 새 줄어듭니다',
-   ehp:1.55, edmg:1.8,  espd:1.18, rate:.52,  boss:1.7,  drop:.02, gemLife:5}
+  {key:'easy', name:'편하게', desc:'교실용 — 맞혀도 여유가 있습니다',
+   ehp:.62,  edmg:.5,   espd:.78,  rate:1.35, boss:.48,  drop:.16, gemLife:16},
+  {key:'norm', name:'보통',   desc:'조금 긴장되는 정도',
+   ehp:.82,  edmg:.7,   espd:.9,   rate:1.05, boss:.68,  drop:.11, gemLife:12},
+  {key:'hard', name:'빡세게', desc:'원래 난이도에 가깝습니다',
+   ehp:1.05, edmg:.95,  espd:1.02, rate:.82,  boss:.95,  drop:.06, gemLife:8}
 ];
-let DIFF = 1;
+let DIFF = 0;
 const D = () => DIFFS[DIFF];
 
 /* ── 강화 카드 ──
@@ -443,7 +428,7 @@ const upgCount = () => Object.values(UPG).reduce((a,b)=>a+b,0);
 const ST = {
   cool:   ()=> .62 * Math.pow(.82, uv('rapid')),
   n:      ()=> 1 + uv('multi'),
-  dmg:    ()=> 4 + 2*uv('power'),
+  dmg:    ()=> 6 + 2*uv('power'),
   pierce: ()=> uv('pierce'),
   bspeed: ()=> 620 * (1 + .2*uv('range')),
   range:  ()=> 520 * (1 + .25*uv('range')),
@@ -451,7 +436,7 @@ const ST = {
   move:   ()=> 250 * (1 + .14*uv('swift')),
   magnet: ()=> 95  * (1 + .6*uv('magnet')),
   dmgMul: ()=> Math.pow(.82, uv('armor')),
-  inv:    ()=> .52 * (1 + .5*uv('iron')),
+  inv:    ()=> .95 * (1 + .5*uv('iron')),
   orbitN: ()=> uv('orbit'),
   auraR:  ()=> uv('aura') ? 90 + 26*uv('aura') : 0,
   auraD:  ()=> 9 * uv('aura')
@@ -459,13 +444,13 @@ const ST = {
 
 /* ── 몬스터 (환경오염 컨셉) ── */
 const ENEMY = {
-  bag:    {r:17, hp:8,  spd:82,  dmg:13, xp:1, score:20,  name:'비닐봉지'},
-  cup:    {r:15, hp:6,  spd:138, dmg:12, xp:1, score:24,  name:'일회용컵'},
-  foam:   {r:24, hp:22, spd:62,  dmg:18, xp:3, score:55,  name:'스티로폼'},
-  bottle: {r:18, hp:12, spd:66,  dmg:14, xp:2, score:45,  name:'페트병 드론', shoot:2.0},
-  smog:   {r:21, hp:10, spd:112, dmg:15, xp:2, score:48,  name:'미세플라스틱'},
-  net:    {r:26, hp:32, spd:54,  dmg:20, xp:4, score:90,  name:'유령그물',   slow:true},
-  boss:   {r:58, hp:400,spd:0,   dmg:36, xp:0, score:3000,name:'플라스틱 덩어리'}
+  bag:    {r:17, hp:5,  spd:64,  dmg:7,  xp:1, score:20,  name:'비닐봉지'},
+  cup:    {r:15, hp:4,  spd:105, dmg:6,  xp:1, score:24,  name:'일회용컵'},
+  foam:   {r:24, hp:14, spd:48,  dmg:9,  xp:3, score:55,  name:'스티로폼'},
+  bottle: {r:18, hp:8,  spd:50,  dmg:8,  xp:2, score:45,  name:'페트병 드론', shoot:2.6},
+  smog:   {r:21, hp:6,  spd:86,  dmg:8,  xp:2, score:48,  name:'미세플라스틱'},
+  net:    {r:26, hp:18, spd:42,  dmg:10, xp:4, score:90,  name:'유령그물',   slow:true},
+  boss:   {r:58, hp:240,spd:0,   dmg:18, xp:0, score:3000,name:'플라스틱 덩어리'}
 };
 /* 라운드가 올라갈수록 등장 종류가 늘어납니다 */
 const POOL = [
@@ -577,7 +562,7 @@ const marks = [];     /* 스폰 예고 */
 const pending = [];   /* 예고 후 실제 스폰 */
 
 const cam = {x:0, y:0};
-const player = {x:AW/2, y:AH/2, r:16, vx:0, vy:0, hp:100, maxHp:100,
+const player = {x:AW/2, y:AH/2, r:16, vx:0, vy:0, hp:130, maxHp:130,
                 inv:0, cool:0, regen:0, face:1, walk:0, slowT:0,
                 muzzle:0, mAng:0, recoil:0};
 let ents = {foes:[], bullets:[], shots:[], gems:[], parts:[], boss:null};
@@ -588,11 +573,11 @@ function dnum(x,y,v,crit){ dmgNums.push({x:x+(Math.random()-.5)*14, y, v:Math.ro
 const totalQ = ROUNDS.reduce((n,r)=> n + (r.qs?r.qs.length:0), 0);
 
 /* 보스 탄막 상자 (언더테일식) */
-const BOX = {x:0, y:0, w:520, h:350};
+const BOX = {x:0, y:0, w:600, h:400};
 function resetBox(){
   const tight = DIFF===2;
-  BOX.w = tight ? 460 : 520;
-  BOX.h = tight ? 300 : 350;
+  BOX.w = tight ? 500 : 600;
+  BOX.h = tight ? 330 : 400;
   BOX.x = AW/2 - BOX.w/2;
   BOX.y = AH/2 + 10;
 }
@@ -612,39 +597,39 @@ function restoreSnap(){
 }
 
 const BOSS_DEFS = [
-  {name:'재생원료 장벽', hp:380, seq:[
-    {id:'aimed', dur:2.6, name:'조준 탄'},
-    {id:'bonesH', dur:3.8, name:'수평 장벽'},
+  {name:'재생원료 장벽', hp:200, seq:[
+    {id:'aimed', dur:2.8, name:'조준 탄'},
+    {id:'bonesH', dur:4.0, name:'수평 장벽'},
+    {id:'ring', dur:3.2, name:'확산 링'},
+    {id:'rain', dur:3.4, name:'낙하'},
+    {id:'spiral', dur:4.0, name:'나선'}]},
+  {name:'분담금 나선', hp:240, seq:[
+    {id:'spiral', dur:3.8, name:'이중 나선'},
+    {id:'homing', dur:3.4, name:'유도 분담'},
+    {id:'plus', dur:3.6, name:'십자 레이저'},
     {id:'ring', dur:3.0, name:'확산 링'},
+    {id:'fan', dur:3.2, name:'부채 탄'}]},
+  {name:'배출 압박', hp:280, seq:[
+    {id:'shrink', dur:4.4, name:'상자 압박'},
+    {id:'bonesV', dur:3.8, name:'수직 장벽'},
+    {id:'plus', dur:3.4, name:'십자 조준'},
     {id:'rain', dur:3.2, name:'낙하'},
-    {id:'spiral', dur:3.8, name:'나선'}]},
-  {name:'분담금 나선', hp:460, seq:[
-    {id:'spiral', dur:3.6, name:'이중 나선'},
-    {id:'homing', dur:3.2, name:'유도 분담'},
-    {id:'plus', dur:3.4, name:'십자 레이저'},
-    {id:'ring', dur:2.8, name:'확산 링'},
-    {id:'fan', dur:3.0, name:'부채 탄'}]},
-  {name:'배출 압박', hp:540, seq:[
-    {id:'shrink', dur:4.2, name:'상자 압박'},
-    {id:'bonesV', dur:3.6, name:'수직 장벽'},
-    {id:'plus', dur:3.2, name:'십자 조준'},
-    {id:'rain', dur:3.0, name:'낙하'},
-    {id:'aimed', dur:2.6, name:'조준 탄'}]},
-  {name:'역진 탄막', hp:640, seq:[
+    {id:'aimed', dur:2.8, name:'조준 탄'}]},
+  {name:'역진 탄막', hp:330, seq:[
+    {id:'walls', dur:4.0, name:'양쪽 벽'},
+    {id:'sweep', dur:4.2, name:'소제 레이저'},
+    {id:'spiralRain', dur:4.4, name:'나선+낙하'},
+    {id:'bonesH', dur:3.6, name:'수평 장벽'},
+    {id:'plus', dur:3.2, name:'십자 레이저'}]},
+  {name:'플라스틱 덩어리', hp:390, seq:[
+    {id:'fan', dur:3.0, name:'부채 탄'},
+    {id:'bonesH', dur:3.6, name:'수평 장벽'},
+    {id:'spiral', dur:3.8, name:'나선'},
+    {id:'plus', dur:3.2, name:'십자 레이저'},
     {id:'walls', dur:3.8, name:'양쪽 벽'},
-    {id:'sweep', dur:4.0, name:'소제 레이저'},
-    {id:'spiralRain', dur:4.2, name:'나선+낙하'},
-    {id:'bonesH', dur:3.4, name:'수평 장벽'},
-    {id:'plus', dur:3.0, name:'십자 레이저'}]},
-  {name:'플라스틱 덩어리', hp:820, seq:[
-    {id:'fan', dur:2.8, name:'부채 탄'},
-    {id:'bonesH', dur:3.4, name:'수평 장벽'},
-    {id:'spiral', dur:3.6, name:'나선'},
-    {id:'plus', dur:3.0, name:'십자 레이저'},
-    {id:'walls', dur:3.6, name:'양쪽 벽'},
-    {id:'sweep', dur:3.6, name:'소제 레이저'},
-    {id:'spiralRain', dur:4.0, name:'광기 탄막'},
-    {id:'aimed', dur:2.4, name:'집중 사격'}]}
+    {id:'sweep', dur:3.8, name:'소제 레이저'},
+    {id:'spiralRain', dur:4.2, name:'광기 탄막'},
+    {id:'aimed', dur:2.6, name:'집중 사격'}]}
 ];
 
 /* ── 입력 ── */
@@ -735,7 +720,7 @@ function loadRound(i, opts){
   player.vx=0; player.vy=0;
   player.hp=player.maxHp; player.inv=1.2; player.cool=0; player.slowT=0; player.regen=0;
   roundLeft = round.sec;
-  spawnT = 0; spawnGap = Math.max(.18, 0.85 * D().rate);
+  spawnT = 0; spawnGap = Math.max(.45, 1.4 * D().rate);
   cam.x = player.x - W/2; cam.y = player.y - H/2;
   if(round.boss) spawnBoss();
   dom('roundName').textContent = 'ROUND ' + round.n + '/6';
@@ -754,7 +739,7 @@ function startGame(){
   Object.keys(UPG).forEach(k=>delete UPG[k]);
   roster.length=0; turns.length=0; autoNo=0; curPlayer=null; curTurn=null;
   level=1; xp=0; xpNeed=5; snap=null;
-  player.maxHp=100; player.hp=100; player.r=16;
+  player.maxHp=130; player.hp=130; player.r=16;
   dom('whoNow').textContent='—';
   const qn = +(new URLSearchParams(location.search).get('round')||1);
   loadRound(Math.max(0, Math.min(ROUNDS.length-1, (qn|0)-1)));
@@ -834,7 +819,7 @@ function spawnBoss(){
     seqI:0, patAge:0, def, name:def.name, sweepDir:1
   };
 }
-function bossDmg(){ return 32; }
+function bossDmg(){ return 12; }
 function shotOrb(x,y,vx,vy,opt){
   opt = opt||{};
   ents.shots.push({kind:'orb', x,y, vx,vy,
@@ -857,29 +842,29 @@ function nextPat(B){
 function tickPat(id, B, dt){
   const box = BOX, p = player;
   const rage = B.hp < B.maxHp*.48;
-  const mul = rage ? .7 : 1;
+  const mul = rage ? .82 : 1;
   switch(id){
     case 'aimed': {
       B.acc += dt;
-      if(B.acc > .52*mul){
+      if(B.acc > .9*mul){
         B.acc = 0;
         const ox = box.x+box.w/2, oy = box.y-8;
         const base = Math.atan2(p.y-oy, p.x-ox);
-        const n = rage?7:5;
+        const n = rage?4:3;
         for(let i=0;i<n;i++){
-          const a = base + (i-(n-1)/2)*.105;
-          shotOrb(ox, oy, Math.cos(a)*270, Math.sin(a)*270);
+          const a = base + (i-(n-1)/2)*.14;
+          shotOrb(ox, oy, Math.cos(a)*170, Math.sin(a)*170);
         }
       }
       break;
     }
     case 'spiral': {
-      B.spin += dt * (rage?7.4:5.4);
+      B.spin += dt * (rage?4.6:3.2);
       B.acc += dt;
-      if(B.acc > (rage?.065:.095)){
+      if(B.acc > (rage?.14:.2)){
         B.acc = 0;
         const cx = box.x+box.w/2, cy = box.y+box.h/2;
-        const a = B.spin, sp = 175;
+        const a = B.spin, sp = 115;
         shotOrb(cx, cy, Math.cos(a)*sp, Math.sin(a)*sp, {col:'#c77dff', r:6.5});
         shotOrb(cx, cy, Math.cos(a+Math.PI)*sp, Math.sin(a+Math.PI)*sp, {col:'#c77dff', r:6.5});
       }
@@ -887,36 +872,36 @@ function tickPat(id, B, dt){
     }
     case 'ring': {
       B.acc += dt;
-      if(B.acc > 1.05*mul){
+      if(B.acc > 1.55*mul){
         B.acc = 0;
         const ox = box.x+box.w/2, oy = box.y+box.h/2;
-        const n = rage?20:14;
+        const n = rage?12:8;
         for(let i=0;i<n;i++){
           const a = i/n*Math.PI*2 + B.ph;
-          shotOrb(ox, oy, Math.cos(a)*200, Math.sin(a)*200);
+          shotOrb(ox, oy, Math.cos(a)*135, Math.sin(a)*135);
         }
       }
       break;
     }
     case 'rain': {
       B.acc += dt;
-      if(B.acc > (rage?.11:.16)){
+      if(B.acc > (rage?.22:.32)){
         B.acc = 0;
         const x = box.x+18+Math.random()*(box.w-36);
-        shotOrb(x, box.y-10, (Math.random()-.5)*36, 210+Math.random()*55, {col:'#7aa2ff', r:6});
+        shotOrb(x, box.y-10, (Math.random()-.5)*28, 130+Math.random()*40, {col:'#7aa2ff', r:6});
       }
       break;
     }
     case 'bonesH': {
       B.acc += dt;
-      if(B.acc > 1.28*mul){
+      if(B.acc > 1.7*mul){
         B.acc = 0;
-        const gap = rage?58:74;
+        const gap = rage?96:120;
         const gy = box.y+28+Math.random()*(box.h-56-gap);
         const dir = Math.random()<.5?1:-1;
         const x0 = dir>0 ? box.x-18 : box.x+box.w+18;
-        const vx = dir*175;
-        for(let y=box.y+12; y<box.y+box.h-12; y+=19){
+        const vx = dir*120;
+        for(let y=box.y+12; y<box.y+box.h-12; y+=22){
           if(y>gy && y<gy+gap) continue;
           shotBone(x0, y, vx, 0, 24, 15);
         }
@@ -925,69 +910,69 @@ function tickPat(id, B, dt){
     }
     case 'bonesV': {
       B.acc += dt;
-      if(B.acc > 1.32*mul){
+      if(B.acc > 1.75*mul){
         B.acc = 0;
-        const gap = rage?58:74;
+        const gap = rage?96:120;
         const gx = box.x+30+Math.random()*(box.w-60-gap);
-        for(let x=box.x+12; x<box.x+box.w-12; x+=19){
+        for(let x=box.x+12; x<box.x+box.w-12; x+=22){
           if(x>gx && x<gx+gap) continue;
-          shotBone(x, box.y-16, 0, 185, 15, 24);
+          shotBone(x, box.y-16, 0, 125, 15, 24);
         }
       }
       break;
     }
     case 'plus': {
       B.acc += dt;
-      if(B.acc > 1.55*mul){
+      if(B.acc > 2.05*mul){
         B.acc = 0;
-        shotLaser(p.x, box.y+box.h/2, 16, box.h+8, .52, .36);
-        shotLaser(box.x+box.w/2, p.y, box.w+8, 16, .52, .36);
+        shotLaser(p.x, box.y+box.h/2, 16, box.h+8, .85, .32);
+        shotLaser(box.x+box.w/2, p.y, box.w+8, 16, .85, .32);
       }
       break;
     }
     case 'sweep': {
       B.acc += dt;
-      if(B.acc > 1.85*mul){
+      if(B.acc > 2.25*mul){
         B.acc = 0;
         B.sweepDir = (B.sweepDir||1)*-1;
         const x = B.sweepDir>0 ? box.x+30 : box.x+box.w-30;
-        ents.shots.push({kind:'sweep', x, y:box.y+box.h/2, vx:B.sweepDir*130, vy:0,
-          w:20, h:box.h-10, life:3.4, dmg:bossDmg()*1.15, col:'#ffd166', warnT:.42, active:false});
+        ents.shots.push({kind:'sweep', x, y:box.y+box.h/2, vx:B.sweepDir*85, vy:0,
+          w:20, h:box.h-10, life:3.8, dmg:bossDmg()*1.15, col:'#ffd166', warnT:.7, active:false});
       }
       break;
     }
     case 'homing': {
       B.acc += dt;
-      if(B.acc > .78*mul){
+      if(B.acc > 1.25*mul){
         B.acc = 0;
         const ox = box.x + (Math.random()<.5? 40 : box.w-40);
-        shotOrb(ox, box.y+16, 0, 50, {homing:2.1, r:9, col:'#c77dff', life:5.5});
+        shotOrb(ox, box.y+16, 0, 40, {homing:1.4, r:9, col:'#c77dff', life:5.5});
       }
       break;
     }
     case 'fan': {
       B.acc += dt;
-      if(B.acc > .82*mul){
+      if(B.acc > 1.15*mul){
         B.acc = 0;
         const ox = box.x+box.w/2, oy = box.y-6;
-        const n = rage?11:8;
+        const n = rage?7:5;
         for(let i=0;i<n;i++){
-          const a = Math.PI*.18 + i/(n-1)*Math.PI*.64;
-          shotOrb(ox, oy, Math.cos(a)*220, Math.sin(a)*220, {col:'#ff8fa3'});
+          const a = Math.PI*.22 + i/(n-1)*Math.PI*.56;
+          shotOrb(ox, oy, Math.cos(a)*145, Math.sin(a)*145, {col:'#ff8fa3'});
         }
       }
       break;
     }
     case 'walls': {
       B.acc += dt;
-      if(B.acc > 1.5*mul){
+      if(B.acc > 1.95*mul){
         B.acc = 0;
-        const gapY = box.y+48+Math.random()*(box.h-130);
+        const gapY = box.y+48+Math.random()*(box.h-160);
         for(let side=0;side<2;side++){
           const x = side? box.x+box.w+12 : box.x-12;
-          const vx = side? -155 : 155;
-          for(let y=box.y+10;y<box.y+box.h-10;y+=17){
-            if(y>gapY && y<gapY+62) continue;
+          const vx = side? -105 : 105;
+          for(let y=box.y+10;y<box.y+box.h-10;y+=20){
+            if(y>gapY && y<gapY+95) continue;
             shotOrb(x, y, vx, 0, {r:6, col:'#ff8fd0'});
           }
         }
@@ -995,29 +980,29 @@ function tickPat(id, B, dt){
       break;
     }
     case 'shrink': {
-      BOX.w = Math.max(DIFF===2?250:280, BOX.w - dt*22);
-      BOX.h = Math.max(DIFF===2?180:210, BOX.h - dt*14);
+      BOX.w = Math.max(DIFF===2?320:380, BOX.w - dt*12);
+      BOX.h = Math.max(DIFF===2?240:280, BOX.h - dt*8);
       BOX.x = AW/2 - BOX.w/2;
       player.x = Math.max(BOX.x+player.r, Math.min(BOX.x+BOX.w-player.r, player.x));
       player.y = Math.max(BOX.y+player.r, Math.min(BOX.y+BOX.h-player.r, player.y));
       B.acc += dt;
-      if(B.acc > (rage?.14:.2)){
+      if(B.acc > (rage?.24:.34)){
         B.acc = 0;
         const x = box.x+16+Math.random()*(box.w-32);
-        shotOrb(x, box.y-8, 0, 195, {col:'#3ddc97', r:6});
+        shotOrb(x, box.y-8, 0, 125, {col:'#3ddc97', r:6});
       }
       break;
     }
     case 'spiralRain': {
-      B.spin += dt * (rage?6.6:4.8);
-      if(Math.random() < dt*(rage?14:9)){
+      B.spin += dt * (rage?4.2:3.0);
+      if(Math.random() < dt*(rage?7:4.5)){
         const cx = box.x+box.w/2, cy = box.y+box.h/2;
         const a = B.spin;
-        shotOrb(cx, cy, Math.cos(a)*160, Math.sin(a)*160, {r:6, col:'#c77dff'});
+        shotOrb(cx, cy, Math.cos(a)*110, Math.sin(a)*110, {r:6, col:'#c77dff'});
       }
-      if(Math.random() < dt*(rage?8:5)){
+      if(Math.random() < dt*(rage?4:2.5)){
         const x = box.x+16+Math.random()*(box.w-32);
-        shotOrb(x, box.y-8, 0, 175, {r:5.5, col:'#7aa2ff'});
+        shotOrb(x, box.y-8, 0, 115, {r:5.5, col:'#7aa2ff'});
       }
       break;
     }
@@ -1124,7 +1109,7 @@ function update(dtRaw){
     if(spawnT<=0 && ents.foes.length < 80){
       spawnT = spawnGap / ramp;
       const pool = POOL[0];
-      const burst = 1 + (Math.random()<.4?1:0) + (DIFF>=1?1:0) + (DIFF===2?1:0);
+      const burst = 1 + (Math.random()<.22?1:0) + (DIFF===2?1:0);
       for(let i=0;i<burst;i++) spawnFoe(pool[Math.floor(Math.random()*pool.length)]);
     }
   }
@@ -1156,7 +1141,7 @@ function update(dtRaw){
       f.cool -= dt;
       if(f.cool<=0 && dd<560){
         f.cool = d.shoot;
-        ents.shots.push({x:f.x, y:f.y, vx:dx/dd*300, vy:dy/dd*300, life:3, dmg:d.dmg*.8, col:'#7ad7ff'});
+        ents.shots.push({x:f.x, y:f.y, vx:dx/dd*180, vy:dy/dd*180, life:3, dmg:d.dmg*.7, col:'#7ad7ff'});
         beep(700,.05,'square',.02);
       }
     } else if(f.t==='smog'){
@@ -1397,9 +1382,9 @@ function collect(g){
   if(g.item){
     const it = ITEMS[g.item];
     if(g.item==='heal'){
-      p.hp = Math.min(p.maxHp, p.hp + 8);
+      p.hp = Math.min(p.maxHp, p.hp + 14);
       ring(p.x,p.y,70,'#3ddc97',4); pop(p.x,p.y,8,'#3ddc97');
-      toast('✚ 정화 팩 — 체력 +8');
+      toast('✚ 정화 팩 — 체력 +14');
     } else if(g.item==='magnet'){
       ents.gems.forEach(o=>{ if(!o.item) o.pull = true; });
       ring(p.x,p.y,420,'#4cc9f0',5); flashA = Math.max(flashA,.18);
@@ -1559,6 +1544,23 @@ function toast(m){ const t=dom('toast'); t.textContent=m; t.classList.add('on');
   clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2000); }
 
 /* ── 퀴즈 ── */
+function shuffleArr(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    const t=a[i]; a[i]=a[j]; a[j]=t;
+  }
+  return a;
+}
+function dealQuiz(src){
+  const n = src.opts.length;
+  const order = shuffleArr(Array.from({length:n}, (_,i)=>i));
+  const q = Object.assign({}, src);
+  q.opts = order.map(i=>src.opts[i]);
+  if(src.reacts) q.reacts = order.map(i=>src.reacts[i]);
+  if(typeof src.answer==='number') q.answer = order.indexOf(src.answer);
+  q._order = order;
+  return q;
+}
 let queue=[], curId=null, cur=null, locked=false, quizTag='', pendingUpgrade=false;
 function openQuiz(ids, tag){
   queue = ids.slice(); quizTag = tag||'';
@@ -1579,7 +1581,7 @@ function nextQuestion(){
     roundClear();
     return;
   }
-  curId = queue.shift(); cur = QUIZ_BANK[curId]; locked=false;
+  curId = queue.shift(); cur = dealQuiz(QUIZ_BANK[curId]); locked=false;
   const op = cur.type==='opinion';
   dom('qzEyebrow').className = 'eyebrow' + (op?' op':'') + (cur.hard?' hardq':'');
   dom('qzEyebrow').textContent = reviewMode ? '오답'
@@ -1595,12 +1597,13 @@ function nextQuestion(){
 function pickOpt(i){
   if(locked || !cur || i>=cur.opts.length) return;
   locked = true;
+  const origI = cur._order ? cur._order[i] : i;
   const op = cur.type==='opinion';
   const btns = dom('qzOpts').querySelectorAll('.opt');
   const v = dom('qzVerdict');
   if(op){
     btns.forEach((b,j)=>{ b.disabled=true; if(j===i) b.classList.add('chosen'); });
-    if(!reviewMode){ asked++; correct++; score+=150; results.push({id:curId, ok:true, opinion:true, picked:i});
+    if(!reviewMode){ asked++; correct++; score+=150; results.push({id:curId, ok:true, opinion:true, picked:origI});
       answeredIds.add(curId); if(curPlayer){ curPlayer.asked++; curPlayer.correct++; } }
     sfx.right();
     v.className = 'verdict on op';
@@ -1610,7 +1613,7 @@ function pickOpt(i){
     btns.forEach((b,j)=>{ b.disabled=true; if(j===cur.answer) b.classList.add('right'); else if(j===i) b.classList.add('wrong'); });
     if(!reviewMode){
       asked++; if(ok){ correct++; score+=250; }
-      results.push({id:curId, ok, picked:i}); answeredIds.add(curId);
+      results.push({id:curId, ok, picked:origI}); answeredIds.add(curId);
       if(curPlayer){ curPlayer.asked++; if(ok) curPlayer.correct++; }
     } else {
       const r = results.find(r=>r.id===curId && !r.ok);
