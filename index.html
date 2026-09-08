@@ -32,6 +32,7 @@
   #hpIn{height:100%;width:100%;background:var(--acc)}
   #hpwrap .lab{position:absolute;inset:0;font-size:9px;display:grid;place-items:center;
     color:#04140e;font-weight:700}
+  #livesHud{color:#ff8fa3;font-weight:800;letter-spacing:1px;min-width:2.2em}
   #hud .skip{pointer-events:auto;cursor:pointer;background:none;border:0;color:var(--dim);
     font:inherit;font-size:13px;padding:0}
   #hud .skip:hover{color:var(--ink)}
@@ -146,6 +147,7 @@
         <span id="whoNow">—</span>
         <span>LV <b id="lvNum">1</b></span>
         <div id="hpwrap"><div id="hpIn"></div><div class="lab" id="hpLab">100 / 100</div></div>
+        <span id="livesHud" title="목숨">♥♥</span>
         <span id="timeBig">0:50</span>
         <button class="skip" id="skipBtn">스킵</button>
       </div>
@@ -576,7 +578,8 @@ const pending = [];   /* 예고 후 실제 스폰 */
 const cam = {x:0, y:0};
 const player = {x:AW/2, y:AH/2, r:16, vx:0, vy:0, hp:100, maxHp:100,
                 inv:0, cool:0, regen:0, face:1, walk:0, slowT:0,
-                muzzle:0, mAng:0, recoil:0, nova:0};
+                muzzle:0, mAng:0, recoil:0, nova:0, lives:2};
+const START_LIVES = 2;
 let ents = {foes:[], bullets:[], shots:[], gems:[], parts:[], boss:null};
 function fxReset(){ rings.length=0; dmgNums.length=0; marks.length=0; pending.length=0;
   hitStop=0; flashA=0; slowmo=0; combo=0; comboT=0; }
@@ -728,6 +731,7 @@ function loadRound(i, opts){
   player.x=AW/2; player.y=AH/2; player.r = 16;
   player.vx=0; player.vy=0;
   player.hp=player.maxHp; player.inv=1.2; player.cool=0; player.slowT=0; player.regen=0; player.nova=.35;
+  player.lives = START_LIVES;
   roundLeft = round.sec;
   spawnT = 0; spawnGap = Math.max(.05, 0.14 * D().rate);
   cam.x = player.x - W/2; cam.y = player.y - H/2;
@@ -748,7 +752,7 @@ function startGame(){
   Object.keys(UPG).forEach(k=>delete UPG[k]);
   roster.length=0; turns.length=0; autoNo=0; curPlayer=null; curTurn=null;
   level=1; xp=0; xpNeed=5; snap=null; bossSnap=null; phase='survive';
-  player.maxHp=100; player.hp=100; player.r=16;
+  player.maxHp=100; player.hp=100; player.r=16; player.lives=START_LIVES;
   dom('whoNow').textContent='—';
   const qn = +(new URLSearchParams(location.search).get('round')||1);
   loadRound(Math.max(0, Math.min(ROUNDS.length-1, (qn|0)-1)));
@@ -806,7 +810,7 @@ function showDeath(){
   state = S.death;
   const el = document.getElementById('deathTitle');
   if(el) el.textContent = '쓰러짐';
-  dom('deathDesc').textContent = (curPlayer?curPlayer.name+' · ':'') + round.title + (inBoss()?' · 보스':' · 사냥');
+  dom('deathDesc').textContent = (curPlayer?curPlayer.name+' · ':'') + round.title + (inBoss()?' · 보스':' · 사냥') + ' · 목숨 소진';
   dom('death').classList.add('on');
 }
 dom('retryRoundBtn').onclick = retryRound;
@@ -883,6 +887,7 @@ function beginBoss(opts){
   ents.gems.length=0; pending.length=0; marks.length=0;
   player.r = 12;
   player.hp = player.maxHp;
+  player.lives = START_LIVES;
   player.inv = 2;
   player.cool = 0;
   resetBox();
@@ -1507,7 +1512,20 @@ function hurt(n){
   p.inv = ST.inv(); shake = .7; sfx.hurt();
   pop(p.x, p.y, 10, '#ff6b6b');
   if(p.hp<=0){
-    p.hp = 0;
+    if(p.lives > 1){
+      p.lives--;
+      p.hp = Math.max(1, Math.round(p.maxHp * .5));
+      p.inv = 2.2;
+      ents.shots.length = 0;
+      shake = 1.5; flashA = Math.max(flashA,.75); slowmo = .45; hitStop = .14;
+      ring(p.x,p.y,260,'#ff8fa3',7); ring(p.x,p.y,140,'#ffd166',4);
+      pop(p.x,p.y,22,'#ff8fa3');
+      toast('부활 · 체력 절반 · 남은 목숨 ' + p.lives);
+      beep(180,.2,'sawtooth',.06); setTimeout(()=>beep(420,.12,'triangle',.05),160);
+      updateHud();
+      return;
+    }
+    p.hp = 0; p.lives = 0;
     if(curPlayer) curPlayer.deaths++;
     ents.shots.length = 0;
     p.inv = 2.5;
@@ -1702,6 +1720,12 @@ function updateHud(){
   el.style.width = (r*100)+'%';
   el.style.background = r>.5 ? '#3ddc97' : r>.25 ? '#ffd166' : '#ff6b6b';
   dom('hpLab').textContent = Math.max(0,Math.round(player.hp)) + ' / ' + player.maxHp;
+  const lh = dom('livesHud');
+  if(lh){
+    const n = Math.max(0, player.lives|0);
+    lh.textContent = n ? '♥'.repeat(n) : '✕';
+    lh.style.color = n>1 ? '#ff8fa3' : n===1 ? '#ffd166' : '#ff6b6b';
+  }
   dom('xpIn').style.width = Math.min(100, xp/xpNeed*100) + '%';
   if(inBoss()){
     if(chestState==='dropped'){
